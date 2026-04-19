@@ -23,17 +23,17 @@ final class ParkingDataService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        // Bounding box (~400 m per side) is more reliable than within_circle
+        // Numeric columns — no quotes; 6 dp is sufficient precision
         let delta = 0.0036 // ≈ 400 m in degrees
-        let minLat = coordinate.latitude  - delta
-        let maxLat = coordinate.latitude  + delta
-        let minLng = coordinate.longitude - delta
-        let maxLng = coordinate.longitude + delta
+        let minLat = String(format: "%.6f", coordinate.latitude  - delta)
+        let maxLat = String(format: "%.6f", coordinate.latitude  + delta)
+        let minLng = String(format: "%.6f", coordinate.longitude - delta)
+        let maxLng = String(format: "%.6f", coordinate.longitude + delta)
 
         var components = URLComponents(string: "https://data.cityofnewyork.us/resource/nfid-uabd.json")!
         components.queryItems = [
             URLQueryItem(name: "$where",
-                         value: "lat > '\(minLat)' AND lat < '\(maxLat)' AND lng > '\(minLng)' AND lng < '\(maxLng)'"),
+                         value: "lat > \(minLat) AND lat < \(maxLat) AND lng > \(minLng) AND lng < \(maxLng)"),
             URLQueryItem(name: "$limit",  value: "1000"),
             URLQueryItem(name: "$select", value: "order_no,signdesc1,signdesc2,signdesc3,signdesc4,street,fromstreet,tostreet,side_of_str,lat,lng,segmentid,boro"),
         ]
@@ -42,18 +42,14 @@ final class ParkingDataService: ObservableObject {
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            // Surface raw API errors before attempting decode
-            if let errorBody = try? JSONDecoder().decode([String: String].self, from: data),
-               let message = errorBody["message"] {
-                print("ParkingDataService API error: \(message)")
+            // If the API returns an error object instead of an array, surface it and bail
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("ParkingDataService API error: \(obj["message"] ?? obj)")
                 return
             }
             let signs = try JSONDecoder().decode([ParkingSign].self, from: data)
             segments = buildSegments(from: signs)
         } catch {
-            if let raw = String(data: (try? Data(contentsOf: url)) ?? Data(), encoding: .utf8) {
-                print("ParkingDataService raw response: \(raw.prefix(300))")
-            }
             print("ParkingDataService decode error: \(error)")
         }
     }
