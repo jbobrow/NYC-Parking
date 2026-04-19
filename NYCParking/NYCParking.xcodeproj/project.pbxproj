@@ -18,6 +18,7 @@
 		AA1900000000000000000002 /* ParkingLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1900000000000000000001 /* ParkingLabel.swift */; };
 		AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1A00000000000000000001 /* ParkingDetailSheet.swift */; };
 		AA1B00000000000000000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1B00000000000000000001 /* Assets.xcassets */; };
+		AA1C00000000000000000002 /* ParkingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000001 /* ParkingCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 		BB1A00000000000000000001 /* ParkingDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDetailSheet.swift; sourceTree = "<group>"; };
 		BB1B00000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB1C00000000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB1D00000000000000000001 /* ParkingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +70,7 @@
 				BB1800000000000000000001 /* LocationManager.swift */,
 				BB1900000000000000000001 /* ParkingLabel.swift */,
 				BB1A00000000000000000001 /* ParkingDetailSheet.swift */,
+				BB1D00000000000000000001 /* ParkingCache.swift */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
 			);
@@ -161,6 +164,7 @@
 				AA1800000000000000000002 /* LocationManager.swift in Sources */,
 				AA1900000000000000000002 /* ParkingLabel.swift in Sources */,
 				AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */,
+				AA1C00000000000000000002 /* ParkingCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

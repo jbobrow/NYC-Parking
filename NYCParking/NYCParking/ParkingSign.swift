@@ -53,7 +53,7 @@ enum StatePlaneConverter {
     }
 }
 
-struct ParkingSign: Decodable {
+struct ParkingSign: Codable {
     let orderNumber: String?
     let onStreet: String?
     let fromStreet: String?

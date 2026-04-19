@@ -23,6 +23,18 @@ enum ParkingDay: String, CaseIterable, Hashable, Identifiable {
         }
     }
 
+    var letter: String {
+        switch self {
+        case .monday:    return "M"
+        case .tuesday:   return "T"
+        case .wednesday: return "W"
+        case .thursday:  return "TH"
+        case .friday:    return "F"
+        case .saturday:  return "SA"
+        case .sunday:    return "SU"
+        }
+    }
+
     var color: Color {
         switch self {
         case .monday:    return Color(red: 0.24, green: 0.52, blue: 0.96)  // cobalt blue
