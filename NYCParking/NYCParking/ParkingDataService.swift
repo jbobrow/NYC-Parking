@@ -23,17 +23,19 @@ final class ParkingDataService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        // Numeric columns — no quotes; 6 dp is sufficient precision
-        let delta = 0.0036 // ≈ 400 m in degrees
-        let minLat = String(format: "%.6f", coordinate.latitude  - delta)
-        let maxLat = String(format: "%.6f", coordinate.latitude  + delta)
-        let minLng = String(format: "%.6f", coordinate.longitude - delta)
-        let maxLng = String(format: "%.6f", coordinate.longitude + delta)
+        // Convert GPS center to State Plane feet, then build bounding box (~400 m ≈ 1312 ft)
+        let (cx, cy) = StatePlaneConverter.forward(latitude: coordinate.latitude,
+                                                   longitude: coordinate.longitude)
+        let radius = 1_400.0  // US survey feet
+        let minX = Int(cx - radius), maxX = Int(cx + radius)
+        let minY = Int(cy - radius), maxY = Int(cy + radius)
 
         var components = URLComponents(string: "https://data.cityofnewyork.us/resource/nfid-uabd.json")!
         components.queryItems = [
             URLQueryItem(name: "$where",
-                         value: "lat > \(minLat) AND lat < \(maxLat) AND lng > \(minLng) AND lng < \(maxLng)"),
+                         value: "sign_x_coord > \(minX) AND sign_x_coord < \(maxX) AND sign_y_coord > \(minY) AND sign_y_coord < \(maxY)"),
+            URLQueryItem(name: "$select",
+                         value: "order_number,on_street,from_street,to_street,side_of_street,sign_description,sign_x_coord,sign_y_coord"),
             URLQueryItem(name: "$limit", value: "1000"),
         ]
 
@@ -41,26 +43,27 @@ final class ParkingDataService: ObservableObject {
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            // If the API returns an error object instead of an array, surface it and bail
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 print("ParkingDataService API error: \(obj["message"] ?? obj)")
                 return
             }
             let signs = try JSONDecoder().decode([ParkingSign].self, from: data)
-            if let first = signs.first {
-                print("ParkingDataService sample: street=\(first.street ?? "nil") desc1=\(first.signDesc1 ?? "nil") lat=\(first.lat ?? "nil") lng=\(first.lng ?? "nil") segid=\(first.segmentId ?? "nil")")
-            }
+            print("ParkingDataService: fetched \(signs.count) signs")
             segments = buildSegments(from: signs)
+            print("ParkingDataService: \(segments.count) segments with alternate-side rules")
         } catch {
             print("ParkingDataService decode error: \(error)")
         }
     }
 
     private func buildSegments(from signs: [ParkingSign]) -> [ParkingSegment] {
-        // Group by segmentId + side so opposite sides of street are separate
+        // Group by block face: street + from/to cross streets + side
         var buckets: [String: [ParkingSign]] = [:]
         for sign in signs {
-            let key = "\(sign.segmentId ?? sign.orderNo ?? UUID().uuidString)_\(sign.sideOfStr ?? "")"
+            let key = [sign.onStreet, sign.fromStreet, sign.toStreet, sign.sideOfStreet]
+                .compactMap { $0?.uppercased() }
+                .joined(separator: "|")
+            guard !key.isEmpty else { continue }
             buckets[key, default: []].append(sign)
         }
 
@@ -75,10 +78,10 @@ final class ParkingDataService: ObservableObject {
             let ref = group[0]
             return ParkingSegment(
                 id: key,
-                street: ref.street ?? "",
+                street: ref.onStreet ?? "",
                 fromStreet: ref.fromStreet ?? "",
                 toStreet: ref.toStreet ?? "",
-                side: ref.sideOfStr ?? "",
+                side: ref.sideOfStreet ?? "",
                 coordinate: coord,
                 rules: rules
             )

@@ -18,6 +18,7 @@
 		AA1900000000000000000002 /* ParkingLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1900000000000000000001 /* ParkingLabel.swift */; };
 		AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1A00000000000000000001 /* ParkingDetailSheet.swift */; };
 		AA1B00000000000000000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1B00000000000000000001 /* Assets.xcassets */; };
+		AA2000000000000000000002 /* StatePlaneConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2000000000000000000001 /* StatePlaneConverter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +35,7 @@
 		BB1A00000000000000000001 /* ParkingDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDetailSheet.swift; sourceTree = "<group>"; };
 		BB1B00000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB1C00000000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB2000000000000000000001 /* StatePlaneConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatePlaneConverter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +72,7 @@
 				BB1A00000000000000000001 /* ParkingDetailSheet.swift */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
+				BB2000000000000000000001 /* StatePlaneConverter.swift */,
 			);
 			path = NYCParking;
 			sourceTree = "<group>";
@@ -161,6 +164,7 @@
 				AA1800000000000000000002 /* LocationManager.swift in Sources */,
 				AA1900000000000000000002 /* ParkingLabel.swift in Sources */,
 				AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */,
+				AA2000000000000000000002 /* StatePlaneConverter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
