@@ -34,8 +34,7 @@ final class ParkingDataService: ObservableObject {
         components.queryItems = [
             URLQueryItem(name: "$where",
                          value: "lat > \(minLat) AND lat < \(maxLat) AND lng > \(minLng) AND lng < \(maxLng)"),
-            URLQueryItem(name: "$limit",  value: "1000"),
-            URLQueryItem(name: "$select", value: "order_no,signdesc1,signdesc2,signdesc3,signdesc4,street,fromstreet,tostreet,side_of_str,lat,lng,segmentid,boro"),
+            URLQueryItem(name: "$limit", value: "1000"),
         ]
 
         guard let url = components.url else { return }
@@ -48,6 +47,9 @@ final class ParkingDataService: ObservableObject {
                 return
             }
             let signs = try JSONDecoder().decode([ParkingSign].self, from: data)
+            if let first = signs.first {
+                print("ParkingDataService sample: street=\(first.street ?? "nil") desc1=\(first.signDesc1 ?? "nil") lat=\(first.lat ?? "nil") lng=\(first.lng ?? "nil") segid=\(first.segmentId ?? "nil")")
+            }
             segments = buildSegments(from: signs)
         } catch {
             print("ParkingDataService decode error: \(error)")
