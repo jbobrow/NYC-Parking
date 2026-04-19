@@ -23,22 +23,38 @@ final class ParkingDataService: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
+        // Bounding box (~400 m per side) is more reliable than within_circle
+        let delta = 0.0036 // ≈ 400 m in degrees
+        let minLat = coordinate.latitude  - delta
+        let maxLat = coordinate.latitude  + delta
+        let minLng = coordinate.longitude - delta
+        let maxLng = coordinate.longitude + delta
+
         var components = URLComponents(string: "https://data.cityofnewyork.us/resource/nfid-uabd.json")!
         components.queryItems = [
             URLQueryItem(name: "$where",
-                         value: "within_circle(the_geom,\(coordinate.latitude),\(coordinate.longitude),400)"),
+                         value: "lat > '\(minLat)' AND lat < '\(maxLat)' AND lng > '\(minLng)' AND lng < '\(maxLng)'"),
             URLQueryItem(name: "$limit",  value: "1000"),
-            URLQueryItem(name: "$select", value: "order_no,signdesc1,signdesc2,signdesc3,signdesc4,street,fromstreet,tostreet,side_of_str,lat,long,segmentid,boro"),
+            URLQueryItem(name: "$select", value: "order_no,signdesc1,signdesc2,signdesc3,signdesc4,street,fromstreet,tostreet,side_of_str,lat,lng,segmentid,boro"),
         ]
 
         guard let url = components.url else { return }
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
+            // Surface raw API errors before attempting decode
+            if let errorBody = try? JSONDecoder().decode([String: String].self, from: data),
+               let message = errorBody["message"] {
+                print("ParkingDataService API error: \(message)")
+                return
+            }
             let signs = try JSONDecoder().decode([ParkingSign].self, from: data)
             segments = buildSegments(from: signs)
         } catch {
-            print("ParkingDataService error: \(error)")
+            if let raw = String(data: (try? Data(contentsOf: url)) ?? Data(), encoding: .utf8) {
+                print("ParkingDataService raw response: \(raw.prefix(300))")
+            }
+            print("ParkingDataService decode error: \(error)")
         }
     }
 

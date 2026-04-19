@@ -13,7 +13,7 @@ struct ParkingSign: Decodable {
     let toStreet: String?
     let sideOfStr: String?
     let lat: String?
-    let long: String?
+    let lng: String?
     let segmentId: String?
 
     enum CodingKeys: String, CodingKey {
@@ -28,12 +28,12 @@ struct ParkingSign: Decodable {
         case toStreet   = "tostreet"
         case sideOfStr  = "side_of_str"
         case lat
-        case long
+        case lng
         case segmentId  = "segmentid"
     }
 
     var coordinate: CLLocationCoordinate2D? {
-        guard let latStr = lat, let lngStr = long,
+        guard let latStr = lat, let lngStr = lng,
               let latVal = Double(latStr), let lngVal = Double(lngStr) else { return nil }
         return CLLocationCoordinate2D(latitude: latVal, longitude: lngVal)
     }
