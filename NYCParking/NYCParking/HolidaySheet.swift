@@ -73,8 +73,32 @@ private struct HolidayRow: View {
             }
 
             Spacer()
+
+            // Days until column
+            VStack(alignment: .trailing, spacing: 0) {
+                if daysUntil == 0 {
+                    Text("Today")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(daysUntil)")
+                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Text(daysUntil == 1 ? "day" : "days")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minWidth: 44, alignment: .trailing)
         }
         .padding(.vertical, 11)
+    }
+
+    private var daysUntil: Int {
+        let cal = Calendar.current
+        return cal.dateComponents([.day],
+            from: cal.startOfDay(for: Date()),
+            to: cal.startOfDay(for: holiday.date)).day ?? 0
     }
 
     private var dateString: String {
