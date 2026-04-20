@@ -2,8 +2,9 @@ import SwiftUI
 import MapKit
 
 struct ContentView: View {
-    @StateObject private var dataService    = ParkingDataService()
-    @StateObject private var locationManager = LocationManager()
+    @StateObject private var dataService       = ParkingDataService()
+    @StateObject private var locationManager   = LocationManager()
+    @StateObject private var reminderService   = ReminderService()
 
     @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
@@ -21,6 +22,8 @@ struct ContentView: View {
     @State private var carDragTranslation: CGSize = .zero
     @State private var lastMapRegion: MKCoordinateRegion?
     @State private var departingSegments: [ParkingSegment] = []
+    @State private var showReminderPrompt = false
+    @State private var pendingReminderDate: Date? = nil
 
     private var screenCornerRadius: CGFloat {
         (UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat) ?? 44
@@ -251,6 +254,8 @@ struct ContentView: View {
                         carDragStartOffset = 20
                         carDragTranslation = .zero
                         record.save()
+                        pendingReminderDate = nextMoveDate
+                        showReminderPrompt = true
                     }
                 }
             )
@@ -276,6 +281,25 @@ struct ContentView: View {
             departingSegments = departed
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 departingSegments = []
+            }
+        }
+        .alert("Add a Reminder?", isPresented: $showReminderPrompt) {
+            Button("Add Reminder") {
+                if let date = pendingReminderDate {
+                    let df = DateFormatter()
+                    df.dateFormat = "EEE, MMM d"
+                    let title = "Move your car — \(df.string(from: date))"
+                    Task { await reminderService.scheduleReminder(title: title, on: date) }
+                }
+            }
+            Button("Not Now", role: .cancel) { }
+        } message: {
+            if let date = pendingReminderDate {
+                let df = DateFormatter()
+                df.dateFormat = "EEEE, MMMM d"
+                Text("Get an 8 AM reminder to move your car on \(df.string(from: date)).")
+            } else {
+                Text("No upcoming restrictions found in the next two weeks.")
             }
         }
         .onChange(of: locationManager.location) { _, newLocation in
