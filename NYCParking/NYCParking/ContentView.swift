@@ -16,8 +16,7 @@ struct ContentView: View {
     @State private var lastCamera: MapCamera? = nil
     @State private var hasSnappedToUserLocation = false
     @State private var isFollowingUser = false
-    @State private var parkedSegment: ParkingSegment?
-    @State private var carOffsetMeters: Double = 20
+    @State private var parkedRecord: ParkedCarRecord?
     @State private var carDragStartOffset: Double = 20
     @State private var carDragTranslation: CGSize = .zero
     @State private var lastMapRegion: MKCoordinateRegion?
@@ -26,7 +25,7 @@ struct ContentView: View {
         Map(position: $position) {
             UserAnnotation()
 
-            if let parked = parkedSegment {
+            if let parked = parkedRecord {
                 Annotation("", coordinate: carCoordinate(for: parked), anchor: .center) {
                     Image(systemName: "car.fill")
                         .font(.system(size: 16, weight: .semibold))
@@ -38,10 +37,8 @@ struct ContentView: View {
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
-                                    // Project the screen drag onto the street direction.
-                                    // Street bearing on screen = (bearing − mapHeading), CW from up.
                                     let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
-                                    let sx = sin(θ), sy = -cos(θ)   // street unit vector in screen space
+                                    let sx = sin(θ), sy = -cos(θ)
                                     let proj = value.translation.width * sx + value.translation.height * sy
                                     carDragTranslation = CGSize(width: proj * sx, height: proj * sy)
                                 }
@@ -55,15 +52,13 @@ struct ContentView: View {
                                     let mPerPoint = region.span.latitudeDelta * 111_320.0
                                                   / UIScreen.main.bounds.height
                                     var newOffset = carDragStartOffset + proj * mPerPoint
-                                    // Keep car out of the label dead-zone (±12 m)
                                     let clearance = 12.0
                                     if abs(newOffset) < clearance {
                                         newOffset = newOffset >= 0 ? clearance : -clearance
                                     }
-                                    // Clamp to the actual block extent
                                     let limit = parked.halfBlockLengthMeters
                                     newOffset = max(-limit, min(limit, newOffset))
-                                    carOffsetMeters = newOffset
+                                    parkedRecord?.offsetMeters = newOffset
                                     carDragStartOffset = newOffset
                                     carDragTranslation = .zero
                                 }
@@ -118,6 +113,15 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: zoomLevel == .hidden)
+        .overlay(alignment: .bottomLeading) {
+            if zoomLevel == .dot {
+                dotLegend
+                    .padding(16)
+                    .padding(.bottom, 24)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottomLeading)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: zoomLevel == .dot)
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 10) {
                 if dataService.isLoading {
@@ -169,11 +173,11 @@ struct ContentView: View {
                 }
                 .buttonStyle(GlassCircleButtonStyle())
 
-                if let parked = parkedSegment {
+                if let parked = parkedRecord {
                     Button {
                         withAnimation(.easeInOut(duration: 0.4)) {
                             position = .region(MKCoordinateRegion(
-                                center: parked.sidewalkCoordinate,
+                                center: carCoordinate(for: parked),
                                 latitudinalMeters: 600,
                                 longitudinalMeters: 600
                             ))
@@ -190,20 +194,22 @@ struct ContentView: View {
             .padding(16)
             .padding(.bottom, 24)
             .animation(.easeInOut(duration: 0.25), value: abs(mapHeading) > 1)
-            .animation(.easeInOut(duration: 0.25), value: parkedSegment != nil)
+            .animation(.easeInOut(duration: 0.25), value: parkedRecord != nil)
         }
         .sheet(item: $selectedSegment) { segment in
             ParkingDetailSheet(
                 segment: segment,
-                isParked: parkedSegment?.id == segment.id,
+                isParked: parkedRecord?.segmentID == segment.id,
                 onPark: {
-                    if parkedSegment?.id == segment.id {
-                        parkedSegment = nil
+                    if parkedRecord?.segmentID == segment.id {
+                        parkedRecord = nil
+                        ParkedCarRecord.clear()
                     } else {
-                        parkedSegment = segment
-                        carOffsetMeters = 20
+                        let record = ParkedCarRecord(segment: segment, offsetMeters: 20)
+                        parkedRecord = record
                         carDragStartOffset = 20
                         carDragTranslation = .zero
+                        record.save()
                     }
                 }
             )
@@ -214,6 +220,13 @@ struct ContentView: View {
         }
         .onAppear {
             locationManager.requestPermission()
+            if let record = ParkedCarRecord.load() {
+                parkedRecord = record
+                carDragStartOffset = record.offsetMeters
+            }
+        }
+        .onChange(of: parkedRecord) { _, record in
+            record == nil ? ParkedCarRecord.clear() : record?.save()
         }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
@@ -232,17 +245,35 @@ struct ContentView: View {
         }
     }
 
-    private func carCoordinate(for segment: ParkingSegment) -> CLLocationCoordinate2D {
-        let bearing = (segment.streetBearing ?? 0) * .pi / 180
-        let lat = segment.coordinate.latitude
+    private func carCoordinate(for record: ParkedCarRecord) -> CLLocationCoordinate2D {
+        let bearing = (record.streetBearing ?? 0) * .pi / 180
         let mPerDegLat = 111_320.0
-        let mPerDegLon = mPerDegLat * cos(lat * .pi / 180)
-        let dlat = cos(bearing) * carOffsetMeters / mPerDegLat
-        let dlon = sin(bearing) * carOffsetMeters / mPerDegLon
+        let mPerDegLon = mPerDegLat * cos(record.coordinateLatitude * .pi / 180)
+        let dlat = cos(bearing) * record.offsetMeters / mPerDegLat
+        let dlon = sin(bearing) * record.offsetMeters / mPerDegLon
         return CLLocationCoordinate2D(
-            latitude:  segment.sidewalkCoordinate.latitude  + dlat,
-            longitude: segment.sidewalkCoordinate.longitude + dlon
+            latitude:  record.sidewalkLatitude  + dlat,
+            longitude: record.sidewalkLongitude + dlon
         )
+    }
+
+    private var dotLegend: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(ParkingDay.allCases) { day in
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(day.color)
+                        .frame(width: 9, height: 9)
+                    Text(day.short)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 20)
+        .padding(.bottom, 20)
+        .glassCapsule()
     }
 
     private var compassNeedle: some View {

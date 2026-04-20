@@ -19,6 +19,7 @@
 		AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1A00000000000000000001 /* ParkingDetailSheet.swift */; };
 		AA1B00000000000000000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1B00000000000000000001 /* Assets.xcassets */; };
 		AA1C00000000000000000002 /* ParkingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000001 /* ParkingCache.swift */; };
+		AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000002 /* ParkedCarRecord.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		BB1B00000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB1C00000000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB1D00000000000000000001 /* ParkingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingCache.swift; sourceTree = "<group>"; };
+		BB1D00000000000000000002 /* ParkedCarRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkedCarRecord.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,6 +73,7 @@
 				BB1900000000000000000001 /* ParkingLabel.swift */,
 				BB1A00000000000000000001 /* ParkingDetailSheet.swift */,
 				BB1D00000000000000000001 /* ParkingCache.swift */,
+				BB1D00000000000000000002 /* ParkedCarRecord.swift */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
 			);
@@ -165,6 +168,7 @@
 				AA1900000000000000000002 /* ParkingLabel.swift in Sources */,
 				AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */,
 				AA1C00000000000000000002 /* ParkingCache.swift in Sources */,
+				AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

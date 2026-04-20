@@ -87,24 +87,34 @@ private struct RuleRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Day pills
-            HStack(spacing: 5) {
-                ForEach(rule.days) { day in
-                    Text(day.short)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(day.color, in: Capsule())
-                }
+            // Day pills — try 3-letter names first; fall back to 1-2 letter abbreviations
+            ViewThatFits(in: .horizontal) {
+                dayPills(using: \.short)
+                dayPills(using: \.letter)
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             // Time range
             Text("\(rule.startTime.lowercased()) – \(rule.endTime.lowercased())")
                 .font(.system(size: 15, weight: .medium, design: .monospaced))
                 .foregroundStyle(.primary)
+                .fixedSize()
         }
+    }
+
+    private func dayPills(using label: @escaping (ParkingDay) -> String) -> some View {
+        HStack(spacing: 5) {
+            ForEach(rule.days) { day in
+                Text(label(day))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(day.color, in: Capsule())
+                    .fixedSize()
+            }
+        }
+        .fixedSize()
     }
 }
