@@ -5,6 +5,7 @@ struct ContentView: View {
     @StateObject private var dataService       = ParkingDataService()
     @StateObject private var locationManager   = LocationManager()
     @StateObject private var reminderService   = ReminderService()
+    @StateObject private var holidayService    = ASPHolidayService()
 
     @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
@@ -257,7 +258,7 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.25), value: parkedRecord != nil)
         }
         .sheet(isPresented: $showHolidaySheet) {
-            HolidaySheet(holidays: NYCHolidayCalendar.upcomingHolidays())
+            HolidaySheet(holidays: holidayService.holidays)
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(22)
                 .presentationBackground(.regularMaterial)
@@ -357,7 +358,7 @@ struct ContentView: View {
             let weekday = cal.component(.weekday, from: candidate)
             guard let day = ParkingDay.from(weekday: weekday),
                   restrictionDayValues.contains(day.rawValue) else { continue }
-            if !NYCHolidayCalendar.isHoliday(candidate, calendar: cal) {
+            if !holidayService.isHoliday(candidate, calendar: cal) {
                 return candidate
             }
         }

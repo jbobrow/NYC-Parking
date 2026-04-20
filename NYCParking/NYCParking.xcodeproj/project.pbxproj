@@ -23,6 +23,7 @@
 		AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1E00000000000000000001 /* NYCHolidayCalendar.swift */; };
 		AA1F00000000000000000002 /* ReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1F00000000000000000001 /* ReminderService.swift */; };
 		AA2000000000000000000002 /* HolidaySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2000000000000000000001 /* HolidaySheet.swift */; };
+		AA2100000000000000000002 /* ASPHolidayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2100000000000000000001 /* ASPHolidayService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +45,7 @@
 		BB1E00000000000000000001 /* NYCHolidayCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NYCHolidayCalendar.swift; sourceTree = "<group>"; };
 		BB1F00000000000000000001 /* ReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderService.swift; sourceTree = "<group>"; };
 		BB2000000000000000000001 /* HolidaySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HolidaySheet.swift; sourceTree = "<group>"; };
+		BB2100000000000000000001 /* ASPHolidayService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASPHolidayService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +85,7 @@
 				BB1E00000000000000000001 /* NYCHolidayCalendar.swift */,
 				BB1F00000000000000000001 /* ReminderService.swift */,
 				BB2000000000000000000001 /* HolidaySheet.swift */,
+				BB2100000000000000000001 /* ASPHolidayService.swift */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
 			);
@@ -181,6 +184,7 @@
 				AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */,
 				AA1F00000000000000000002 /* ReminderService.swift in Sources */,
 				AA2000000000000000000002 /* HolidaySheet.swift in Sources */,
+				AA2100000000000000000002 /* ASPHolidayService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
