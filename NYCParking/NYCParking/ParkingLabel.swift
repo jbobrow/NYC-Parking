@@ -12,6 +12,7 @@ struct ParkingLabel: View {
     let segment: ParkingSegment
     let zoomLevel: MarkerZoomLevel
     let mapHeading: Double   // current map rotation in degrees [0, 360)
+    var onTap: (() -> Void)? = nil
 
     private var days: [ParkingDay] { segment.allDays }
     private var primaryRule: ParkingRule? { segment.rules.first }
@@ -23,8 +24,12 @@ struct ParkingLabel: View {
         case .dot:
             dotView
                 .rotationEffect(days.count > 1 ? streetAngle : .degrees(0))
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?() }
         case .days:
             dayPills
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?() }
                 .rotationEffect(streetAngle)
                 .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
         case .full:
@@ -34,6 +39,8 @@ struct ParkingLabel: View {
                     timeLabel(rule)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture { onTap?() }
             .rotationEffect(streetAngle)
             .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
         }

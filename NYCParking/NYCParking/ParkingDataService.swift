@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import SwiftUI
 
 @MainActor
 final class ParkingDataService: ObservableObject {
@@ -35,7 +36,9 @@ final class ParkingDataService: ObservableObject {
 
             // Serve cached signs immediately (already done in init on first launch;
             // subsequent calls refresh the display with the relevant cached slice).
-            segments = buildSegments(from: cached.signs)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                segments = buildSegments(from: cached.signs)
+            }
 
             // Ask Socrata whether the dataset has changed since we last fetched.
             if let serverUpdatedAt = await ParkingCache.fetchDatasetUpdatedAt(),
@@ -75,7 +78,9 @@ final class ParkingDataService: ObservableObject {
             }
             let signs = try JSONDecoder().decode([ParkingSign].self, from: data)
             print("ParkingDataService: fetched \(signs.count) signs from API")
-            segments = buildSegments(from: signs)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                segments = buildSegments(from: signs)
+            }
             print("ParkingDataService: \(segments.count) segments built")
 
             // Persist so the next launch (or same location) can skip the API call.

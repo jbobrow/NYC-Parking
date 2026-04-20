@@ -20,9 +20,16 @@ struct ContentView: View {
     @State private var carDragStartOffset: Double = 20
     @State private var carDragTranslation: CGSize = .zero
     @State private var lastMapRegion: MKCoordinateRegion?
+    @State private var departingSegments: [ParkingSegment] = []
+
+    private var screenCornerRadius: CGFloat {
+        (UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat) ?? 44
+    }
 
     var body: some View {
-        Map(position: $position) {
+        ZStack {
+            Color.black
+            Map(position: $position) {
             UserAnnotation()
 
             if let parked = parkedRecord {
@@ -69,15 +76,23 @@ struct ContentView: View {
             if zoomLevel != .hidden {
                 ForEach(dataService.segments) { segment in
                     Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
+                        ParkingLabel(segment: segment, zoomLevel: zoomLevel, mapHeading: mapHeading,
+                                     onTap: { selectedSegment = segment })
+                            .id(zoomLevel)
+                            .modifier(MarkerAppearAnimation())
+                    }
+                }
+                ForEach(departingSegments) { segment in
+                    Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
                         ParkingLabel(segment: segment, zoomLevel: zoomLevel, mapHeading: mapHeading)
-                            .contentShape(Rectangle())
-                            .onTapGesture { selectedSegment = segment }
+                            .modifier(MarkerDepartAnimation())
                     }
                 }
             }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
         .ignoresSafeArea()
+        .clipShape(RoundedRectangle(cornerRadius: screenCornerRadius, style: .continuous))
         .onMapCameraChange(frequency: .continuous) { ctx in
             mapHeading = ctx.camera.heading
             lastCamera = ctx.camera
@@ -98,17 +113,34 @@ struct ContentView: View {
             }
         }
         .mapControls { }
-        .safeAreaInset(edge: .top, spacing: 0) {
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: 0.50),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .frame(height: 50)
+                .frame(maxWidth: .infinity)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+        }
+        .overlay {
             if zoomLevel == .hidden {
-                Text("Zoom in to see parking restrictions")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                Text("Zoom in to see\nparking restrictions")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
                     .glassCapsule()
-                    .padding(.top, 12)
-                    .padding(.bottom, 4)
-                    .frame(maxWidth: .infinity)
                     .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
         }
@@ -228,6 +260,15 @@ struct ContentView: View {
         .onChange(of: parkedRecord) { _, record in
             record == nil ? ParkedCarRecord.clear() : record?.save()
         }
+        .onChange(of: dataService.segments) { old, new in
+            let newIDs = Set(new.map(\.id))
+            let departed = old.filter { !newIDs.contains($0.id) }
+            guard !departed.isEmpty else { return }
+            departingSegments = departed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                departingSegments = []
+            }
+        }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
             dataService.fetchSigns(near: loc.coordinate)
@@ -243,6 +284,8 @@ struct ContentView: View {
                 }
             }
         }
+        } // ZStack
+        .ignoresSafeArea()
     }
 
     private func carCoordinate(for record: ParkedCarRecord) -> CLLocationCoordinate2D {
@@ -332,5 +375,41 @@ private struct GlassCircleModifier: ViewModifier {
                 .brightness(isPressed ? 0.1 : 0)
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
         }
+    }
+}
+
+// MARK: - Marker Animations
+
+private struct MarkerAppearAnimation: ViewModifier {
+    @State private var scale: CGFloat = 0
+    @State private var opacity: Double = 0
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                    scale = 1
+                    opacity = 1
+                }
+            }
+    }
+}
+
+private struct MarkerDepartAnimation: ViewModifier {
+    @State private var scale: CGFloat = 1
+    @State private var opacity: Double = 1
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeIn(duration: 0.2)) {
+                    scale = 0
+                    opacity = 0
+                }
+            }
     }
 }
