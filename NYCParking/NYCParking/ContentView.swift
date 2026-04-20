@@ -32,8 +32,7 @@ struct ContentView: View {
     @State private var departingSegments: [ParkingSegment] = []
     @State private var showReminderPrompt = false
     @State private var pendingReminderDate: Date? = nil
-    @State private var showCarActions = false
-    @State private var showUnparkConfirm = false
+    @State private var showParkedCarSheet = false
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
 
@@ -61,7 +60,7 @@ struct ContentView: View {
                         .background(Color.blue, in: Circle())
                         .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
                         .offset(carDragTranslation)
-                        .onTapGesture { showCarActions = true }
+                        .onTapGesture { showParkedCarSheet = true }
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
@@ -241,7 +240,7 @@ struct ContentView: View {
                 if let parked = parkedRecord {
                     Button {
                         if isCenteredOnCar {
-                            showCarActions = true
+                            showParkedCarSheet = true
                         } else {
                             isCenteredOnCar = true
                             withAnimation(.easeInOut(duration: 0.4)) {
@@ -326,25 +325,24 @@ struct ContentView: View {
                 departingSegments = []
             }
         }
-        .confirmationDialog("", isPresented: $showCarActions, titleVisibility: .hidden) {
-            Button("Directions to Car") {
-                if let parked = parkedRecord { openDirectionsToCar(for: parked) }
+        .sheet(isPresented: $showParkedCarSheet) {
+            if let parked = parkedRecord {
+                ParkedCarSheet(
+                    record: parked,
+                    nextMoveDate: nextMoveDate,
+                    onDirections: { openDirectionsToCar(for: parked) },
+                    onUnpark: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            parkedRecord = nil
+                            ParkedCarRecord.clear()
+                        }
+                    }
+                )
+                .presentationDetents([.fraction(0.42)])
+                .presentationCornerRadius(22)
+                .presentationBackground(.regularMaterial)
+                .presentationDragIndicator(.hidden)
             }
-            Button("Unpark Car", role: .destructive) {
-                showUnparkConfirm = true
-            }
-            Button("Cancel", role: .cancel) { }
-        }
-        .alert("Unpark Car?", isPresented: $showUnparkConfirm) {
-            Button("Unpark", role: .destructive) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    parkedRecord = nil
-                    ParkedCarRecord.clear()
-                }
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to unpark your car?")
         }
         .alert("Add a Reminder?", isPresented: $showReminderPrompt) {
             Button("Add Reminder") {

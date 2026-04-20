@@ -20,6 +20,10 @@ struct ParkedCarRecord: Codable, Equatable {
     let halfBlockLengthMeters: Double
     var offsetMeters: Double
     let restrictionRules: [StoredRule]
+    let street: String
+    let fromStreet: String
+    let toStreet: String
+    let side: String
 
     init(segment: ParkingSegment, offsetMeters: Double) {
         self.segmentID             = segment.id
@@ -33,6 +37,10 @@ struct ParkedCarRecord: Codable, Equatable {
         self.restrictionRules      = segment.rules.map {
             StoredRule(days: $0.days.map(\.rawValue), startTime: $0.startTime, endTime: $0.endTime)
         }
+        self.street                = segment.street
+        self.fromStreet            = segment.fromStreet
+        self.toStreet              = segment.toStreet
+        self.side                  = segment.side
     }
 
     // MARK: - Persistence
