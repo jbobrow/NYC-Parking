@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var pendingReminderDate: Date? = nil
     @State private var showCarActions = false
     @State private var showUnparkConfirm = false
+    @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
 
     private var screenCornerRadius: CGFloat {
@@ -119,10 +120,15 @@ struct ContentView: View {
                       : .hidden
             dataService.fetchSigns(near: ctx.region.center)
 
+            let mapCenter = CLLocation(latitude: ctx.region.center.latitude,
+                                       longitude: ctx.region.center.longitude)
             if let userLoc = locationManager.location {
-                let center = CLLocation(latitude: ctx.region.center.latitude,
-                                        longitude: ctx.region.center.longitude)
-                isFollowingUser = center.distance(from: userLoc) < 80
+                isFollowingUser = mapCenter.distance(from: userLoc) < 80
+            }
+            if let parked = parkedRecord {
+                let coord = carCoordinate(for: parked)
+                let carLoc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+                isCenteredOnCar = mapCenter.distance(from: carLoc) < 80
             }
         }
         .mapControls { }
@@ -226,9 +232,22 @@ struct ContentView: View {
                 }
                 .buttonStyle(GlassCircleButtonStyle())
 
-                if parkedRecord != nil {
-                    Button { showCarActions = true } label: {
-                        Image(systemName: "car.fill")
+                if let parked = parkedRecord {
+                    Button {
+                        if isCenteredOnCar {
+                            showCarActions = true
+                        } else {
+                            isCenteredOnCar = true
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                position = .region(MKCoordinateRegion(
+                                    center: carCoordinate(for: parked),
+                                    latitudinalMeters: 600,
+                                    longitudinalMeters: 600
+                                ))
+                            }
+                        }
+                    } label: {
+                        Image(systemName: isCenteredOnCar ? "car.fill" : "car")
                             .font(.system(size: 17))
                             .foregroundStyle(.white)
                     }
@@ -249,6 +268,7 @@ struct ContentView: View {
             .padding(.bottom, 24)
             .animation(.easeInOut(duration: 0.25), value: abs(mapHeading) > 1)
             .animation(.easeInOut(duration: 0.25), value: parkedRecord != nil)
+            .animation(.easeInOut(duration: 0.25), value: isCenteredOnCar)
         }
         .sheet(isPresented: $showHolidaySheet) {
             HolidaySheet(holidays: holidayService.holidays)
@@ -290,6 +310,7 @@ struct ContentView: View {
         }
         .onChange(of: parkedRecord) { _, record in
             record == nil ? ParkedCarRecord.clear() : record?.save()
+            if record == nil { isCenteredOnCar = false }
         }
         .onChange(of: dataService.segments) { old, new in
             let newIDs = Set(new.map(\.id))
