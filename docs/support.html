@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support — NYC Parking</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      background: #fff;
+      color: #1C1C1E;
+      -webkit-font-smoothing: antialiased;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 60px 28px 80px;
+    }
+
+    a { color: #3D85F5; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .back {
+      display: inline-block;
+      font-size: 15px;
+      color: #3D85F5;
+      margin-bottom: 48px;
+    }
+
+    h1 {
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: -1px;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 36px 0 10px;
+    }
+
+    p {
+      font-size: 15px;
+      line-height: 1.65;
+      color: #3C3C43;
+    }
+
+    .faq + .faq {
+      border-top: 1px solid #E5E5EA;
+      padding-top: 28px;
+      margin-top: 28px;
+    }
+
+    .contact-box {
+      background: #F2F2F7;
+      border-radius: 16px;
+      padding: 28px;
+      margin-top: 48px;
+      text-align: center;
+    }
+
+    .contact-box p {
+      margin-bottom: 16px;
+      color: #3C3C43;
+    }
+
+    .contact-btn {
+      display: inline-block;
+      background: #3D85F5;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 12px 28px;
+      border-radius: 980px;
+      text-decoration: none;
+    }
+    .contact-btn:hover { opacity: 0.88; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <a class="back" href="index.html">← NYC Parking</a>
+
+  <h1>Support</h1>
+
+  <div class="faq">
+    <h2>The map isn't showing any parking signs</h2>
+    <p>Make sure location access is enabled for the app in Settings → Privacy & Security → Location Services. The app fetches sign data from NYC Open Data when you move the map — try panning slightly or tapping the location button to trigger a refresh.</p>
+  </div>
+
+  <div class="faq">
+    <h2>The parking data looks wrong for my block</h2>
+    <p>Sign data comes directly from <a href="https://data.cityofnewyork.us/Transportation/Parking-Regulation-Locations-and-Signs/nfid-uabd/about_data" target="_blank">NYC Open Data</a>. If a sign is missing or incorrect, it may not yet be reflected in the city's dataset. You can report errors to NYC DOT at <a href="https://portal.311.nyc.gov" target="_blank">311</a>.</p>
+  </div>
+
+  <div class="faq">
+    <h2>What does the split-color label mean?</h2>
+    <p>A pill with two colors means that block has alternate-side rules on two different days. Each color represents a day of the week — tap the label to see the exact times.</p>
+  </div>
+
+  <div class="faq">
+    <h2>Does the app work outside NYC?</h2>
+    <p>No — the app uses NYC-specific sign data and is designed for the five boroughs only.</p>
+  </div>
+
+  <div class="faq">
+    <h2>Is the app free?</h2>
+    <p>Yes, NYC Parking is completely free with no ads or in-app purchases.</p>
+  </div>
+
+  <div class="contact-box">
+    <p>Still have a question or found a bug?</p>
+    <a class="contact-btn" href="mailto:jon@move38.com">Get in touch</a>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYC Parking — Know before you park</title>
+  <meta name="description" content="See alternate-side parking rules for every street around you, color-coded by day. Free for iPhone.">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --mon: #3D85F5;
+      --tue: #F57F2E;
+      --wed: #33C77F;
+      --thu: #AE52EB;
+      --fri: #F04252;
+      --sat: #F0BC1E;
+      --sun: #4DC2E6;
+      --text: #1C1C1E;
+      --text2: #8E8E93;
+      --bg: #FFFFFF;
+      --bg2: #F2F2F7;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 56px;
+    }
+
+    .app-icon {
+      width: 116px;
+      height: 116px;
+      border-radius: 26px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.14);
+      margin-bottom: 28px;
+    }
+
+    .hero h1 {
+      font-size: clamp(40px, 8vw, 64px);
+      font-weight: 700;
+      letter-spacing: -2px;
+      line-height: 1.05;
+      margin-bottom: 14px;
+    }
+
+    .hero p {
+      font-size: clamp(18px, 3vw, 22px);
+      color: var(--text2);
+      margin-bottom: 36px;
+    }
+
+    /* Day pills */
+    .days {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 44px;
+    }
+
+    .day {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      letter-spacing: 0.3px;
+    }
+    .day.mon { background: var(--mon); }
+    .day.tue { background: var(--tue); }
+    .day.wed { background: var(--wed); }
+    .day.thu { background: var(--thu); }
+    .day.fri { background: var(--fri); }
+    .day.sat { background: var(--sat); color: rgba(0,0,0,0.7); }
+    .day.sun { background: var(--sun); }
+
+    .store-btn img {
+      height: 50px;
+    }
+
+    /* ── Screenshots ── */
+    .screenshots-wrap {
+      background: var(--bg2);
+      padding: 48px 0;
+    }
+
+    .screenshots {
+      display: flex;
+      gap: 20px;
+      padding: 8px 48px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .screenshots::-webkit-scrollbar { display: none; }
+
+    .screenshots img {
+      height: 540px;
+      border-radius: 40px;
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.16);
+    }
+
+    /* ── Features ── */
+    .features {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 72px 28px;
+    }
+
+    .feature {
+      display: flex;
+      gap: 22px;
+      align-items: flex-start;
+      margin-bottom: 48px;
+    }
+    .feature:last-child { margin-bottom: 0; }
+
+    .feature-icon {
+      font-size: 36px;
+      flex-shrink: 0;
+      line-height: 1;
+      margin-top: 2px;
+    }
+
+    .feature-text h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    .feature-text p {
+      font-size: 15px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px 20px 40px;
+      border-top: 1px solid #E5E5EA;
+      font-size: 13px;
+      color: var(--text2);
+    }
+
+    footer a {
+      color: var(--text2);
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <img class="app-icon"
+         src="https://github.com/user-attachments/assets/e63b24a7-4a4e-43ad-8999-23dca14b8b56"
+         alt="NYC Parking app icon">
+
+    <h1>NYC Parking</h1>
+    <p>Know before you park.</p>
+
+    <div class="days">
+      <span class="day mon">MON</span>
+      <span class="day tue">TUE</span>
+      <span class="day wed">WED</span>
+      <span class="day thu">THU</span>
+      <span class="day fri">FRI</span>
+      <span class="day sat">SAT</span>
+      <span class="day sun">SUN</span>
+    </div>
+
+    <a class="store-btn" href="#">
+      <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83"
+           alt="Download on the App Store">
+    </a>
+  </section>
+
+  <div class="screenshots-wrap">
+    <div class="screenshots">
+      <img src="https://github.com/user-attachments/assets/6272baa5-1466-46a8-8915-60772acb4ec9" alt="Map view showing color-coded parking rules">
+      <img src="https://github.com/user-attachments/assets/6e7b0d75-27d8-450d-99b5-9df23934e53d" alt="Street detail with parking times">
+      <img src="https://github.com/user-attachments/assets/d10fd327-9db2-401b-b7b6-ff5c91d0862b" alt="Day color coding legend">
+      <img src="https://github.com/user-attachments/assets/b5154d66-ee35-446f-bbb4-44b5518ebe2a" alt="Alternate side parking schedule">
+      <img src="https://github.com/user-attachments/assets/2600d0b8-82d8-4fec-a550-360d5d748e43" alt="Neighborhood parking overview">
+    </div>
+  </div>
+
+  <section class="features">
+    <div class="feature">
+      <span class="feature-icon">🗺️</span>
+      <div class="feature-text">
+        <h3>Street-level map</h3>
+        <p>Alternate-side parking rules for every block around you, displayed right on the map where you need them.</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">🎨</span>
+      <div class="feature-text">
+        <h3>Color coded by day</h3>
+        <p>Each day of the week has its own color. Spot the pattern for your block instantly — no more squinting at signs.</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <span class="feature-icon">📍</span>
+      <div class="feature-text">
+        <h3>Centered on you</h3>
+        <p>Opens to your location, zoomed to street level. One tap to re-center any time you move the map.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>© 2026 Jonathan Bobrow &nbsp;·&nbsp; <a href="support.html">Support</a> &nbsp;·&nbsp; <a href="privacy.html">Privacy Policy</a></p>
+  </footer>
+
+</body>
+</html>
