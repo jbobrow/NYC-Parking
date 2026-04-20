@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var showReminderPrompt = false
     @State private var pendingReminderDate: Date? = nil
     @State private var showDirectionsConfirm = false
+    @State private var showHolidaySheet = false
 
     private var screenCornerRadius: CGFloat {
         (UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat) ?? 44
@@ -226,7 +227,7 @@ struct ContentView: View {
                 if let parked = parkedRecord {
                     Button {
                         withAnimation(.easeInOut(duration: 0.4)) {
-                         c   position = .region(MKCoordinateRegion(
+                            position = .region(MKCoordinateRegion(
                                 center: carCoordinate(for: parked),
                                 latitudinalMeters: 600,
                                 longitudinalMeters: 600
@@ -240,11 +241,27 @@ struct ContentView: View {
                     .buttonStyle(GlassCircleButtonStyle())
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
+
+                Button {
+                    showHolidaySheet = true
+                } label: {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(GlassCircleButtonStyle())
             }
             .padding(16)
             .padding(.bottom, 24)
             .animation(.easeInOut(duration: 0.25), value: abs(mapHeading) > 1)
             .animation(.easeInOut(duration: 0.25), value: parkedRecord != nil)
+        }
+        .sheet(isPresented: $showHolidaySheet) {
+            HolidaySheet(holidays: NYCHolidayCalendar.upcomingHolidays())
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(22)
+                .presentationBackground(.regularMaterial)
+                .presentationDragIndicator(.hidden)
         }
         .sheet(item: $selectedSegment) { segment in
             ParkingDetailSheet(

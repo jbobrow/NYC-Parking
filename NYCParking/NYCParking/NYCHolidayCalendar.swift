@@ -1,5 +1,11 @@
 import Foundation
 
+struct NamedHoliday: Identifiable {
+    let id = UUID()
+    let name: String
+    let date: Date
+}
+
 /// Returns whether a date falls on an NYC alternate-side parking holiday.
 ///
 /// Covers US federal holidays + NYC-specific fixed and algorithmic days.
@@ -10,66 +16,72 @@ enum NYCHolidayCalendar {
 
     static func isHoliday(_ date: Date, calendar: Calendar = .current) -> Bool {
         let year = calendar.component(.year, from: date)
-        return holidays(for: year, calendar: calendar)
-            .contains { calendar.isDate($0, inSameDayAs: date) }
+        return namedHolidays(for: year, calendar: calendar)
+            .contains { calendar.isDate($0.date, inSameDayAs: date) }
     }
 
-    // MARK: - Holiday list
+    /// Returns upcoming NYC ASP holidays within the next `months` months, sorted chronologically.
+    static func upcomingHolidays(months: Int = 13, calendar: Calendar = .current) -> [NamedHoliday] {
+        let today = calendar.startOfDay(for: Date())
+        let year = calendar.component(.year, from: today)
+        let cutoff = calendar.date(byAdding: .month, value: months, to: today) ?? today
 
-    static func holidays(for year: Int, calendar: Calendar = .current) -> [Date] {
-        var dates: [Date] = []
+        var all = namedHolidays(for: year, calendar: calendar)
+        all += namedHolidays(for: year + 1, calendar: calendar)
+
+        return all
+            .filter { $0.date >= today && $0.date <= cutoff }
+            .sorted { $0.date < $1.date }
+    }
+
+    // MARK: - Named holiday list
+
+    static func namedHolidays(for year: Int, calendar: Calendar = .current) -> [NamedHoliday] {
+        var holidays: [NamedHoliday] = []
+
+        func add(_ name: String, _ date: Date?) {
+            guard let d = date else { return }
+            holidays.append(NamedHoliday(name: name, date: d))
+        }
 
         // Fixed-date holidays — shift to Monday if Sunday, Friday if Saturday
-        let fixed: [(Int, Int)] = [
-            (1,  1),  // New Year's Day
-            (2,  12), // Lincoln's Birthday (NYC)
-            (2,  22), // Washington's Birthday (NYC, separate from Presidents' Day)
-            (6,  19), // Juneteenth
-            (7,  4),  // Independence Day
-            (11, 11), // Veterans Day
-            (12, 25), // Christmas Day
+        let fixed: [(String, Int, Int)] = [
+            ("New Year's Day",       1,  1),
+            ("Lincoln's Birthday",   2,  12),
+            ("Washington's Birthday", 2, 22),
+            ("Juneteenth",           6,  19),
+            ("Independence Day",     7,  4),
+            ("Veterans Day",         11, 11),
+            ("Christmas Day",        12, 25),
         ]
-        for (month, day) in fixed {
+        for (name, month, day) in fixed {
             if let d = makeDate(year: year, month: month, day: day, cal: calendar) {
-                dates.append(observed(d, calendar: calendar))
+                add(name, observed(d, calendar: calendar))
             }
         }
 
         // Nth-weekday holidays
-        let nthSpecs: [(weekday: Int, n: Int, month: Int)] = [
-            (2, 3,  1),  // MLK Day: 3rd Mon of January
-            (2, 3,  2),  // Presidents' Day: 3rd Mon of February
-            (2, 1,  9),  // Labor Day: 1st Mon of September
-            (2, 2,  10), // Columbus/Indigenous Peoples' Day: 2nd Mon of October
-            (5, 4,  11), // Thanksgiving: 4th Thu of November
-        ]
-        for s in nthSpecs {
-            if let d = nthWeekday(s.weekday, s.n, month: s.month, year: year, cal: calendar) {
-                dates.append(d)
-            }
-        }
-
-        // Memorial Day: last Monday of May
-        if let d = nthWeekday(2, -1, month: 5, year: year, cal: calendar) {
-            dates.append(d)
-        }
+        add("Martin Luther King Jr. Day", nthWeekday(2, 3,  month: 1,  year: year, cal: calendar))
+        add("Presidents' Day",            nthWeekday(2, 3,  month: 2,  year: year, cal: calendar))
+        add("Memorial Day",               nthWeekday(2, -1, month: 5,  year: year, cal: calendar))
+        add("Labor Day",                  nthWeekday(2, 1,  month: 9,  year: year, cal: calendar))
+        add("Columbus Day",               nthWeekday(2, 2,  month: 10, year: year, cal: calendar))
+        add("Thanksgiving",               nthWeekday(5, 4,  month: 11, year: year, cal: calendar))
 
         // Election Day: 1st Tuesday after the 1st Monday in November
         if let firstMon = nthWeekday(2, 1, month: 11, year: year, cal: calendar),
            let electionDay = calendar.date(byAdding: .day, value: 1, to: firstMon) {
-            dates.append(electionDay)
+            add("Election Day", electionDay)
         }
 
-        // Easter-based holidays: Ash Wednesday (−46), Holy Thursday (−3), Good Friday (−2)
+        // Easter-based holidays
         if let easter = easterDate(year: year, calendar: calendar) {
-            for offset in [-46, -3, -2] {
-                if let d = calendar.date(byAdding: .day, value: offset, to: easter) {
-                    dates.append(d)
-                }
-            }
+            add("Ash Wednesday", calendar.date(byAdding: .day, value: -46, to: easter))
+            add("Holy Thursday", calendar.date(byAdding: .day, value: -3,  to: easter))
+            add("Good Friday",   calendar.date(byAdding: .day, value: -2,  to: easter))
         }
 
-        return dates
+        return holidays
     }
 
     // MARK: - Helpers
