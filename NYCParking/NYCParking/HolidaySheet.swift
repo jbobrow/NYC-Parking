@@ -51,20 +51,15 @@ private struct HolidayRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Day-of-week badge
-            Group {
-                if let day = parkingDay {
-                    Text(day.short)
-                        .foregroundStyle(.white)
-                        .background(day.color, in: Capsule())
-                } else {
-                    Text("   ")
-                        .background(.secondary, in: Capsule())
-                }
+            // Day-of-week badge — identical styling to ParkingLabel singlePill
+            if let day = parkingDay {
+                Text(day.short)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(day.color, in: Capsule())
             }
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .frame(width: 40)
-            .padding(.vertical, 5)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(holiday.name)
