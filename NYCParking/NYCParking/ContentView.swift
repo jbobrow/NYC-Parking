@@ -41,6 +41,7 @@ struct ContentView: View {
                         .background(Color.blue, in: Circle())
                         .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
                         .offset(carDragTranslation)
+                        .onTapGesture { openDirectionsToCar(for: parked) }
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
@@ -286,6 +287,16 @@ struct ContentView: View {
         }
         } // ZStack
         .ignoresSafeArea()
+    }
+
+    private func openDirectionsToCar(for record: ParkedCarRecord) {
+        let coord = carCoordinate(for: record)
+        let placemark = MKPlacemark(coordinate: coord)
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = "My Car"
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
+        ])
     }
 
     private func carCoordinate(for record: ParkedCarRecord) -> CLLocationCoordinate2D {
