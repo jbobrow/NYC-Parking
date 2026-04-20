@@ -25,10 +25,14 @@ struct ContentView: View {
     @State private var showReminderPrompt = false
     @State private var pendingReminderDate: Date? = nil
     @State private var showDirectionsConfirm = false
-    @State private var safeAreaTop: CGFloat = 59
 
     private var screenCornerRadius: CGFloat {
         (UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat) ?? 44
+    }
+
+    private var windowSafeAreaTop: CGFloat {
+        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+            .keyWindow?.safeAreaInsets.top ?? 59
     }
 
     var body: some View {
@@ -122,16 +126,11 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             if let moveDate = nextMoveDate {
                 moveCarBanner(for: moveDate)
-                    .padding(.top, safeAreaTop + 10)
+                    .padding(.top, windowSafeAreaTop + 10)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .animation(.easeInOut(duration: 0.3), value: nextMoveDate != nil)
-        .background(
-            GeometryReader { geo in
-                Color.clear.onAppear { safeAreaTop = geo.safeAreaInsets.top }
-            }
-        )
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(.ultraThinMaterial)
