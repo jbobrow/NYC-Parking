@@ -7,11 +7,18 @@ struct ContentView: View {
     @StateObject private var reminderService   = ReminderService()
     @StateObject private var holidayService    = ASPHolidayService()
 
-    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
-        latitudinalMeters: 600,
-        longitudinalMeters: 600
-    ))
+    @State private var position: MapCameraPosition = {
+        let center: CLLocationCoordinate2D
+        if let cached = ParkingCache.load() {
+            center = CLLocationCoordinate2D(latitude: cached.centerLatitude,
+                                            longitude: cached.centerLongitude)
+        } else {
+            center = CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855)
+        }
+        return .region(MKCoordinateRegion(center: center,
+                                          latitudinalMeters: 600,
+                                          longitudinalMeters: 600))
+    }()
     @State private var selectedSegment: ParkingSegment?
     @State private var zoomLevel: MarkerZoomLevel = .days
     @State private var mapHeading: Double = 0
