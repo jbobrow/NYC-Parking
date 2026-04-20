@@ -141,6 +141,7 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             if let moveDate = nextMoveDate {
                 moveCarBanner(for: moveDate)
+                    .onTapGesture { showParkedCarSheet = true }
                     .padding(.top, windowSafeAreaTop + 10)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -198,17 +199,13 @@ struct ContentView: View {
 
                 if abs(mapHeading) > 1 {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            if let cam = lastCamera {
-                                position = .camera(MapCamera(
-                                    centerCoordinate: cam.centerCoordinate,
-                                    distance: cam.distance,
-                                    heading: 0,
-                                    pitch: cam.pitch
-                                ))
-                            } else {
-                                position = .userLocation(fallback: .automatic)
-                            }
+                        if let cam = lastCamera {
+                            position = .camera(MapCamera(
+                                centerCoordinate: cam.centerCoordinate,
+                                distance: cam.distance,
+                                heading: 0,
+                                pitch: cam.pitch
+                            ))
                         }
                     } label: {
                         compassNeedle
@@ -498,6 +495,7 @@ private struct GlassCircleButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(colorScheme == .dark ? .white : Color.accentColor)
             .frame(width: 52, height: 52)
+            .contentShape(Circle())
             .modifier(GlassCircleModifier(isPressed: configuration.isPressed))
             .scaleEffect(configuration.isPressed ? 1.15 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.65), value: configuration.isPressed)

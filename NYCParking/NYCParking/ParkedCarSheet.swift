@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 struct ParkedCarSheet: View {
     let record: ParkedCarRecord
@@ -8,6 +9,7 @@ struct ParkedCarSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var showUnparkConfirm = false
+    @State private var streetNumber: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -21,8 +23,14 @@ struct ParkedCarSheet: View {
 
             // Street header
             VStack(alignment: .leading, spacing: 5) {
-                Text(record.street.localizedCapitalized)
-                    .font(.system(size: 22, weight: .bold))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if let number = streetNumber {
+                        Text(number)
+                            .font(.system(size: 22, weight: .bold))
+                    }
+                    Text(record.street.localizedCapitalized)
+                        .font(.system(size: 22, weight: .bold))
+                }
 
                 if !blockDescription.isEmpty {
                     Text(blockDescription)
@@ -38,6 +46,9 @@ struct ParkedCarSheet: View {
                 }
             }
             .padding(.horizontal, 20)
+            .task {
+                await resolveStreetNumber()
+            }
 
             Divider()
                 .padding(.horizontal, 20)
@@ -111,5 +122,13 @@ struct ParkedCarSheet: View {
         let df = DateFormatter()
         df.dateFormat = "EEE, MMM d"
         return df.string(from: date)
+    }
+
+    private func resolveStreetNumber() async {
+        let location = CLLocation(latitude: record.sidewalkLatitude, longitude: record.sidewalkLongitude)
+        let placemarks = try? await CLGeocoder().reverseGeocodeLocation(location)
+        if let number = placemarks?.first?.subThoroughfare, !number.isEmpty {
+            streetNumber = number
+        }
     }
 }
