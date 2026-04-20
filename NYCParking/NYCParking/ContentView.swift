@@ -24,6 +24,8 @@ struct ContentView: View {
     @State private var departingSegments: [ParkingSegment] = []
     @State private var showReminderPrompt = false
     @State private var pendingReminderDate: Date? = nil
+    @State private var showDirectionsConfirm = false
+    @State private var safeAreaTop: CGFloat = 59
 
     private var screenCornerRadius: CGFloat {
         (UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat) ?? 44
@@ -44,7 +46,7 @@ struct ContentView: View {
                         .background(Color.blue, in: Circle())
                         .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
                         .offset(carDragTranslation)
-                        .onTapGesture { openDirectionsToCar(for: parked) }
+                        .onTapGesture { showDirectionsConfirm = true }
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
@@ -120,11 +122,16 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             if let moveDate = nextMoveDate {
                 moveCarBanner(for: moveDate)
-                    .padding(.top, 8)
+                    .padding(.top, safeAreaTop + 10)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .animation(.easeInOut(duration: 0.3), value: nextMoveDate != nil)
+        .background(
+            GeometryReader { geo in
+                Color.clear.onAppear { safeAreaTop = geo.safeAreaInsets.top }
+            }
+        )
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(.ultraThinMaterial)
@@ -282,6 +289,12 @@ struct ContentView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                 departingSegments = []
             }
+        }
+        .confirmationDialog("Directions to your car?", isPresented: $showDirectionsConfirm, titleVisibility: .visible) {
+            Button("Open in Maps") {
+                if let parked = parkedRecord { openDirectionsToCar(for: parked) }
+            }
+            Button("Cancel", role: .cancel) { }
         }
         .alert("Add a Reminder?", isPresented: $showReminderPrompt) {
             Button("Add Reminder") {
