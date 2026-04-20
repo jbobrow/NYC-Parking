@@ -3,9 +3,12 @@ import SwiftUI
 struct ParkingDetailSheet: View {
     let segment: ParkingSegment
     let isParked: Bool
+    let hasAnyParkedCar: Bool
     let onPark: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var showUnparkConfirm = false
+    @State private var showMoveConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,8 +22,21 @@ struct ParkingDetailSheet: View {
 
             // Street header
             VStack(alignment: .leading, spacing: 5) {
-                Text(segment.street.localizedCapitalized)
-                    .font(.system(size: 22, weight: .bold))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(segment.street.localizedCapitalized)
+                        .font(.system(size: 22, weight: .bold))
+
+                    if isParked {
+                        Image(systemName: "car.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green, in: Capsule())
+                            .transition(.scale(scale: 0.5).combined(with: .opacity))
+                    }
+                }
+                .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isParked)
 
                 if !segment.fromStreet.isEmpty || !segment.toStreet.isEmpty {
                     Text(blockDescription)
@@ -52,20 +68,51 @@ struct ParkingDetailSheet: View {
             Spacer(minLength: 20)
 
             Button {
-                onPark()
-                dismiss()
+                if isParked {
+                    showUnparkConfirm = true
+                } else if hasAnyParkedCar {
+                    showMoveConfirm = true
+                } else {
+                    onPark()
+                    dismiss()
+                }
             } label: {
-                Label(isParked ? "Parked Here" : "Park Here",
-                      systemImage: isParked ? "car.fill" : "car")
+                Label(buttonLabel, systemImage: buttonIcon)
                     .font(.system(size: 17, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(isParked ? Color.green : Color.accentColor, in: RoundedRectangle(cornerRadius: 14))
+                    .background(buttonColor, in: RoundedRectangle(cornerRadius: 14))
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
         }
+        .alert("Unpark Car?", isPresented: $showUnparkConfirm) {
+            Button("Unpark", role: .destructive) { onPark(); dismiss() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to unpark your car?")
+        }
+        .alert("Move Car Here?", isPresented: $showMoveConfirm) {
+            Button("Move Car Here") { onPark(); dismiss() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will move your parked car to \(segment.street.localizedCapitalized).")
+        }
+    }
+
+    private var buttonLabel: String {
+        if isParked { return "Unpark Car" }
+        if hasAnyParkedCar { return "Move Car Here" }
+        return "Park Here"
+    }
+
+    private var buttonIcon: String {
+        isParked ? "car" : "car.fill"
+    }
+
+    private var buttonColor: Color {
+        isParked ? .green : .accentColor
     }
 
     private var blockDescription: String {

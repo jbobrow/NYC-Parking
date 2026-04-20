@@ -281,6 +281,7 @@ struct ContentView: View {
             ParkingDetailSheet(
                 segment: segment,
                 isParked: parkedRecord?.segmentID == segment.id,
+                hasAnyParkedCar: parkedRecord != nil,
                 onPark: {
                     if parkedRecord?.segmentID == segment.id {
                         parkedRecord = nil
