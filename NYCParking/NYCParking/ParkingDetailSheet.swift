@@ -94,7 +94,7 @@ struct ParkingDetailSheet: View {
             Text("Are you sure you want to unpark your car?")
         }
         .alert("Move Car Here?", isPresented: $showMoveConfirm) {
-            Button("Move Car Here") { onPark(); dismiss() }
+            Button("Move Car") { onPark(); dismiss() }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will move your parked car to \(segment.street.localizedCapitalized).")
