@@ -294,13 +294,7 @@ struct ContentView: View {
             }
             Button("Not Now", role: .cancel) { }
         } message: {
-            if let date = pendingReminderDate {
-                let df = DateFormatter()
-                df.dateFormat = "EEEE, MMMM d"
-                Text("Get an 8 AM reminder to move your car on \(df.string(from: date)).")
-            } else {
-                Text("No upcoming restrictions found in the next two weeks.")
-            }
+            reminderAlertMessage
         }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
@@ -339,6 +333,15 @@ struct ContentView: View {
             }
         }
         return nil
+    }
+
+    private var reminderAlertMessage: Text {
+        guard let date = pendingReminderDate else {
+            return Text("No upcoming restrictions found in the next two weeks.")
+        }
+        let df = DateFormatter()
+        df.dateFormat = "EEEE, MMMM d"
+        return Text("Get an 8 AM reminder to move your car on \(df.string(from: date)).")
     }
 
     private func moveCarBanner(for date: Date) -> some View {
