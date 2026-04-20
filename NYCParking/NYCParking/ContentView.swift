@@ -25,7 +25,8 @@ struct ContentView: View {
     @State private var departingSegments: [ParkingSegment] = []
     @State private var showReminderPrompt = false
     @State private var pendingReminderDate: Date? = nil
-    @State private var showDirectionsConfirm = false
+    @State private var showCarActions = false
+    @State private var showUnparkConfirm = false
     @State private var showHolidaySheet = false
 
     private var screenCornerRadius: CGFloat {
@@ -52,7 +53,7 @@ struct ContentView: View {
                         .background(Color.blue, in: Circle())
                         .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
                         .offset(carDragTranslation)
-                        .onTapGesture { showDirectionsConfirm = true }
+                        .onTapGesture { showCarActions = true }
                         .gesture(
                             DragGesture()
                                 .onChanged { value in
@@ -225,16 +226,8 @@ struct ContentView: View {
                 }
                 .buttonStyle(GlassCircleButtonStyle())
 
-                if let parked = parkedRecord {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.4)) {
-                            position = .region(MKCoordinateRegion(
-                                center: carCoordinate(for: parked),
-                                latitudinalMeters: 600,
-                                longitudinalMeters: 600
-                            ))
-                        }
-                    } label: {
+                if parkedRecord != nil {
+                    Button { showCarActions = true } label: {
                         Image(systemName: "car.fill")
                             .font(.system(size: 17))
                             .foregroundStyle(.white)
@@ -307,11 +300,25 @@ struct ContentView: View {
                 departingSegments = []
             }
         }
-        .confirmationDialog("Directions to your car?", isPresented: $showDirectionsConfirm, titleVisibility: .visible) {
-            Button("Open in Maps") {
+        .confirmationDialog("", isPresented: $showCarActions, titleVisibility: .hidden) {
+            Button("Directions to Car") {
                 if let parked = parkedRecord { openDirectionsToCar(for: parked) }
             }
+            Button("Unpark Car", role: .destructive) {
+                showUnparkConfirm = true
+            }
             Button("Cancel", role: .cancel) { }
+        }
+        .alert("Unpark Car?", isPresented: $showUnparkConfirm) {
+            Button("Unpark", role: .destructive) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    parkedRecord = nil
+                    ParkedCarRecord.clear()
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to unpark your car?")
         }
         .alert("Add a Reminder?", isPresented: $showReminderPrompt) {
             Button("Add Reminder") {

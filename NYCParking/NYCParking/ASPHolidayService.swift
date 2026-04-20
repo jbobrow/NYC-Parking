@@ -78,21 +78,26 @@ final class ASPHolidayService: ObservableObject {
             } else if inEvent {
                 if line.hasPrefix("DTSTART") {
                     startStr = line.components(separatedBy: ":").last
-                } else if line.hasPrefix("SUMMARY:") {
-                    summaryStr = cleanSummary(String(line.dropFirst("SUMMARY:".count)))
+                } else if line.hasPrefix("DESCRIPTION:") {
+                    // Holiday name lives in DESCRIPTION, e.g.
+                    // "Alternate Side Parking suspended for Memorial Day. Parking meters..."
+                    summaryStr = extractHolidayName(String(line.dropFirst("DESCRIPTION:".count)))
                 }
             }
         }
         return results
     }
 
-    /// Strips the NYC DOT boilerplate prefix, e.g.
-    /// "Alternate Side Parking Suspended - Memorial Day" → "Memorial Day"
-    private func cleanSummary(_ raw: String) -> String {
-        if let range = raw.range(of: " - ") {
-            return String(raw[range.upperBound...])
+    /// Extracts the holiday name from the DESCRIPTION field.
+    /// "...suspended for Memorial Day. Parking meters..." → "Memorial Day"
+    private func extractHolidayName(_ description: String) -> String? {
+        let text = description.replacingOccurrences(of: "\\,", with: ",")
+        guard let forRange = text.range(of: "suspended for ", options: .caseInsensitive) else { return nil }
+        let afterFor = text[forRange.upperBound...]
+        if let dotRange = afterFor.range(of: ".") {
+            return String(afterFor[..<dotRange.lowerBound])
         }
-        return raw
+        return String(afterFor)
     }
 
     /// Parses YYYYMMDD from any DTSTART value (date-only or datetime).
