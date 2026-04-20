@@ -226,7 +226,7 @@ struct ContentView: View {
                 if let parked = parkedRecord {
                     Button {
                         withAnimation(.easeInOut(duration: 0.4)) {
-                            position = .region(MKCoordinateRegion(
+                         c   position = .region(MKCoordinateRegion(
                                 center: carCoordinate(for: parked),
                                 latitudinalMeters: 600,
                                 longitudinalMeters: 600
