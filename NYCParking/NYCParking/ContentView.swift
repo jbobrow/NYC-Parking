@@ -228,7 +228,6 @@ struct ContentView: View {
                 } label: {
                     Image(systemName: isFollowingUser ? "location.fill" : "location")
                         .font(.system(size: 17))
-                        .foregroundStyle(.white)
                 }
                 .buttonStyle(GlassCircleButtonStyle())
 
@@ -249,7 +248,6 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: isCenteredOnCar ? "car.fill" : "car")
                             .font(.system(size: 17))
-                            .foregroundStyle(.white)
                     }
                     .buttonStyle(GlassCircleButtonStyle())
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
@@ -260,7 +258,6 @@ struct ContentView: View {
                 } label: {
                     Image(systemName: "calendar")
                         .font(.system(size: 17))
-                        .foregroundStyle(.white)
                 }
                 .buttonStyle(GlassCircleButtonStyle())
             }
@@ -490,8 +487,11 @@ private extension View {
 // MARK: - Glass Circle Button Style
 
 private struct GlassCircleButtonStyle: ButtonStyle {
+    @Environment(\.colorScheme) private var colorScheme
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .foregroundStyle(colorScheme == .dark ? .white : Color.accentColor)
             .frame(width: 52, height: 52)
             .modifier(GlassCircleModifier(isPressed: configuration.isPressed))
             .scaleEffect(configuration.isPressed ? 1.15 : 1.0)
