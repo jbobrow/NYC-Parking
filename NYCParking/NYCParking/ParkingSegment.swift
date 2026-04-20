@@ -11,6 +11,8 @@ struct ParkingSegment: Identifiable, Hashable {
     /// Compass bearing of the street in degrees [0, 360), computed from sign positions.
     /// Nil when only one sign coordinate is available.
     let streetBearing: Double?
+    /// Half-length of this block face in meters (centroid → end), derived from sign positions.
+    let halfBlockLengthMeters: Double
     let rules: [ParkingRule]
 
     static func == (lhs: ParkingSegment, rhs: ParkingSegment) -> Bool { lhs.id == rhs.id }

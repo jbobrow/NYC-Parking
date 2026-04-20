@@ -132,6 +132,19 @@ final class ParkingDataService: ObservableObject {
             }
             let bearing = Self.streetBearing(fromStatePlane: spCoords)
 
+            // Project sign positions onto the street bearing axis to measure block half-length.
+            // State Plane unit vector for compass bearing B: (sin B, cos B) in (easting, northing).
+            let bearingRad = (bearing ?? 0) * .pi / 180
+            let n = Double(spCoords.count)
+            let mx = spCoords.map(\.0).reduce(0, +) / n
+            let my = spCoords.map(\.1).reduce(0, +) / n
+            let halfLengthFt = spCoords.map { (x, y) -> Double in
+                let dx = x - mx, dy = y - my
+                return abs(dx * sin(bearingRad) + dy * cos(bearingRad))
+            }.max() ?? 0
+            // 1 US survey foot = 0.3048006 m; minimum 20 m so there is always room to drag
+            let halfBlockLengthMeters = max(halfLengthFt * 0.3048006, 20.0)
+
             let ref = group[0]
             return ParkingSegment(
                 id: key,
@@ -141,6 +154,7 @@ final class ParkingDataService: ObservableObject {
                 side: ref.sideOfStreet ?? "",
                 coordinate: coord,
                 streetBearing: bearing,
+                halfBlockLengthMeters: halfBlockLengthMeters,
                 rules: rules
             )
         }

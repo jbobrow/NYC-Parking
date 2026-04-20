@@ -2,6 +2,10 @@ import SwiftUI
 
 struct ParkingDetailSheet: View {
     let segment: ParkingSegment
+    let isParked: Bool
+    let onPark: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -46,6 +50,21 @@ struct ParkingDetailSheet: View {
             .padding(.horizontal, 20)
 
             Spacer(minLength: 20)
+
+            Button {
+                onPark()
+                dismiss()
+            } label: {
+                Label(isParked ? "Parked Here" : "Park Here",
+                      systemImage: isParked ? "car.fill" : "car")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(isParked ? Color.green : Color.accentColor, in: RoundedRectangle(cornerRadius: 14))
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
     }
 
