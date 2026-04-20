@@ -454,9 +454,9 @@ struct ContentView: View {
 
     private var compassNeedle: some View {
         ZStack {
-            Capsule().fill(.white.opacity(0.55)).frame(width: 4, height: 9).offset(y: 5)
+            Capsule().fill(.primary.opacity(0.55)).frame(width: 4, height: 9).offset(y: 5)
             Capsule().fill(Color.red).frame(width: 4, height: 9).offset(y: -5)
-            Circle().fill(.white.opacity(0.8)).frame(width: 4, height: 4)
+            Circle().fill(.primary.opacity(0.8)).frame(width: 4, height: 4)
         }
     }
 }
