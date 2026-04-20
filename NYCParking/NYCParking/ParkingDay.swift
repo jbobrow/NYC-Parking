@@ -58,4 +58,18 @@ enum ParkingDay: String, CaseIterable, Hashable, Identifiable {
         case .sunday:    return 6
         }
     }
+
+    /// Maps a `Calendar.weekday` component (1 = Sunday … 7 = Saturday) to a ParkingDay.
+    static func from(weekday: Int) -> ParkingDay? {
+        switch weekday {
+        case 1: return .sunday
+        case 2: return .monday
+        case 3: return .tuesday
+        case 4: return .wednesday
+        case 5: return .thursday
+        case 6: return .friday
+        case 7: return .saturday
+        default: return nil
+        }
+    }
 }

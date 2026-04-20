@@ -115,6 +115,14 @@ struct ContentView: View {
         }
         .mapControls { }
         .overlay(alignment: .top) {
+            if let moveDate = nextMoveDate {
+                moveCarBanner(for: moveDate)
+                    .padding(.top, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: nextMoveDate != nil)
+        .overlay(alignment: .top) {
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .mask {
@@ -287,6 +295,37 @@ struct ContentView: View {
         }
         } // ZStack
         .ignoresSafeArea()
+    }
+
+    // MARK: - Move car banner
+
+    private var nextMoveDate: Date? {
+        guard let record = parkedRecord else { return nil }
+        let restrictionDayValues = Set(record.restrictionRules.flatMap { $0.days })
+        guard !restrictionDayValues.isEmpty else { return nil }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        for offset in 1...14 {
+            guard let candidate = cal.date(byAdding: .day, value: offset, to: today) else { continue }
+            let weekday = cal.component(.weekday, from: candidate)
+            guard let day = ParkingDay.from(weekday: weekday),
+                  restrictionDayValues.contains(day.rawValue) else { continue }
+            if !NYCHolidayCalendar.isHoliday(candidate, calendar: cal) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private func moveCarBanner(for date: Date) -> some View {
+        let df = DateFormatter()
+        df.dateFormat = "EEE, MMM d"
+        return Label("Move by \(df.string(from: date))", systemImage: "calendar.badge.clock")
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .glassCapsule()
     }
 
     private func openDirectionsToCar(for record: ParkedCarRecord) {

@@ -1,6 +1,13 @@
 import Foundation
 import CoreLocation
 
+/// A minimal encoding of one parking restriction (days + time window).
+struct StoredRule: Codable, Equatable {
+    let days: [String]      // ParkingDay.rawValue, e.g. "MON", "THURS"
+    let startTime: String
+    let endTime: String
+}
+
 /// Minimal persisted snapshot of a parked car location.
 /// Stored in UserDefaults so the pin survives app restarts.
 struct ParkedCarRecord: Codable, Equatable {
@@ -12,6 +19,7 @@ struct ParkedCarRecord: Codable, Equatable {
     let streetBearing: Double?
     let halfBlockLengthMeters: Double
     var offsetMeters: Double
+    let restrictionRules: [StoredRule]
 
     init(segment: ParkingSegment, offsetMeters: Double) {
         self.segmentID             = segment.id
@@ -22,6 +30,9 @@ struct ParkedCarRecord: Codable, Equatable {
         self.streetBearing         = segment.streetBearing
         self.halfBlockLengthMeters = segment.halfBlockLengthMeters
         self.offsetMeters          = offsetMeters
+        self.restrictionRules      = segment.rules.map {
+            StoredRule(days: $0.days.map(\.rawValue), startTime: $0.startTime, endTime: $0.endTime)
+        }
     }
 
     // MARK: - Persistence
