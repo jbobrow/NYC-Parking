@@ -51,15 +51,18 @@ private struct HolidayRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Day-of-week badge — identical styling to ParkingLabel singlePill
-            if let day = parkingDay {
-                Text(day.short)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(day.color, in: Capsule())
+            // Day-of-week badge — fixed-width column so holiday names align
+            ZStack {
+                if let day = parkingDay {
+                    Text(day.short)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(day.color, in: Capsule())
+                }
             }
+            .frame(width: 52)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(holiday.name)
