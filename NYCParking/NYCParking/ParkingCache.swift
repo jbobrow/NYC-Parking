@@ -1,36 +1,42 @@
 import Foundation
-import CoreLocation
-
-// Persisted snapshot of a single bounding-box fetch.
-struct SignCache: Codable {
-    let savedAt: Date           // when the API fetch completed
-    let centerLatitude: Double
-    let centerLongitude: Double
-    let signs: [ParkingSign]
-
-    var center: CLLocation {
-        CLLocation(latitude: centerLatitude, longitude: centerLongitude)
-    }
-}
 
 enum ParkingCache {
-    private static let fileURL: URL = {
+    // Cached update (written after a live API refresh)
+    private static let cacheURL: URL = {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("nyc_parking_signs.json")
+            .appendingPathComponent("nyc_segments_cache.json")
     }()
 
-    static func load() -> SignCache? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(SignCache.self, from: data)
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d
+    }()
+    private static let encoder: JSONEncoder = {
+        let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601; return e
+    }()
+
+    // MARK: - Bundle (pre-built at release time, instant load)
+
+    static func loadBundle() -> SegmentBundle? {
+        guard let url = Bundle.main.url(forResource: "segments", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? decoder.decode(SegmentBundle.self, from: data)
     }
 
-    static func save(_ cache: SignCache) {
-        guard let data = try? JSONEncoder().encode(cache) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+    // MARK: - On-disk update cache
+
+    static func loadCache() -> SegmentBundle? {
+        guard let data = try? Data(contentsOf: cacheURL) else { return nil }
+        return try? decoder.decode(SegmentBundle.self, from: data)
     }
+
+    static func saveCache(_ bundle: SegmentBundle) {
+        guard let data = try? encoder.encode(bundle) else { return }
+        try? data.write(to: cacheURL, options: .atomic)
+    }
+
+    // MARK: - Staleness check
 
     /// Returns the dataset's `rowsUpdatedAt` from the Socrata metadata endpoint.
-    /// Returns nil on any network or parse failure (caller should treat as "unknown").
     static func fetchDatasetUpdatedAt() async -> Date? {
         guard let url = URL(string: "https://data.cityofnewyork.us/api/views/nfid-uabd.json") else { return nil }
         guard let (data, _) = try? await URLSession.shared.data(from: url),

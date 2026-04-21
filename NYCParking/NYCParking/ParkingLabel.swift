@@ -2,16 +2,16 @@ import SwiftUI
 
 // Driven by map zoom level; set in ContentView.onMapCameraChange.
 enum MarkerZoomLevel: Equatable {
-    case hidden   // > ~1650 m visible span
-    case dot      // ~660–1650 m: small colored dot
-    case days     // ~220–660 m: day-name pill(s)
-    case full     // < ~220 m: day pill(s) + time label
+    case dot      // small colored dot; radius scales with zoom
+    case days     // day-name pill(s)
+    case full     // day pill(s) + time label
 }
 
 struct ParkingLabel: View {
     let segment: ParkingSegment
     let zoomLevel: MarkerZoomLevel
     let mapHeading: Double   // current map rotation in degrees [0, 360)
+    var dotRadius: Double = 3.5
     var onTap: (() -> Void)? = nil
 
     private var days: [ParkingDay] { segment.allDays }
@@ -19,8 +19,6 @@ struct ParkingLabel: View {
 
     var body: some View {
         switch zoomLevel {
-        case .hidden:
-            EmptyView()
         case .dot:
             dotView
                 .rotationEffect(days.count > 1 ? streetAngle : .degrees(0))
@@ -49,14 +47,16 @@ struct ParkingLabel: View {
     // MARK: - Dot
 
     private var dotView: some View {
-        HStack(spacing: 3) {
+        let diameter = dotRadius * 2
+        let spacing  = max(1, dotRadius * 0.43)
+        return HStack(spacing: spacing) {
             ForEach(days) { day in
                 Circle()
                     .fill(day.color)
-                    .frame(width: 7, height: 7)
+                    .frame(width: diameter, height: diameter)
             }
         }
-        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+        .shadow(color: .black.opacity(dotRadius < 2 ? 0 : 0.3), radius: 2, x: 0, y: 1)
     }
 
     // MARK: - Day pills

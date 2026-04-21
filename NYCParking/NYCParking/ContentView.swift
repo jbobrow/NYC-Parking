@@ -7,20 +7,12 @@ struct ContentView: View {
     @StateObject private var reminderService   = ReminderService()
     @StateObject private var holidayService    = ASPHolidayService()
 
-    @State private var position: MapCameraPosition = {
-        let center: CLLocationCoordinate2D
-        if let cached = ParkingCache.load() {
-            center = CLLocationCoordinate2D(latitude: cached.centerLatitude,
-                                            longitude: cached.centerLongitude)
-        } else {
-            center = CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855)
-        }
-        return .region(MKCoordinateRegion(center: center,
-                                          latitudinalMeters: 600,
-                                          longitudinalMeters: 600))
-    }()
+    @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
+        latitudinalMeters: 600, longitudinalMeters: 600))
     @State private var selectedSegment: ParkingSegment?
     @State private var zoomLevel: MarkerZoomLevel = .days
+    @State private var dotRadius: Double = 3.5
     @State private var mapHeading: Double = 0
     @State private var lastCamera: MapCamera? = nil
     @State private var hasSnappedToUserLocation = false
@@ -29,7 +21,6 @@ struct ContentView: View {
     @State private var carDragStartOffset: Double = 20
     @State private var carDragTranslation: CGSize = .zero
     @State private var lastMapRegion: MKCoordinateRegion?
-    @State private var departingSegments: [ParkingSegment] = []
     @State private var showReminderPrompt = false
     @State private var pendingReminderDate: Date? = nil
     @State private var showParkedCarSheet = false
@@ -93,20 +84,13 @@ struct ContentView: View {
                 }
             }
 
-            if zoomLevel != .hidden {
-                ForEach(dataService.segments) { segment in
-                    Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
-                        ParkingLabel(segment: segment, zoomLevel: zoomLevel, mapHeading: mapHeading,
-                                     onTap: { selectedSegment = segment })
-                            .id(zoomLevel)
-                            .modifier(MarkerAppearAnimation())
-                    }
-                }
-                ForEach(departingSegments) { segment in
-                    Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
-                        ParkingLabel(segment: segment, zoomLevel: zoomLevel, mapHeading: mapHeading)
-                            .modifier(MarkerDepartAnimation())
-                    }
+            ForEach(dataService.segments) { segment in
+                Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
+                    ParkingLabel(segment: segment, zoomLevel: zoomLevel, mapHeading: mapHeading,
+                                 dotRadius: dotRadius,
+                                 onTap: { selectedSegment = segment })
+                        .id(zoomLevel)
+                        .modifier(MarkerAppearAnimation())
                 }
             }
         }
@@ -122,9 +106,8 @@ struct ContentView: View {
             let delta = ctx.region.span.latitudeDelta
             zoomLevel = delta < 0.002 ? .full
                       : delta < 0.006 ? .days
-                      : delta < 0.015 ? .dot
-                      : .hidden
-            dataService.fetchSigns(near: ctx.region.center)
+                      : .dot
+            dotRadius = max(1.0, 3.5 * 0.006 / delta)
 
             let mapCenter = CLLocation(latitude: ctx.region.center.latitude,
                                        longitude: ctx.region.center.longitude)
@@ -166,19 +149,6 @@ struct ContentView: View {
                 .ignoresSafeArea(edges: .top)
                 .allowsHitTesting(false)
         }
-        .overlay {
-            if zoomLevel == .hidden {
-                Text("Zoom in to see\nparking restrictions")
-                    .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 16)
-                    .glassCapsule()
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: zoomLevel == .hidden)
         .overlay(alignment: .bottomLeading) {
             if zoomLevel == .dot {
                 dotLegend
@@ -313,15 +283,6 @@ struct ContentView: View {
             record == nil ? ParkedCarRecord.clear() : record?.save()
             if record == nil { isCenteredOnCar = false }
         }
-        .onChange(of: dataService.segments) { old, new in
-            let newIDs = Set(new.map(\.id))
-            let departed = old.filter { !newIDs.contains($0.id) }
-            guard !departed.isEmpty else { return }
-            departingSegments = departed
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                departingSegments = []
-            }
-        }
         .sheet(isPresented: $showParkedCarSheet) {
             if let parked = parkedRecord {
                 ParkedCarSheet(
@@ -354,9 +315,11 @@ struct ContentView: View {
         } message: {
             reminderAlertMessage
         }
+        .onAppear {
+            dataService.fetchAllSigns()
+        }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
-            dataService.fetchSigns(near: loc.coordinate)
             if !hasSnappedToUserLocation {
                 hasSnappedToUserLocation = true
                 isFollowingUser = true
@@ -531,23 +494,6 @@ private struct MarkerAppearAnimation: ViewModifier {
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
                     scale = 1
                     opacity = 1
-                }
-            }
-    }
-}
-
-private struct MarkerDepartAnimation: ViewModifier {
-    @State private var scale: CGFloat = 1
-    @State private var opacity: Double = 1
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(scale)
-            .opacity(opacity)
-            .onAppear {
-                withAnimation(.easeIn(duration: 0.2)) {
-                    scale = 0
-                    opacity = 0
                 }
             }
     }
