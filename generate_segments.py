@@ -188,6 +188,18 @@ def build_segments(signs):
             "rules":   rules,
         })
 
+    # Fill null bearings from same-street median (normalize to [0°,180°) first
+    # to avoid PCA direction-flip artifacts where identical streets have bearings
+    # clustered near both 0° and 180°).
+    street_bearings: dict[str, list[float]] = {}
+    for seg in segments:
+        if seg["bearing"] is not None:
+            street_bearings.setdefault(seg["street"], []).append(seg["bearing"] % 180)
+    for seg in segments:
+        if seg["bearing"] is None and seg["street"] in street_bearings:
+            bs = sorted(street_bearings[seg["street"]])
+            seg["bearing"] = round(bs[len(bs) // 2], 2)
+
     return segments
 
 # ── Main ───────────────────────────────────────────────────────────────────────
