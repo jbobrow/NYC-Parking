@@ -1,5 +1,6 @@
 import Foundation
 import CoreLocation
+import SwiftUI
 
 struct ParkingSegment: Identifiable, Hashable {
     let id: String
@@ -44,4 +45,6 @@ struct ParkingSegment: Identifiable, Hashable {
         let unique = Set(rules.flatMap { $0.days })
         return unique.sorted { $0.sortOrder < $1.sortOrder }
     }
+
+    var primaryDayColor: Color { allDays.first?.color ?? .gray }
 }

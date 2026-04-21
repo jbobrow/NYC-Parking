@@ -18,7 +18,7 @@ Each segment:
     "rules": [{"days":["MON","THURS"],"startTime":"8AM","endTime":"9AM"}] }
 """
 
-import math, json, re, sys, datetime, requests
+import math, json, re, sys, datetime, sqlite3, requests
 
 # ── State Plane EPSG:2263 → WGS84 ─────────────────────────────────────────────
 _a   = 6_378_137.0
@@ -192,7 +192,7 @@ def build_segments(signs):
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    out = "NYCParking/NYCParking/segments.json"
+    out = "NYCParking/NYCParking/segments.db"
 
     print("Fetching signs from NYC Open Data…")
     signs = fetch_all()
@@ -202,14 +202,56 @@ if __name__ == "__main__":
     segs = build_segments(signs)
     print(f"Total segments: {len(segs)}")
 
-    bundle = {
-        "generatedAt": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "segments": segs,
-    }
+    import os
+    try:
+        os.remove(out)
+    except FileNotFoundError:
+        pass
 
-    with open(out, "w") as f:
-        json.dump(bundle, f, separators=(",", ":"))
+    conn = sqlite3.connect(out)
+    c = conn.cursor()
+    c.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+        CREATE TABLE segments (
+            id TEXT PRIMARY KEY,
+            street TEXT, from_st TEXT, to_st TEXT, side TEXT,
+            lat REAL NOT NULL, lon REAL NOT NULL,
+            bearing REAL,
+            half_len REAL NOT NULL,
+            rules TEXT NOT NULL
+        );
+        CREATE INDEX idx_bbox ON segments(lat, lon);
+    """)
 
-    size_mb = len(json.dumps(bundle, separators=(",",":"))) / 1_048_576
+    generated_at = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    c.execute("INSERT INTO meta VALUES (?,?)", ("generated_at", generated_at))
+
+    for seg in segs:
+        # Encode rules as compact JSON array: [["MON,THURS","8AM","9AM"], ...]
+        rules_arr = [
+            [",".join(r["days"]), r["startTime"], r["endTime"]]
+            for r in seg["rules"]
+        ]
+        rules_json = json.dumps(rules_arr, separators=(",", ":"))
+        c.execute(
+            "INSERT OR REPLACE INTO segments VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                seg["id"],
+                seg["street"],
+                seg["from"],
+                seg["to"],
+                seg["side"],
+                seg["lat"],
+                seg["lon"],
+                seg["bearing"],
+                seg["halfLen"],
+                rules_json,
+            ),
+        )
+
+    conn.commit()
+    conn.close()
+
+    size_mb = os.path.getsize(out) / 1_048_576
     print(f"Written to {out}  ({size_mb:.1f} MB)")
-    print("Add segments.json to the Xcode project as a bundle resource, then build.")
+    print("Add segments.db to the Xcode project as a bundle resource, then build.")

@@ -12,7 +12,11 @@ struct ContentView: View {
         latitudinalMeters: 600, longitudinalMeters: 600))
     @State private var selectedSegment: ParkingSegment?
     @State private var zoomLevel: MarkerZoomLevel = .days
-    @State private var dotRadius: Double = 3.5
+    @State private var annotationGeneration: Int = 0
+    @State private var showAnnotationContent: Bool = false
+    @State private var pillsVisible: Bool = false
+    @State private var pillZoomLevel: MarkerZoomLevel = .days
+    @State private var removeAnnotationsTask: Task<Void, Never>? = nil
     @State private var mapHeading: Double = 0
     @State private var lastCamera: MapCamera? = nil
     @State private var hasSnappedToUserLocation = false
@@ -42,55 +46,16 @@ struct ContentView: View {
             Map(position: $position) {
             UserAnnotation()
 
-            if let parked = parkedRecord {
-                Annotation("", coordinate: carCoordinate(for: parked), anchor: .center) {
-                    Image(systemName: "car.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Color.blue, in: Circle())
-                        .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
-                        .offset(carDragTranslation)
-                        .onTapGesture { showParkedCarSheet = true }
-                        .gesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
-                                    let sx = sin(θ), sy = -cos(θ)
-                                    let proj = value.translation.width * sx + value.translation.height * sy
-                                    carDragTranslation = CGSize(width: proj * sx, height: proj * sy)
-                                }
-                                .onEnded { value in
-                                    guard let region = lastMapRegion else {
-                                        carDragTranslation = .zero; return
-                                    }
-                                    let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
-                                    let sx = sin(θ), sy = -cos(θ)
-                                    let proj = value.translation.width * sx + value.translation.height * sy
-                                    let mPerPoint = region.span.latitudeDelta * 111_320.0
-                                                  / UIScreen.main.bounds.height
-                                    var newOffset = carDragStartOffset + proj * mPerPoint
-                                    let clearance = 12.0
-                                    if abs(newOffset) < clearance {
-                                        newOffset = newOffset >= 0 ? clearance : -clearance
-                                    }
-                                    let limit = parked.halfBlockLengthMeters
-                                    newOffset = max(-limit, min(limit, newOffset))
-                                    parkedRecord?.offsetMeters = newOffset
-                                    carDragStartOffset = newOffset
-                                    carDragTranslation = .zero
-                                }
-                        )
-                }
-            }
-
-            ForEach(dataService.segments) { segment in
-                Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
-                    ParkingLabel(segment: segment, zoomLevel: zoomLevel, mapHeading: mapHeading,
-                                 dotRadius: dotRadius,
-                                 onTap: { selectedSegment = segment })
-                        .id(zoomLevel)
-                        .modifier(MarkerAppearAnimation())
+            if showAnnotationContent {
+                ForEach(dataService.segments) { segment in
+                    Annotation("", coordinate: segment.sidewalkCoordinate, anchor: .center) {
+                        ParkingLabel(segment: segment, zoomLevel: pillZoomLevel, mapHeading: mapHeading,
+                                     onTap: { selectedSegment = segment })
+                            .scaleEffect(pillsVisible ? 1 : 0)
+                            .opacity(pillsVisible ? 1 : 0)
+                            .animation(.spring(response: 0.45, dampingFraction: 0.7), value: pillsVisible)
+                            .id(annotationGeneration)
+                    }
                 }
             }
         }
@@ -101,13 +66,34 @@ struct ContentView: View {
             mapHeading = ctx.camera.heading
             lastCamera = ctx.camera
             lastMapRegion = ctx.region
+            let delta = ctx.region.span.latitudeDelta
+            let newZoom: MarkerZoomLevel = delta < 0.002 ? .full
+                                         : delta < 0.006 ? .days
+                                         : .dot
+            guard newZoom != zoomLevel else { return }
+            if zoomLevel == .dot {
+                // Entering pill view: cancel any pending removal, start entry animation
+                removeAnnotationsTask?.cancel()
+                annotationGeneration += 1
+                pillZoomLevel = newZoom
+                showAnnotationContent = true
+                // Defer pillsVisible so annotations render at scale=0 before animating in
+                DispatchQueue.main.async { pillsVisible = true }
+            } else if newZoom == .dot {
+                // Entering dot view: animate pills out, then remove from map content
+                pillsVisible = false
+                removeAnnotationsTask?.cancel()
+                removeAnnotationsTask = Task {
+                    try? await Task.sleep(for: .seconds(0.5))
+                    showAnnotationContent = false
+                }
+            } else {
+                pillZoomLevel = newZoom
+            }
+            zoomLevel = newZoom
         }
         .onMapCameraChange(frequency: .onEnd) { ctx in
-            let delta = ctx.region.span.latitudeDelta
-            zoomLevel = delta < 0.002 ? .full
-                      : delta < 0.006 ? .days
-                      : .dot
-            dotRadius = max(1.0, 3.5 * 0.006 / delta)
+            dataService.loadRegion(ctx.region)
 
             let mapCenter = CLLocation(latitude: ctx.region.center.latitude,
                                        longitude: ctx.region.center.longitude)
@@ -121,6 +107,64 @@ struct ContentView: View {
             }
         }
         .mapControls { }
+        .overlay {
+            if zoomLevel == .dot {
+                MapDotsLayer(segments: dataService.segments, region: lastMapRegion)
+                    .allowsHitTesting(false)
+            }
+        }
+        // Car icon rendered above the dots canvas. The canvas is now inside MKMapView's
+        // subview stack, so MapKit's UserAnnotation already floats above it naturally.
+        .overlay {
+            if let mapRegion = lastMapRegion {
+                GeometryReader { geo in
+                    ZStack {
+                        if let parked = parkedRecord,
+                           let pt = mercatorPoint(carCoordinate(for: parked), region: mapRegion, size: geo.size) {
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.blue, in: Circle())
+                                .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+                                .position(x: pt.x + carDragTranslation.width,
+                                          y: pt.y + carDragTranslation.height)
+                                .onTapGesture { showParkedCarSheet = true }
+                                .gesture(
+                                    DragGesture()
+                                        .onChanged { value in
+                                            let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
+                                            let sx = sin(θ), sy = -cos(θ)
+                                            let proj = value.translation.width * sx + value.translation.height * sy
+                                            carDragTranslation = CGSize(width: proj * sx, height: proj * sy)
+                                        }
+                                        .onEnded { value in
+                                            guard let region = lastMapRegion else {
+                                                carDragTranslation = .zero; return
+                                            }
+                                            let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
+                                            let sx = sin(θ), sy = -cos(θ)
+                                            let proj = value.translation.width * sx + value.translation.height * sy
+                                            let mPerPoint = region.span.latitudeDelta * 111_320.0
+                                                          / UIScreen.main.bounds.height
+                                            var newOffset = carDragStartOffset + proj * mPerPoint
+                                            let clearance = 12.0
+                                            if abs(newOffset) < clearance {
+                                                newOffset = newOffset >= 0 ? clearance : -clearance
+                                            }
+                                            let limit = parked.halfBlockLengthMeters
+                                            newOffset = max(-limit, min(limit, newOffset))
+                                            parkedRecord?.offsetMeters = newOffset
+                                            carDragStartOffset = newOffset
+                                            carDragTranslation = .zero
+                                        }
+                                )
+                        }
+                    }
+                }
+                .ignoresSafeArea()
+            }
+        }
         .overlay(alignment: .top) {
             if let moveDate = nextMoveDate {
                 moveCarBanner(for: moveDate)
@@ -316,7 +360,7 @@ struct ContentView: View {
             reminderAlertMessage
         }
         .onAppear {
-            dataService.fetchAllSigns()
+            dataService.checkForUpdates()
         }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
@@ -384,6 +428,23 @@ struct ContentView: View {
         mapItem.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
         ])
+    }
+
+    private func mercatorPoint(_ coord: CLLocationCoordinate2D,
+                               region: MKCoordinateRegion,
+                               size: CGSize) -> CGPoint? {
+        let lonRange = region.span.longitudeDelta
+        guard lonRange > 0 else { return nil }
+        func mercY(_ lat: Double) -> Double {
+            log(tan(.pi / 4.0 + lat * .pi / 360.0))
+        }
+        let minLon = region.center.longitude - lonRange / 2
+        let maxMercY = mercY(region.center.latitude + region.span.latitudeDelta / 2)
+        let mercRange = maxMercY - mercY(region.center.latitude - region.span.latitudeDelta / 2)
+        guard mercRange > 0 else { return nil }
+        let px = (coord.longitude - minLon) / lonRange * Double(size.width)
+        let py = (maxMercY - mercY(coord.latitude)) / mercRange * Double(size.height)
+        return CGPoint(x: px, y: py)
     }
 
     private func carCoordinate(for record: ParkedCarRecord) -> CLLocationCoordinate2D {
@@ -480,21 +541,3 @@ private struct GlassCircleModifier: ViewModifier {
     }
 }
 
-// MARK: - Marker Animations
-
-private struct MarkerAppearAnimation: ViewModifier {
-    @State private var scale: CGFloat = 0
-    @State private var opacity: Double = 0
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(scale)
-            .opacity(opacity)
-            .onAppear {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-                    scale = 1
-                    opacity = 1
-                }
-            }
-    }
-}
