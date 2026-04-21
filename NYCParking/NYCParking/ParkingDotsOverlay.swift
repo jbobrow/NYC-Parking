@@ -105,22 +105,31 @@ final class ParkingDotsView: UIView {
         guard lonRange > 0, mercRange > 0 else { return }
 
         // Build one path per day color — drops ~50k fill calls to at most 8.
-        var paths: [ParkingDay?: CGMutablePath] = [:]
+        // Multi-day segments draw N side-by-side circles (matching ParkingLabel.dotView).
+        let gap = max(1.0, dotR * 0.43)
+        let step = dotR * 2 + gap
+        var paths: [ParkingDay: CGMutablePath] = [:]
         for seg in segments {
+            let days = seg.allDays
+            guard !days.isEmpty else { continue }
             let coord = seg.sidewalkCoordinate
             let px = (coord.longitude - minLon) / lonRange * w
             let py = (maxMercY - mercY(coord.latitude)) / mercRange * h
-            guard px >= -dotR, px <= w + dotR,
+            guard px >= -dotR * Double(days.count) * 2, px <= w + dotR * Double(days.count) * 2,
                   py >= -dotR, py <= h + dotR else { continue }
-            let day = seg.allDays.first
-            if paths[day] == nil { paths[day] = CGMutablePath() }
-            paths[day]!.addEllipse(in: CGRect(x: px - dotR, y: py - dotR,
-                                               width: dotR * 2, height: dotR * 2))
+            // Center the group of N dots around (px, py)
+            let startX = px - (Double(days.count) - 1) * step / 2
+            for (i, day) in days.enumerated() {
+                let cx = startX + Double(i) * step
+                guard cx >= -dotR, cx <= w + dotR else { continue }
+                if paths[day] == nil { paths[day] = CGMutablePath() }
+                paths[day]!.addEllipse(in: CGRect(x: cx - dotR, y: py - dotR,
+                                                   width: dotR * 2, height: dotR * 2))
+            }
         }
 
         for (day, path) in paths {
-            let uiColor = day.map { UIColor($0.color) } ?? .gray
-            ctx.setFillColor(uiColor.withAlphaComponent(0.85).cgColor)
+            ctx.setFillColor(UIColor(day.color).withAlphaComponent(0.85).cgColor)
             ctx.addPath(path)
             ctx.fillPath()
         }
