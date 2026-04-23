@@ -2,10 +2,10 @@ import SwiftUI
 import MapKit
 
 struct ContentView: View {
-    @StateObject private var dataService       = ParkingDataService()
-    @StateObject private var locationManager   = LocationManager()
-    @StateObject private var reminderService   = ReminderService()
-    @StateObject private var holidayService    = ASPHolidayService()
+    @StateObject private var dataService           = ParkingDataService()
+    @StateObject private var locationManager       = LocationManager()
+    @StateObject private var notificationService   = NotificationService()
+    @StateObject private var holidayService        = ASPHolidayService()
 
     @State private var position: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
@@ -26,8 +26,6 @@ struct ContentView: View {
     @State private var carDragStartOffset: Double = 20
     @State private var carDragTranslation: CGSize = .zero
     @State private var lastMapRegion: MKCoordinateRegion?
-    @State private var showReminderPrompt = false
-    @State private var pendingReminderDate: Date? = nil
     @State private var showParkedCarSheet = false
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
@@ -325,14 +323,16 @@ struct ContentView: View {
                     if parkedRecord?.segmentID == segment.id {
                         parkedRecord = nil
                         ParkedCarRecord.clear()
+                        notificationService.cancelPendingNotifications()
                     } else {
                         let record = ParkedCarRecord(segment: segment, offsetMeters: 20)
                         parkedRecord = record
                         carDragStartOffset = 20
                         carDragTranslation = .zero
                         record.save()
-                        pendingReminderDate = nextMoveDate
-                        showReminderPrompt = true
+                        if let date = nextMoveDate {
+                            Task { await notificationService.scheduleNotifications(for: record, moveDate: date) }
+                        }
                     }
                 }
             )
@@ -359,6 +359,7 @@ struct ContentView: View {
                     nextMoveDate: nextMoveDate,
                     onDirections: { openDirectionsToCar(for: parked) },
                     onUnpark: {
+                        notificationService.cancelPendingNotifications()
                         withAnimation(.easeInOut(duration: 0.3)) {
                             parkedRecord = nil
                             ParkedCarRecord.clear()
@@ -370,19 +371,6 @@ struct ContentView: View {
                 .presentationBackground(.regularMaterial)
                 .presentationDragIndicator(.hidden)
             }
-        }
-        .alert("Add a Reminder?", isPresented: $showReminderPrompt) {
-            Button("Add Reminder") {
-                if let date = pendingReminderDate {
-                    let df = DateFormatter()
-                    df.dateFormat = "EEE, MMM d"
-                    let title = "Move your car — \(df.string(from: date))"
-                    Task { await reminderService.scheduleReminder(title: title, on: date) }
-                }
-            }
-            Button("Not Now", role: .cancel) { }
-        } message: {
-            reminderAlertMessage
         }
         .onAppear {
             dataService.checkForUpdates()
@@ -449,15 +437,6 @@ struct ContentView: View {
             }
         }
         return nil
-    }
-
-    private var reminderAlertMessage: Text {
-        guard let date = pendingReminderDate else {
-            return Text("No upcoming restrictions found in the next two weeks.")
-        }
-        let df = DateFormatter()
-        df.dateFormat = "EEEE, MMMM d"
-        return Text("Get an 8 AM reminder to move your car on \(df.string(from: date)).")
     }
 
     private func moveCarBanner(for date: Date) -> some View {
