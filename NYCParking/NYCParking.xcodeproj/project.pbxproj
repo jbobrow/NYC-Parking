@@ -18,7 +18,6 @@
 		AA1900000000000000000002 /* ParkingLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1900000000000000000001 /* ParkingLabel.swift */; };
 		AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1A00000000000000000001 /* ParkingDetailSheet.swift */; };
 		AA1B00000000000000000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1B00000000000000000001 /* Assets.xcassets */; };
-		AA2400000000000000000002 /* segments.db in Resources */ = {isa = PBXBuildFile; fileRef = BB2400000000000000000001 /* segments.db */; };
 		AA1C00000000000000000002 /* ParkingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000001 /* ParkingCache.swift */; };
 		AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000002 /* ParkedCarRecord.swift */; };
 		AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1E00000000000000000001 /* NYCHolidayCalendar.swift */; };
@@ -26,6 +25,7 @@
 		AA2000000000000000000002 /* HolidaySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2000000000000000000001 /* HolidaySheet.swift */; };
 		AA2100000000000000000002 /* ASPHolidayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2100000000000000000001 /* ASPHolidayService.swift */; };
 		AA2200000000000000000002 /* ParkedCarSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2200000000000000000001 /* ParkedCarSheet.swift */; };
+		AA2400000000000000000002 /* segments.db in Resources */ = {isa = PBXBuildFile; fileRef = BB2400000000000000000001 /* segments.db */; };
 		AA2500000000000000000002 /* ParkingDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2500000000000000000001 /* ParkingDatabase.swift */; };
 		AA2600000000000000000002 /* ParkingTileOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2600000000000000000001 /* ParkingTileOverlay.swift */; };
 		AA2700000000000000000002 /* ParkingDotsOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2700000000000000000001 /* ParkingDotsOverlay.swift */; };
@@ -52,7 +52,7 @@
 		BB2000000000000000000001 /* HolidaySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HolidaySheet.swift; sourceTree = "<group>"; };
 		BB2100000000000000000001 /* ASPHolidayService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASPHolidayService.swift; sourceTree = "<group>"; };
 		BB2200000000000000000001 /* ParkedCarSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkedCarSheet.swift; sourceTree = "<group>"; };
-		BB2400000000000000000001 /* segments.db */ = {isa = PBXFileReference; lastKnownFileType = "text"; path = segments.db; sourceTree = "<group>"; };
+		BB2400000000000000000001 /* segments.db */ = {isa = PBXFileReference; lastKnownFileType = text; path = segments.db; sourceTree = "<group>"; };
 		BB2500000000000000000001 /* ParkingDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDatabase.swift; sourceTree = "<group>"; };
 		BB2600000000000000000001 /* ParkingTileOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingTileOverlay.swift; sourceTree = "<group>"; };
 		BB2700000000000000000001 /* ParkingDotsOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDotsOverlay.swift; sourceTree = "<group>"; };
@@ -334,7 +334,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -348,7 +348,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -363,7 +363,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -377,7 +377,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
