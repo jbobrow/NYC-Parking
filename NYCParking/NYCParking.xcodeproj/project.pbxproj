@@ -21,7 +21,7 @@
 		AA1C00000000000000000002 /* ParkingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000001 /* ParkingCache.swift */; };
 		AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000002 /* ParkedCarRecord.swift */; };
 		AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1E00000000000000000001 /* NYCHolidayCalendar.swift */; };
-		AA1F00000000000000000002 /* ReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1F00000000000000000001 /* ReminderService.swift */; };
+		AA1F00000000000000000002 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1F00000000000000000001 /* NotificationService.swift */; };
 		AA2000000000000000000002 /* HolidaySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2000000000000000000001 /* HolidaySheet.swift */; };
 		AA2100000000000000000002 /* ASPHolidayService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2100000000000000000001 /* ASPHolidayService.swift */; };
 		AA2200000000000000000002 /* ParkedCarSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2200000000000000000001 /* ParkedCarSheet.swift */; };
@@ -48,7 +48,7 @@
 		BB1D00000000000000000001 /* ParkingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingCache.swift; sourceTree = "<group>"; };
 		BB1D00000000000000000002 /* ParkedCarRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkedCarRecord.swift; sourceTree = "<group>"; };
 		BB1E00000000000000000001 /* NYCHolidayCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NYCHolidayCalendar.swift; sourceTree = "<group>"; };
-		BB1F00000000000000000001 /* ReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderService.swift; sourceTree = "<group>"; };
+		BB1F00000000000000000001 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		BB2000000000000000000001 /* HolidaySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HolidaySheet.swift; sourceTree = "<group>"; };
 		BB2100000000000000000001 /* ASPHolidayService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASPHolidayService.swift; sourceTree = "<group>"; };
 		BB2200000000000000000001 /* ParkedCarSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkedCarSheet.swift; sourceTree = "<group>"; };
@@ -93,7 +93,7 @@
 				BB1D00000000000000000001 /* ParkingCache.swift */,
 				BB1D00000000000000000002 /* ParkedCarRecord.swift */,
 				BB1E00000000000000000001 /* NYCHolidayCalendar.swift */,
-				BB1F00000000000000000001 /* ReminderService.swift */,
+				BB1F00000000000000000001 /* NotificationService.swift */,
 				BB2000000000000000000001 /* HolidaySheet.swift */,
 				BB2100000000000000000001 /* ASPHolidayService.swift */,
 				BB2200000000000000000001 /* ParkedCarSheet.swift */,
@@ -198,7 +198,7 @@
 				AA1C00000000000000000002 /* ParkingCache.swift in Sources */,
 				AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */,
 				AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */,
-				AA1F00000000000000000002 /* ReminderService.swift in Sources */,
+				AA1F00000000000000000002 /* NotificationService.swift in Sources */,
 				AA2000000000000000000002 /* HolidaySheet.swift in Sources */,
 				AA2100000000000000000002 /* ASPHolidayService.swift in Sources */,
 				AA2200000000000000000002 /* ParkedCarSheet.swift in Sources */,
@@ -334,7 +334,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -363,7 +363,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
