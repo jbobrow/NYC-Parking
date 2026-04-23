@@ -21,6 +21,7 @@ struct ContentView: View {
     @State private var lastCamera: MapCamera? = nil
     @State private var hasSnappedToUserLocation = false
     @State private var isFollowingUser = false
+    @State private var isDrivingMode = false
     @State private var parkedRecord: ParkedCarRecord?
     @State private var carDragStartOffset: Double = 20
     @State private var carDragTranslation: CGSize = .zero
@@ -44,7 +45,57 @@ struct ContentView: View {
         ZStack {
             Color.black
             Map(position: $position) {
-            UserAnnotation()
+            if isDrivingMode, let userLoc = locationManager.location {
+                Annotation("", coordinate: userLoc.coordinate, anchor: .center) {
+                    NavigationArrowView(course: userLoc.course,
+                                        speed: userLoc.speed,
+                                        mapHeading: mapHeading)
+                }
+            } else {
+                UserAnnotation()
+            }
+
+            if let parked = parkedRecord {
+                Annotation("", coordinate: carCoordinate(for: parked), anchor: .center) {
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.blue, in: Circle())
+                        .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
+                        .offset(x: carDragTranslation.width, y: carDragTranslation.height)
+                        .onTapGesture { showParkedCarSheet = true }
+                        .gesture(
+                            DragGesture(minimumDistance: 5)
+                                .onChanged { value in
+                                    let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
+                                    let sx = sin(θ), sy = -cos(θ)
+                                    let proj = value.translation.width * sx + value.translation.height * sy
+                                    carDragTranslation = CGSize(width: proj * sx, height: proj * sy)
+                                }
+                                .onEnded { value in
+                                    guard let region = lastMapRegion else {
+                                        carDragTranslation = .zero; return
+                                    }
+                                    let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
+                                    let sx = sin(θ), sy = -cos(θ)
+                                    let proj = value.translation.width * sx + value.translation.height * sy
+                                    let mPerPoint = region.span.latitudeDelta * 111_320.0
+                                                  / UIScreen.main.bounds.height
+                                    var newOffset = carDragStartOffset + proj * mPerPoint
+                                    let clearance = 12.0
+                                    if abs(newOffset) < clearance {
+                                        newOffset = newOffset >= 0 ? clearance : -clearance
+                                    }
+                                    let limit = parked.halfBlockLengthMeters
+                                    newOffset = max(-limit, min(limit, newOffset))
+                                    parkedRecord?.offsetMeters = newOffset
+                                    carDragStartOffset = newOffset
+                                    carDragTranslation = .zero
+                                }
+                        )
+                }
+            }
 
             if showAnnotationContent {
                 ForEach(dataService.segments) { segment in
@@ -97,8 +148,10 @@ struct ContentView: View {
 
             let mapCenter = CLLocation(latitude: ctx.region.center.latitude,
                                        longitude: ctx.region.center.longitude)
-            if let userLoc = locationManager.location {
-                isFollowingUser = mapCenter.distance(from: userLoc) < 80
+            if isFollowingUser, let userLoc = locationManager.location,
+               mapCenter.distance(from: userLoc) > 80 {
+                isFollowingUser = false
+                isDrivingMode = false
             }
             if let parked = parkedRecord {
                 let coord = carCoordinate(for: parked)
@@ -109,60 +162,8 @@ struct ContentView: View {
         .mapControls { }
         .overlay {
             if zoomLevel == .dot {
-                MapDotsLayer(segments: dataService.segments, region: lastMapRegion)
+                MapDotsLayer(segments: dataService.segments, region: lastMapRegion, heading: mapHeading)
                     .allowsHitTesting(false)
-            }
-        }
-        // Car icon rendered above the dots canvas. The canvas is now inside MKMapView's
-        // subview stack, so MapKit's UserAnnotation already floats above it naturally.
-        .overlay {
-            if let mapRegion = lastMapRegion {
-                GeometryReader { geo in
-                    ZStack {
-                        if let parked = parkedRecord,
-                           let pt = mercatorPoint(carCoordinate(for: parked), region: mapRegion, size: geo.size) {
-                            Image(systemName: "car.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: 36, height: 36)
-                                .background(Color.blue, in: Circle())
-                                .shadow(color: .black.opacity(0.25), radius: 4, x: 0, y: 2)
-                                .position(x: pt.x + carDragTranslation.width,
-                                          y: pt.y + carDragTranslation.height)
-                                .onTapGesture { showParkedCarSheet = true }
-                                .gesture(
-                                    DragGesture()
-                                        .onChanged { value in
-                                            let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
-                                            let sx = sin(θ), sy = -cos(θ)
-                                            let proj = value.translation.width * sx + value.translation.height * sy
-                                            carDragTranslation = CGSize(width: proj * sx, height: proj * sy)
-                                        }
-                                        .onEnded { value in
-                                            guard let region = lastMapRegion else {
-                                                carDragTranslation = .zero; return
-                                            }
-                                            let θ = (parked.streetBearing ?? 0 - mapHeading) * .pi / 180
-                                            let sx = sin(θ), sy = -cos(θ)
-                                            let proj = value.translation.width * sx + value.translation.height * sy
-                                            let mPerPoint = region.span.latitudeDelta * 111_320.0
-                                                          / UIScreen.main.bounds.height
-                                            var newOffset = carDragStartOffset + proj * mPerPoint
-                                            let clearance = 12.0
-                                            if abs(newOffset) < clearance {
-                                                newOffset = newOffset >= 0 ? clearance : -clearance
-                                            }
-                                            let limit = parked.halfBlockLengthMeters
-                                            newOffset = max(-limit, min(limit, newOffset))
-                                            parkedRecord?.offsetMeters = newOffset
-                                            carDragStartOffset = newOffset
-                                            carDragTranslation = .zero
-                                        }
-                                )
-                        }
-                    }
-                }
-                .ignoresSafeArea()
             }
         }
         .overlay(alignment: .top) {
@@ -204,13 +205,6 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.2), value: zoomLevel == .dot)
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 10) {
-                if dataService.isLoading {
-                    ProgressView()
-                        .tint(.secondary)
-                        .padding(10)
-                        .glassCircle()
-                }
-
                 if abs(mapHeading) > 1 {
                     Button {
                         if let cam = lastCamera {
@@ -230,23 +224,53 @@ struct ContentView: View {
                 }
 
                 Button {
-                    isFollowingUser = true
-                    withAnimation(.easeInOut(duration: 0.4)) {
-                        if let loc = locationManager.location {
+                    guard let loc = locationManager.location else {
+                        position = .userLocation(fallback: .automatic)
+                        isFollowingUser = true
+                        return
+                    }
+                    if !isFollowingUser {
+                        // Off → On: center on user, normal follow
+                        isFollowingUser = true
+                        isDrivingMode = false
+                        withAnimation(.easeInOut(duration: 0.4)) {
                             position = .region(MKCoordinateRegion(
                                 center: loc.coordinate,
-                                latitudinalMeters: 600,
-                                longitudinalMeters: 600
+                                latitudinalMeters: 300,
+                                longitudinalMeters: 300
                             ))
-                        } else {
-                            position = .userLocation(fallback: .automatic)
+                        }
+                    } else if !isDrivingMode {
+                        // On → Driving: enable course-up navigation
+                        isDrivingMode = true
+                        let heading = (loc.course >= 0 && loc.speed > 0.5) ? loc.course : mapHeading
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            position = .camera(MapCamera(
+                                centerCoordinate: loc.coordinate,
+                                distance: lastCamera?.distance ?? 1000,
+                                heading: heading,
+                                pitch: 0
+                            ))
+                        }
+                    } else {
+                        // Driving → On: exit driving, reset heading to north
+                        isDrivingMode = false
+                        withAnimation(.easeInOut(duration: 0.4)) {
+                            position = .camera(MapCamera(
+                                centerCoordinate: loc.coordinate,
+                                distance: lastCamera?.distance ?? 1000,
+                                heading: 0,
+                                pitch: 0
+                            ))
                         }
                     }
                 } label: {
-                    Image(systemName: isFollowingUser ? "location.fill" : "location")
+                    Image(systemName: isDrivingMode ? "location.north.fill"
+                                    : isFollowingUser ? "location.fill"
+                                    : "location")
                         .font(.system(size: 17))
                 }
-                .buttonStyle(GlassCircleButtonStyle())
+                .buttonStyle(GlassCircleButtonStyle(isDriving: isDrivingMode))
 
                 if let parked = parkedRecord {
                     Button {
@@ -374,6 +398,32 @@ struct ContentView: View {
                         longitudinalMeters: 600
                     ))
                 }
+            } else if isFollowingUser {
+                if isDrivingMode {
+                    // Driving mode: course-up, rotate map to match travel direction
+                    let targetHeading = (loc.course >= 0 && loc.speed > 0.5) ? loc.course : mapHeading
+                    position = .camera(MapCamera(
+                        centerCoordinate: loc.coordinate,
+                        distance: lastCamera?.distance ?? 1000,
+                        heading: targetHeading,
+                        pitch: 0
+                    ))
+                } else {
+                    // Normal follow: re-center, keep current zoom and heading
+                    position = .region(MKCoordinateRegion(
+                        center: loc.coordinate,
+                        span: lastMapRegion?.span ?? MKCoordinateSpan(
+                            latitudeDelta: 0.003, longitudeDelta: 0.003
+                        )
+                    ))
+                }
+            }
+        }
+        .onChange(of: isDrivingMode) { _, driving in
+            if driving {
+                locationManager.startNavigationMode()
+            } else {
+                locationManager.stopNavigationMode()
             }
         }
         } // ZStack
@@ -428,23 +478,6 @@ struct ContentView: View {
         mapItem.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
         ])
-    }
-
-    private func mercatorPoint(_ coord: CLLocationCoordinate2D,
-                               region: MKCoordinateRegion,
-                               size: CGSize) -> CGPoint? {
-        let lonRange = region.span.longitudeDelta
-        guard lonRange > 0 else { return nil }
-        func mercY(_ lat: Double) -> Double {
-            log(tan(.pi / 4.0 + lat * .pi / 360.0))
-        }
-        let minLon = region.center.longitude - lonRange / 2
-        let maxMercY = mercY(region.center.latitude + region.span.latitudeDelta / 2)
-        let mercRange = maxMercY - mercY(region.center.latitude - region.span.latitudeDelta / 2)
-        guard mercRange > 0 else { return nil }
-        let px = (coord.longitude - minLon) / lonRange * Double(size.width)
-        let py = (maxMercY - mercY(coord.latitude)) / mercRange * Double(size.height)
-        return CGPoint(x: px, y: py)
     }
 
     private func carCoordinate(for record: ParkedCarRecord) -> CLLocationCoordinate2D {
@@ -514,13 +547,15 @@ private extension View {
 
 private struct GlassCircleButtonStyle: ButtonStyle {
     @Environment(\.colorScheme) private var colorScheme
+    var isDriving: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(colorScheme == .dark ? .white : Color.accentColor)
+            .foregroundStyle(isDriving ? Color.white
+                             : colorScheme == .dark ? .white : Color.accentColor)
             .frame(width: 52, height: 52)
             .contentShape(Circle())
-            .modifier(GlassCircleModifier(isPressed: configuration.isPressed))
+            .modifier(GlassCircleModifier(isPressed: configuration.isPressed, isDriving: isDriving))
             .scaleEffect(configuration.isPressed ? 1.15 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.65), value: configuration.isPressed)
     }
@@ -528,9 +563,15 @@ private struct GlassCircleButtonStyle: ButtonStyle {
 
 private struct GlassCircleModifier: ViewModifier {
     let isPressed: Bool
+    var isDriving: Bool = false
 
     func body(content: Content) -> some View {
-        if #available(iOS 26, *) {
+        if isDriving {
+            content
+                .background(Color.blue, in: Circle())
+                .brightness(isPressed ? 0.15 : 0)
+                .shadow(color: .blue.opacity(0.55), radius: 10, x: 0, y: 0)
+        } else if #available(iOS 26, *) {
             content.glassEffect(in: Circle())
         } else {
             content
@@ -538,6 +579,42 @@ private struct GlassCircleModifier: ViewModifier {
                 .brightness(isPressed ? 0.1 : 0)
                 .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
         }
+    }
+}
+
+// MARK: - Navigation Arrow Annotation
+
+/// User location marker for driving mode. Shows a directional arrow when moving
+/// (rotated to travel direction in screen space) and a dot when stationary.
+private struct NavigationArrowView: View {
+    let course: Double      // CLLocation.course — degrees CW from north, or -1 if invalid
+    let speed: Double       // CLLocation.speed in m/s
+    let mapHeading: Double  // current map heading in degrees CW from north
+
+    private var showArrow: Bool { course >= 0 && speed > 0.5 }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 32, height: 32)
+                .shadow(color: .black.opacity(0.35), radius: 5, x: 0, y: 2)
+            if showArrow {
+                // location.north.fill points toward screen-up at 0° rotation.
+                // Subtracting mapHeading converts geographic course to screen angle.
+                Image(systemName: "location.north.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .rotationEffect(.degrees(course - mapHeading))
+            } else {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 12, height: 12)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showArrow)
+        .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.8),
+                   value: course - mapHeading)
     }
 }
 

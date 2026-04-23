@@ -7,7 +7,8 @@ import MapKit
 /// without any duplicate markers.
 struct MapDotsLayer: UIViewRepresentable {
     let segments: [ParkingSegment]
-    let region: MKCoordinateRegion?
+    let region: MKCoordinateRegion?   // pan/zoom/rotation trigger → setNeedsDisplay
+    let heading: Double               // rotation trigger → setNeedsDisplay
 
     func makeUIView(context: Context) -> UIView {
         // A hidden placeholder — the real canvas lives inside MKMapView.
@@ -18,7 +19,8 @@ struct MapDotsLayer: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.update(segments: segments, region: region)
+        context.coordinator.canvas.segments = segments
+        context.coordinator.canvas.setNeedsDisplay()
         context.coordinator.installIfNeeded(from: uiView)
     }
 
@@ -36,12 +38,6 @@ struct MapDotsLayer: UIViewRepresentable {
 
         deinit { canvas.removeFromSuperview() }
 
-        func update(segments: [ParkingSegment], region: MKCoordinateRegion?) {
-            canvas.segments = segments
-            canvas.region = region
-            canvas.setNeedsDisplay()
-        }
-
         func installIfNeeded(from placeholder: UIView) {
             guard !installed else { return }
             // Walk to UIWindow, then search down for MKMapView.
@@ -49,6 +45,7 @@ struct MapDotsLayer: UIViewRepresentable {
             while let p = root.superview { root = p }
             guard let mapView = findMKMapView(in: root) else { return }
 
+            canvas.mapView = mapView
             canvas.frame = mapView.bounds
             canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             mapView.insertSubview(canvas, at: annotationLayerIndex(in: mapView))
@@ -82,39 +79,29 @@ struct MapDotsLayer: UIViewRepresentable {
 
 final class ParkingDotsView: UIView {
     var segments: [ParkingSegment] = []
-    var region: MKCoordinateRegion?
+    /// Set by the Coordinator after installation so draw() can use MapKit's
+    /// own coordinate conversion, which handles heading/projection automatically.
+    weak var mapView: MKMapView?
 
     override func draw(_ rect: CGRect) {
-        guard let region, !segments.isEmpty,
+        guard let mapView, !segments.isEmpty,
               let ctx = UIGraphicsGetCurrentContext() else { return }
 
-        let w = Double(bounds.width)
-        let h = Double(bounds.height)
-        let dotR = dotRadius(for: region.span.latitudeDelta)
-
-        let minLon = region.center.longitude - region.span.longitudeDelta / 2.0
-        let lonRange = region.span.longitudeDelta
-
-        // Mercator Y for accurate vertical placement (matches MapKit's projection)
-        func mercY(_ lat: Double) -> Double {
-            let rad = lat * .pi / 180.0
-            return log(tan(.pi / 4.0 + rad / 2.0))
-        }
-        let maxMercY = mercY(region.center.latitude + region.span.latitudeDelta / 2.0)
-        let mercRange = maxMercY - mercY(region.center.latitude - region.span.latitudeDelta / 2.0)
-        guard lonRange > 0, mercRange > 0 else { return }
+        let dotR = dotRadius(for: mapView.region.span.latitudeDelta)
+        let gap = max(1.0, dotR * 0.43)
+        let step = dotR * 2 + gap
+        let w = Double(bounds.width), h = Double(bounds.height)
 
         // Build one path per day color — drops ~50k fill calls to at most 8.
         // Multi-day segments draw N side-by-side circles (matching ParkingLabel.dotView).
-        let gap = max(1.0, dotR * 0.43)
-        let step = dotR * 2 + gap
         var paths: [ParkingDay: CGMutablePath] = [:]
         for seg in segments {
             let days = seg.allDays
             guard !days.isEmpty else { continue }
-            let coord = seg.sidewalkCoordinate
-            let px = (coord.longitude - minLon) / lonRange * w
-            let py = (maxMercY - mercY(coord.latitude)) / mercRange * h
+            // MKMapView.convert accounts for heading rotation, Mercator projection,
+            // and zoom in one call — no manual projection math needed.
+            let pt = mapView.convert(seg.sidewalkCoordinate, toPointTo: self)
+            let px = Double(pt.x), py = Double(pt.y)
             guard px >= -dotR * Double(days.count) * 2, px <= w + dotR * Double(days.count) * 2,
                   py >= -dotR, py <= h + dotR else { continue }
             // Center the group of N dots around (px, py)

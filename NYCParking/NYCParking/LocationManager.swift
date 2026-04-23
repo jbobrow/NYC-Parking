@@ -18,6 +18,16 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.requestWhenInUseAuthorization()
     }
 
+    func startNavigationMode() {
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = kCLDistanceFilterNone
+    }
+
+    func stopNavigationMode() {
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 50
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
         if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {

@@ -177,6 +177,7 @@ final class ParkingDatabase {
         sqlite3_exec(db, "COMMIT", nil, nil, nil)
         sqlite3_close(db)
 
+        try? FileManager.default.removeItem(at: url)
         try FileManager.default.moveItem(at: tmpURL, to: url)
     }
 }

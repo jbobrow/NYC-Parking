@@ -6,10 +6,15 @@ import SwiftUI
 @MainActor
 final class ParkingDataService: ObservableObject {
     @Published var segments: [ParkingSegment] = []
-    @Published var isLoading = false
 
     private var database = ParkingDatabase()
     private let pageSize = 10_000
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
 
     func loadRegion(_ region: MKCoordinateRegion) {
         guard let db = database else { return }
@@ -32,9 +37,6 @@ final class ParkingDataService: ObservableObject {
     }
 
     private func fetchFull() async {
-        isLoading = true
-        defer { isLoading = false }
-
         var allSigns: [ParkingSign] = []
         var offset = 0
         while true {
@@ -44,7 +46,9 @@ final class ParkingDataService: ObservableObject {
             if page.count < pageSize { break }
             offset += pageSize
         }
-        let newSegments = buildSegments(from: allSigns)
+        let newSegments = await Task.detached(priority: .utility) {
+            ParkingDataService.buildSegments(from: allSigns)
+        }.value
         print("ParkingDataService: \(newSegments.count) segments rebuilt")
 
         do {
@@ -58,7 +62,7 @@ final class ParkingDataService: ObservableObject {
 
     private func fetchDatasetUpdatedAt() async -> Date? {
         guard let url = URL(string: "https://data.cityofnewyork.us/api/views/nfid-uabd.json") else { return nil }
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
+        guard let (data, _) = try? await session.data(from: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let ts = json["rowsUpdatedAt"] as? TimeInterval else { return nil }
         return Date(timeIntervalSince1970: ts)
@@ -74,12 +78,12 @@ final class ParkingDataService: ObservableObject {
         ]
         guard let url = components.url else { return [] }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await session.data(from: url)
             return try JSONDecoder().decode([ParkingSign].self, from: data)
         } catch { return [] }
     }
 
-    private func buildSegments(from signs: [ParkingSign]) -> [ParkingSegment] {
+    private nonisolated static func buildSegments(from signs: [ParkingSign]) -> [ParkingSegment] {
         var buckets: [String: [ParkingSign]] = [:]
         for sign in signs {
             let key = [sign.onStreet, sign.fromStreet, sign.toStreet, sign.sideOfStreet]
@@ -120,7 +124,7 @@ final class ParkingDataService: ObservableObject {
         }
     }
 
-    private static func streetBearing(fromStatePlane coords: [(Double,Double)]) -> Double? {
+    private nonisolated static func streetBearing(fromStatePlane coords: [(Double,Double)]) -> Double? {
         guard coords.count >= 2 else { return nil }
         let n = Double(coords.count)
         let mx = coords.map(\.0).reduce(0,+)/n, my = coords.map(\.1).reduce(0,+)/n
