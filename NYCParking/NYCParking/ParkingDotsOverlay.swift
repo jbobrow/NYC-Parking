@@ -91,9 +91,11 @@ final class ParkingDotsView: UIView {
         let gap = max(1.0, dotR * 0.43)
         let step = dotR * 2 + gap
         let w = Double(bounds.width), h = Double(bounds.height)
+        let heading = mapView.camera.heading
 
         // Build one path per day color — drops ~50k fill calls to at most 8.
-        // Multi-day segments draw N side-by-side circles (matching ParkingLabel.dotView).
+        // Multi-day dots are spaced along the street direction so they're
+        // parallel to the curb, matching what the pill labels show.
         var paths: [ParkingDay: CGMutablePath] = [:]
         for seg in segments {
             let days = seg.allDays
@@ -102,15 +104,34 @@ final class ParkingDotsView: UIView {
             // and zoom in one call — no manual projection math needed.
             let pt = mapView.convert(seg.sidewalkCoordinate, toPointTo: self)
             let px = Double(pt.x), py = Double(pt.y)
-            guard px >= -dotR * Double(days.count) * 2, px <= w + dotR * Double(days.count) * 2,
-                  py >= -dotR, py <= h + dotR else { continue }
-            // Center the group of N dots around (px, py)
-            let startX = px - (Double(days.count) - 1) * step / 2
+            let margin = dotR * Double(days.count) * 2
+            guard px >= -margin, px <= w + margin,
+                  py >= -margin, py <= h + margin else { continue }
+
+            // Bearing → screen direction vector (same math as ParkingLabel.streetAngle).
+            // bearing=90° (E-W street) + heading=0° → screenAngle=0° → dx=1, dy=0 (horizontal).
+            let bearing: Double
+            if let b = seg.streetBearing {
+                bearing = b
+            } else {
+                switch seg.side.uppercased() {
+                case "E", "W": bearing = 0
+                default:       bearing = 90
+                }
+            }
+            let screenAngle = (bearing - heading - 90) * .pi / 180
+            let dx = cos(screenAngle)
+            let dy = sin(screenAngle)
+            let halfSpan = (Double(days.count) - 1) * step / 2
+
             for (i, day) in days.enumerated() {
-                let cx = startX + Double(i) * step
-                guard cx >= -dotR, cx <= w + dotR else { continue }
+                let offset = -halfSpan + Double(i) * step
+                let cx = px + offset * dx
+                let cy = py + offset * dy
+                guard cx >= -dotR, cx <= w + dotR,
+                      cy >= -dotR, cy <= h + dotR else { continue }
                 if paths[day] == nil { paths[day] = CGMutablePath() }
-                paths[day]!.addEllipse(in: CGRect(x: cx - dotR, y: py - dotR,
+                paths[day]!.addEllipse(in: CGRect(x: cx - dotR, y: cy - dotR,
                                                    width: dotR * 2, height: dotR * 2))
             }
         }
