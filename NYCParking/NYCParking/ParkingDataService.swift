@@ -9,8 +9,9 @@ final class ParkingDataService: ObservableObject {
 
     private var database = ParkingDatabase()
     private let pageSize = 10_000
-    // Street name → circular-mean bearing for all segments that had 2+ signs.
-    // Filled in at startup; used to fix single-sign segments with nil bearing.
+    // Street name → centroid-PCA bearing. Used only to fill in segments whose
+    // sign-position PCA returned nil (single-sign blocks). Never overrides a
+    // bearing that was already computed from sign data.
     private var streetConsensusBearings: [String: Double] = [:]
 
     init() {
@@ -33,25 +34,26 @@ final class ParkingDataService: ObservableObject {
         Task { await refreshIfStale() }
     }
 
-    // MARK: - Street bearing consensus
+    // MARK: - Street bearing consensus (nil-bearing fallback only)
 
     private func precomputeStreetConsensus() {
         guard let db = database else { return }
-        // Read raw pairs on main thread (fast for read-only SQLite), then
-        // build the consensus map on a background thread with only Sendable data.
-        let pairs = db.streetBearingPairs()
+        let locations = db.allSegmentLocations()
         Task { [weak self] in
             let consensus = await Task.detached(priority: .utility) {
-                var byStreet: [String: [Double]] = [:]
-                for (street, bearing) in pairs {
-                    byStreet[street.uppercased(), default: []].append(bearing)
-                }
-                return byStreet.compactMapValues { ParkingDataService.circularMeanBearing($0) }
+                ParkingDataService.streetBearingsByPCA(from: locations)
             }.value
-            self?.streetConsensusBearings = consensus
+            guard let self else { return }
+            self.streetConsensusBearings = consensus
+            if !self.segments.isEmpty {
+                self.segments = self.applyConsensusBearings(self.segments)
+            }
         }
     }
 
+    // Only fills in segments where the database has no bearing — does not
+    // override bearings that were already computed from sign data or from
+    // the offline precompute script.
     private func applyConsensusBearings(_ segs: [ParkingSegment]) -> [ParkingSegment] {
         guard !streetConsensusBearings.isEmpty else { return segs }
         return segs.map { seg in
@@ -65,30 +67,39 @@ final class ParkingDataService: ObservableObject {
         }
     }
 
-    // Circular mean for bearings with 180° period (a street has no direction).
-    // Normalises to [0°, 180°) then uses the doubled-angle trick so that
-    // e.g. 29° and 209° (same line) average to 29° rather than 119°.
-    private nonisolated static func circularMeanBearing(_ bearings: [Double]) -> Double? {
-        guard !bearings.isEmpty else { return nil }
-        let normalized = bearings.map { b -> Double in
-            var b = b.truncatingRemainder(dividingBy: 360)
-            if b < 0 { b += 360 }
-            return b >= 180 ? b - 180 : b
+    // PCA of all block centroids for a given street name, scaled to metres so
+    // diagonal streets compute correctly regardless of latitude.
+    private nonisolated static func streetBearingsByPCA(
+        from locations: [(street: String, lat: Double, lon: Double)]
+    ) -> [String: Double] {
+        var byStreet: [String: [(Double, Double)]] = [:]
+        for loc in locations {
+            byStreet[loc.street.uppercased(), default: []].append((loc.lat, loc.lon))
         }
-        let sinSum = normalized.map { sin($0 * .pi / 90) }.reduce(0, +)
-        let cosSum = normalized.map { cos($0 * .pi / 90) }.reduce(0, +)
-        guard sinSum != 0 || cosSum != 0 else { return normalized[0] }
-        var mean = atan2(sinSum, cosSum) * 90 / .pi
-        if mean < 0 { mean += 180 }
-        return mean
+        return byStreet.compactMapValues { coords -> Double? in
+            guard coords.count >= 2 else { return nil }
+            let n = Double(coords.count)
+            let avgLat = coords.map(\.0).reduce(0, +) / n
+            let avgLon = coords.map(\.1).reduce(0, +) / n
+            let cosLat = cos(avgLat * .pi / 180)
+            var sxx = 0.0, sxy = 0.0, syy = 0.0
+            for (lat, lon) in coords {
+                let u = (lon - avgLon) * cosLat * 111_320.0
+                let v = (lat - avgLat) * 111_320.0
+                sxx += u * u; sxy += u * v; syy += v * v
+            }
+            let deg = 0.5 * atan2(2 * sxy, sxx - syy) * 180.0 / .pi
+            return (90.0 - deg + 360.0).truncatingRemainder(dividingBy: 360)
+        }
     }
+
+    // MARK: - Data refresh
 
     private func refreshIfStale() async {
         let ourDate = database?.generatedAt ?? .distantPast
         guard let serverDate = await fetchDatasetUpdatedAt() else { return }
         guard serverDate > ourDate else {
-            print("ParkingDataService: data is current")
-            return
+            print("ParkingDataService: data is current"); return
         }
         print("ParkingDataService: dataset updated, re-fetching…")
         await fetchFull()
@@ -108,10 +119,9 @@ final class ParkingDataService: ObservableObject {
             ParkingDataService.buildSegments(from: allSigns)
         }.value
         print("ParkingDataService: \(newSegments.count) segments rebuilt")
-
         do {
             try ParkingDatabase.writeCache(segments: newSegments, generatedAt: Date())
-            database = ParkingDatabase()  // reopen with new cache
+            database = ParkingDatabase()
             precomputeStreetConsensus()
             print("ParkingDataService: cache written, database reopened")
         } catch {
@@ -142,6 +152,8 @@ final class ParkingDataService: ObservableObject {
         } catch { return [] }
     }
 
+    // MARK: - Segment building
+
     private nonisolated static func buildSegments(from signs: [ParkingSign]) -> [ParkingSegment] {
         var buckets: [String: [ParkingSign]] = [:]
         for sign in signs {
@@ -160,19 +172,19 @@ final class ParkingDataService: ObservableObject {
                 }
             let coords = group.compactMap { $0.coordinate }
             guard !rules.isEmpty, !coords.isEmpty else { return nil }
-            let avgLat = coords.map(\.latitude).reduce(0,+) / Double(coords.count)
-            let avgLon = coords.map(\.longitude).reduce(0,+) / Double(coords.count)
-            let spCoords: [(Double,Double)] = group.compactMap { s in
+            let avgLat = coords.map(\.latitude).reduce(0, +) / Double(coords.count)
+            let avgLon = coords.map(\.longitude).reduce(0, +) / Double(coords.count)
+            let spCoords: [(Double, Double)] = group.compactMap { s in
                 guard let xs = s.signXCoord, let ys = s.signYCoord,
                       let x = Double(xs), let y = Double(ys), x != 0, y != 0 else { return nil }
                 return (x, y)
             }
             let bearing = Self.streetBearing(fromStatePlane: spCoords)
             let br = (bearing ?? 0) * .pi / 180
-            let n  = Double(spCoords.count)
-            let mx = spCoords.map(\.0).reduce(0,+) / n
-            let my = spCoords.map(\.1).reduce(0,+) / n
-            let halfFt = spCoords.map { abs(($0.0-mx)*sin(br) + ($0.1-my)*cos(br)) }.max() ?? 0
+            let n  = Double(max(spCoords.count, 1))
+            let mx = spCoords.map(\.0).reduce(0, +) / n
+            let my = spCoords.map(\.1).reduce(0, +) / n
+            let halfFt = spCoords.map { abs(($0.0 - mx) * sin(br) + ($0.1 - my) * cos(br)) }.max() ?? 0
             let ref = group[0]
             return ParkingSegment(
                 id: key, street: ref.onStreet ?? "", fromStreet: ref.fromStreet ?? "",
@@ -182,13 +194,12 @@ final class ParkingDataService: ObservableObject {
                 rules: rules)
         }
 
-        // Second pass: propagate street-level consensus bearing to single-sign segments.
-        var byStreet: [String: [Double]] = [:]
-        for seg in raw {
-            guard let b = seg.streetBearing else { continue }
-            byStreet[seg.street.uppercased(), default: []].append(b)
-        }
-        let consensus = byStreet.compactMapValues { circularMeanBearing($0) }
+        // Second pass: fill nil bearings from street-level centroid PCA.
+        // Segments with a sign-derived bearing keep it unchanged.
+        let locations = raw.map { (street: $0.street,
+                                   lat: $0.coordinate.latitude,
+                                   lon: $0.coordinate.longitude) }
+        let consensus = streetBearingsByPCA(from: locations)
         return raw.map { seg in
             guard seg.streetBearing == nil,
                   let b = consensus[seg.street.uppercased()] else { return seg }
@@ -200,13 +211,14 @@ final class ParkingDataService: ObservableObject {
         }
     }
 
-    private nonisolated static func streetBearing(fromStatePlane coords: [(Double,Double)]) -> Double? {
+    private nonisolated static func streetBearing(fromStatePlane coords: [(Double, Double)]) -> Double? {
         guard coords.count >= 2 else { return nil }
         let n = Double(coords.count)
-        let mx = coords.map(\.0).reduce(0,+)/n, my = coords.map(\.1).reduce(0,+)/n
-        var sxx=0.0, sxy=0.0, syy=0.0
-        for (x,y) in coords { let dx=x-mx,dy=y-my; sxx+=dx*dx; sxy+=dx*dy; syy+=dy*dy }
-        let deg = 0.5 * atan2(2*sxy, sxx-syy) * 180.0 / Double.pi
+        let mx = coords.map(\.0).reduce(0, +) / n
+        let my = coords.map(\.1).reduce(0, +) / n
+        var sxx = 0.0, sxy = 0.0, syy = 0.0
+        for (x, y) in coords { let dx = x - mx, dy = y - my; sxx += dx*dx; sxy += dx*dy; syy += dy*dy }
+        let deg = 0.5 * atan2(2 * sxy, sxx - syy) * 180.0 / Double.pi
         return (90.0 - deg + 360.0).truncatingRemainder(dividingBy: 360)
     }
 }

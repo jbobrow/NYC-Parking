@@ -122,17 +122,20 @@ final class ParkingDatabase {
         )
     }
 
-    // Returns (street, bearing) for every segment with a non-null bearing.
-    // Used to build the street-level consensus map in ParkingDataService.
-    func streetBearingPairs() -> [(street: String, bearing: Double)] {
+    // Returns (street, lat, lon) for every segment — used to compute street
+    // bearing via PCA of all block centroids, which is far more reliable than
+    // per-block sign-position PCA (centroids are ground-truth street geometry).
+    func allSegmentLocations() -> [(street: String, lat: Double, lon: Double)] {
         var stmt: OpaquePointer?
-        let sql = "SELECT street, bearing FROM segments WHERE bearing IS NOT NULL"
+        let sql = "SELECT street, lat, lon FROM segments"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
-        var result: [(String, Double)] = []
+        var result: [(String, Double, Double)] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let cStr = sqlite3_column_text(stmt, 0) else { continue }
-            result.append((String(cString: cStr), sqlite3_column_double(stmt, 1)))
+            result.append((String(cString: cStr),
+                           sqlite3_column_double(stmt, 1),
+                           sqlite3_column_double(stmt, 2)))
         }
         return result
     }

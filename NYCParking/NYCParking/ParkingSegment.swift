@@ -19,26 +19,47 @@ struct ParkingSegment: Identifiable, Hashable {
     static func == (lhs: ParkingSegment, rhs: ParkingSegment) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
-    // Offset the coordinate toward the sidewalk (~10 m away from street center)
+    // Offset the coordinate ~11 m toward the sidewalk.
+    // Uses the street bearing to compute the correct perpendicular direction so
+    // diagonal streets (e.g. Broadway, Union Square East) push the marker to the
+    // right side of the road, not due N/S/E/W.
     var sidewalkCoordinate: CLLocationCoordinate2D {
-        let latDelta = 0.00010   // ≈ 11 m
-        let lonDelta = 0.00013   // ≈ 11 m at NYC latitude
+        let offsetM  = 11.0
+        let cosLat   = cos(coordinate.latitude * .pi / 180)
+        let mPerLat  = 111_320.0
+        let mPerLon  = mPerLat * cosLat
+
+        // Cardinal target for the labeled side.
+        let sideTarget: Double
         switch side.uppercased() {
-        case "N":
-            return CLLocationCoordinate2D(latitude: coordinate.latitude + latDelta,
-                                          longitude: coordinate.longitude)
-        case "S":
-            return CLLocationCoordinate2D(latitude: coordinate.latitude - latDelta,
-                                          longitude: coordinate.longitude)
-        case "E":
-            return CLLocationCoordinate2D(latitude: coordinate.latitude,
-                                          longitude: coordinate.longitude + lonDelta)
-        case "W":
-            return CLLocationCoordinate2D(latitude: coordinate.latitude,
-                                          longitude: coordinate.longitude - lonDelta)
-        default:
-            return coordinate
+        case "N": sideTarget = 0
+        case "S": sideTarget = 180
+        case "E": sideTarget = 90
+        case "W": sideTarget = 270
+        default:  return coordinate
         }
+
+        // Direction of push: if we have a bearing, pick the perpendicular that is
+        // closest to the side label's cardinal direction.  Otherwise fall back to
+        // the cardinal direction itself.
+        let pushDir: Double
+        if let b = streetBearing {
+            let perp1 = (b + 90).truncatingRemainder(dividingBy: 360)
+            let perp2 = (b + 270).truncatingRemainder(dividingBy: 360)
+            func angDiff(_ a: Double, _ b: Double) -> Double {
+                let d = abs(a - b).truncatingRemainder(dividingBy: 360)
+                return min(d, 360 - d)
+            }
+            pushDir = angDiff(perp1, sideTarget) <= angDiff(perp2, sideTarget) ? perp1 : perp2
+        } else {
+            pushDir = sideTarget
+        }
+
+        let rad  = pushDir * .pi / 180
+        let dlat = cos(rad) * offsetM / mPerLat
+        let dlon = sin(rad) * offsetM / mPerLon
+        return CLLocationCoordinate2D(latitude:  coordinate.latitude  + dlat,
+                                      longitude: coordinate.longitude + dlon)
     }
 
     var allDays: [ParkingDay] {
