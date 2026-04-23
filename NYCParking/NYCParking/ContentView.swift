@@ -119,7 +119,8 @@ struct ContentView: View {
             lastMapRegion = ctx.region
             let delta = ctx.region.span.latitudeDelta
             let newZoom: MarkerZoomLevel = delta < 0.002 ? .full
-                                         : delta < 0.006 ? .days
+                                         : delta < 0.004 ? .days
+                                         : delta < 0.006 ? .smallDays
                                          : .dot
             guard newZoom != zoomLevel else { return }
             if zoomLevel == .dot {

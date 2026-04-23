@@ -2,9 +2,10 @@ import SwiftUI
 
 // Driven by map zoom level; set in ContentView.onMapCameraChange.
 enum MarkerZoomLevel: Equatable {
-    case dot      // small colored dot; radius scales with zoom
-    case days     // day-name pill(s)
-    case full     // day pill(s) + time label
+    case dot       // small colored dot; radius scales with zoom
+    case smallDays // day-name pill(s) at ~2/3 size — first pill level after dots
+    case days      // day-name pill(s) at full size
+    case full      // day pill(s) + time label
 }
 
 struct ParkingLabel: View {
@@ -24,6 +25,13 @@ struct ParkingLabel: View {
                 .rotationEffect(days.count > 1 ? streetAngle : .degrees(0))
                 .contentShape(Rectangle())
                 .onTapGesture { onTap?() }
+        case .smallDays:
+            dayPills
+                .contentShape(Rectangle())
+                .onTapGesture { onTap?() }
+                .rotationEffect(streetAngle)
+                .scaleEffect(2.0 / 3.0)
+                .shadow(color: .black.opacity(0.20), radius: 2, x: 0, y: 1)
         case .days:
             dayPills
                 .contentShape(Rectangle())
