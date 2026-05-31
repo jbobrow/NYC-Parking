@@ -62,6 +62,35 @@ _DAY_TOKENS = [
     ("WED", "WED"), ("FRI", "FRI"), ("SAT", "SAT"), ("SUN", "SUN"),
 ]
 _TIME_RE = re.compile(r'(\d{1,2}(?::\d{2})?(?:AM|PM))-(\d{1,2}(?::\d{2})?(?:AM|PM))')
+_ALL_DAYS = ["MON", "TUES", "WED", "THURS", "FRI", "SAT", "SUN"]
+_DAY_ORDER = {d: i for i, d in enumerate(_ALL_DAYS)}
+
+def _match_days(text):
+    """Day tokens present in text, de-duplicated, in token order."""
+    days, seen = [], set()
+    for token, day in _DAY_TOKENS:
+        if token in text and day not in seen:
+            seen.add(day)
+            days.append(day)
+    return days
+
+def _extract_days(u):
+    """Days a restriction is in effect, honoring "EXCEPT" language.
+
+    Days listed after "EXCEPT" (e.g. "NO PARKING 8AM-6PM EXCEPT SUNDAY") are
+    exempt, so the rule applies to every other day. Without an explicit day list
+    before "EXCEPT", the restriction defaults to all seven days minus the exempt
+    ones — otherwise we'd invert the sign.
+    """
+    idx = u.find("EXCEPT")
+    if idx != -1:
+        exempt = set(_match_days(u[idx + len("EXCEPT"):]))
+        explicit = _match_days(u[:idx])
+        base = explicit if explicit else list(_ALL_DAYS)
+        days = [d for d in base if d not in exempt]
+    else:
+        days = _match_days(u)
+    return sorted(days, key=lambda d: _DAY_ORDER[d])
 
 def parse_rule(desc):
     u = desc.upper()
@@ -71,12 +100,7 @@ def parse_rule(desc):
     if not m:
         return None
     start, end = m.group(1), m.group(2)
-    days = []
-    seen = set()
-    for token, day in _DAY_TOKENS:
-        if token in u and day not in seen:
-            seen.add(day)
-            days.append(day)
+    days = _extract_days(u)
     if not days:
         return None
     return {"days": days, "startTime": start, "endTime": end}
