@@ -42,15 +42,34 @@ enum SignParser {
         ("SUN",   .sunday),
     ]
 
+    /// Extracts the days a restriction is in effect.
+    ///
+    /// Handles "EXCEPT" language (e.g. "NO PARKING 8AM-6PM EXCEPT SUNDAY"): days
+    /// listed after "EXCEPT" are *exempt* from the restriction, so the rule
+    /// applies to every other day instead. When no days are listed before
+    /// "EXCEPT", the restriction defaults to all seven days minus the exempt
+    /// ones — otherwise we'd invert the sign and show the restriction on exactly
+    /// the day it does not apply.
     private static func extractDays(from text: String) -> [ParkingDay] {
-        var seen = Set<ParkingDay>()
-        var days: [ParkingDay] = []
-        for (token, day) in dayTokens {
-            if text.contains(token), !seen.contains(day) {
-                seen.insert(day)
-                days.append(day)
-            }
+        let days: [ParkingDay]
+        if let exceptRange = text.range(of: "EXCEPT") {
+            let exempt = Set(matchDays(in: String(text[exceptRange.upperBound...])))
+            let explicit = matchDays(in: String(text[..<exceptRange.lowerBound]))
+            let base = explicit.isEmpty ? ParkingDay.allCases : explicit
+            days = base.filter { !exempt.contains($0) }
+        } else {
+            days = matchDays(in: text)
         }
         return days.sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Returns the day tokens present in `text`, de-duplicated, in token order.
+    private static func matchDays(in text: String) -> [ParkingDay] {
+        var seen = Set<ParkingDay>()
+        var days: [ParkingDay] = []
+        for (token, day) in dayTokens where text.contains(token) {
+            if seen.insert(day).inserted { days.append(day) }
+        }
+        return days
     }
 }
