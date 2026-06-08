@@ -120,7 +120,7 @@ struct ParkedCarSheet: View {
 
     private func moveDateString(_ date: Date) -> String {
         let df = DateFormatter()
-        df.dateFormat = "EEE, MMM d"
+        df.dateFormat = "h:mm a, EEE MMM d"
         return df.string(from: date)
     }
 
