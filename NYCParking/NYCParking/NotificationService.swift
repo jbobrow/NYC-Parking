@@ -16,14 +16,7 @@ final class NotificationService: ObservableObject {
         guard let parkingDay = ParkingDay.from(weekday: weekday) else { return }
 
         let applicableRule = record.restrictionRules.first { $0.days.contains(parkingDay.rawValue) }
-        let (restrictionHour, restrictionMinute): (Int, Int)
-        if let rule = applicableRule, let parsed = parseTime(rule.startTime) {
-            restrictionHour = parsed.hour
-            restrictionMinute = parsed.minute
-        } else {
-            restrictionHour = 8
-            restrictionMinute = 0
-        }
+        let (restrictionHour, restrictionMinute) = applicableRule?.startTimeComponents ?? (8, 0)
 
         guard let restrictionTime = cal.date(
             bySettingHour: restrictionHour, minute: restrictionMinute, second: 0, of: moveDate
@@ -89,19 +82,6 @@ final class NotificationService: ObservableObject {
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
-    }
-
-    private func parseTime(_ timeString: String) -> (hour: Int, minute: Int)? {
-        let s = timeString.trimmingCharacters(in: .whitespaces).uppercased()
-        let isPM = s.hasSuffix("PM")
-        guard isPM || s.hasSuffix("AM") else { return nil }
-        let timePart = s.dropLast(2)
-        let parts = timePart.split(separator: ":")
-        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else { return nil }
-        var h = hour
-        if isPM && h != 12 { h += 12 }
-        if !isPM && h == 12 { h = 0 }
-        return (h, minute)
     }
 
     private func formatTime(_ hour: Int, _ minute: Int) -> String {

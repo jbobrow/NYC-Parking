@@ -426,22 +426,28 @@ struct ContentView: View {
         let restrictionDayValues = Set(record.restrictionRules.flatMap { $0.days })
         guard !restrictionDayValues.isEmpty else { return nil }
         let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        for offset in 1...14 {
+        let now = Date()
+        let today = cal.startOfDay(for: now)
+        // Start at today (offset 0): if today is a restriction day and the
+        // street-cleaning start time hasn't passed yet, that's the deadline.
+        for offset in 0...14 {
             guard let candidate = cal.date(byAdding: .day, value: offset, to: today) else { continue }
             let weekday = cal.component(.weekday, from: candidate)
             guard let day = ParkingDay.from(weekday: weekday),
                   restrictionDayValues.contains(day.rawValue) else { continue }
-            if !holidayService.isHoliday(candidate, calendar: cal) {
-                return candidate
-            }
+            guard !holidayService.isHoliday(candidate, calendar: cal) else { continue }
+            let rule = record.restrictionRules.first { $0.days.contains(day.rawValue) }
+            let (hour, minute) = rule?.startTimeComponents ?? (8, 0)
+            guard let deadline = cal.date(bySettingHour: hour, minute: minute, second: 0, of: candidate)
+            else { continue }
+            if deadline > now { return deadline }
         }
         return nil
     }
 
     private func moveCarBanner(for date: Date) -> some View {
         let df = DateFormatter()
-        df.dateFormat = "EEE, MMM d"
+        df.dateFormat = "h:mm a, EEE MMM d"
         return Label("Move by \(df.string(from: date))", systemImage: "calendar.badge.clock")
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .foregroundStyle(.primary)

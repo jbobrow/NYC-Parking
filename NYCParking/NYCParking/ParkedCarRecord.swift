@@ -6,6 +6,20 @@ struct StoredRule: Codable, Equatable {
     let days: [String]      // ParkingDay.rawValue, e.g. "MON", "THURS"
     let startTime: String
     let endTime: String
+
+    /// Hour/minute when the restriction begins, parsed from `startTime` (e.g. "9:30 AM").
+    var startTimeComponents: (hour: Int, minute: Int)? {
+        let s = startTime.trimmingCharacters(in: .whitespaces).uppercased()
+        let isPM = s.hasSuffix("PM")
+        guard isPM || s.hasSuffix("AM") else { return nil }
+        let timePart = s.dropLast(2)
+        let parts = timePart.split(separator: ":")
+        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else { return nil }
+        var h = hour
+        if isPM && h != 12 { h += 12 }
+        if !isPM && h == 12 { h = 0 }
+        return (h, minute)
+    }
 }
 
 /// Minimal persisted snapshot of a parked car location.
