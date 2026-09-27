@@ -27,6 +27,7 @@
 		AA2500000000000000000002 /* ParkingDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2500000000000000000001 /* ParkingDatabase.swift */; };
 		AA2700000000000000000002 /* ParkingMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2700000000000000000001 /* ParkingMapView.swift */; };
 		AA2800000000000000000002 /* MoveCountdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2800000000000000000001 /* MoveCountdown.swift */; };
+		AA2900000000000000000002 /* ScreenshotScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2900000000000000000001 /* ScreenshotScenes.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +53,7 @@
 		BB2500000000000000000001 /* ParkingDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDatabase.swift; sourceTree = "<group>"; };
 		BB2700000000000000000001 /* ParkingMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingMapView.swift; sourceTree = "<group>"; };
 		BB2800000000000000000001 /* MoveCountdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveCountdown.swift; sourceTree = "<group>"; };
+		BB2900000000000000000001 /* ScreenshotScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotScenes.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +96,7 @@
 				BB2500000000000000000001 /* ParkingDatabase.swift */,
 				BB2700000000000000000001 /* ParkingMapView.swift */,
 				BB2800000000000000000001 /* MoveCountdown.swift */,
+				BB2900000000000000000001 /* ScreenshotScenes.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -197,6 +200,7 @@
 				AA2500000000000000000002 /* ParkingDatabase.swift in Sources */,
 				AA2700000000000000000002 /* ParkingMapView.swift in Sources */,
 				AA2800000000000000000002 /* MoveCountdown.swift in Sources */,
+				AA2900000000000000000002 /* ScreenshotScenes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,7 +344,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -369,7 +373,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

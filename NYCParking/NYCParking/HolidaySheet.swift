@@ -97,7 +97,7 @@ private struct HolidayRow: View {
     private var daysUntil: Int {
         let cal = Calendar.current
         return cal.dateComponents([.day],
-            from: cal.startOfDay(for: Date()),
+            from: cal.startOfDay(for: AppClock.now),
             to: cal.startOfDay(for: holiday.date)).day ?? 0
     }
 

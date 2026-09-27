@@ -19,6 +19,8 @@ struct ContentView: View {
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
     @State private var displayMode: MapDisplayMode = .countdown
+    /// Always on in the app; screenshot scenes can turn it off for a cleaner map.
+    @State private var showsHolidayBanner = true
     @Environment(\.scenePhase) private var scenePhase
 
     private var screenCornerRadius: CGFloat {
@@ -72,6 +74,7 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             TopBanners(record: parkedRecord,
                        holidays: holidayService.holidays,
+                       showsHolidayBanner: showsHolidayBanner,
                        onMoveTap: { showParkedCarSheet = true },
                        onHolidayTap: { showHolidaySheet = true })
                 .padding(.horizontal, 16)
@@ -272,6 +275,9 @@ struct ContentView: View {
                 try? await Task.sleep(for: .seconds(300))
             }
         }
+        #if DEBUG
+        .task { await applyScreenshotScene() }
+        #endif
         .onChange(of: isDrivingMode) { _, driving in
             if driving {
                 locationManager.startNavigationMode()
@@ -282,6 +288,32 @@ struct ContentView: View {
         } // ZStack
         .ignoresSafeArea()
     }
+
+    #if DEBUG
+    /// Stages an App Store screenshot scene (see `ScreenshotScene`).
+    private func applyScreenshotScene() async {
+        guard let scene = ScreenshotScene.current else { return }
+        hasSnappedToUserLocation = true   // keep the first location fix from moving the camera
+        isFollowingUser = false
+        displayMode = scene.mode
+        showsHolidayBanner = scene.showsHolidayBanner
+        try? await Task.sleep(for: .milliseconds(300))
+        mapController.setRegion(MKCoordinateRegion(center: scene.center,
+                                                   latitudinalMeters: scene.spanMeters.lat,
+                                                   longitudinalMeters: scene.spanMeters.lon),
+                                animated: false)
+        mapController.setCamera(center: scene.center, heading: scene.heading, animated: false)
+
+        while dataService.index == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        let segments = dataService.index?.segments ?? []
+        parkedRecord = scene.parkedSegmentID
+            .flatMap { id in segments.first { $0.id == id } }
+            .map { ParkedCarRecord(segment: $0, offsetMeters: scene.parkedOffsetMeters) }
+        try? await Task.sleep(for: .milliseconds(500))
+        selectedSegment = scene.selectedSegmentID.flatMap { id in segments.first { $0.id == id } }
+        showHolidaySheet = scene.showsHolidays
+    }
+    #endif
 
     // MARK: - Location & drive mode
 
@@ -328,7 +360,7 @@ struct ContentView: View {
     // MARK: - Move car banner
 
     private var nextMoveDate: Date? {
-        parkedRecord?.nextMoveDate(after: Date()) { holidayService.isHoliday($0) }
+        parkedRecord?.nextMoveDate(after: AppClock.now) { holidayService.isHoliday($0) }
     }
 
     private func openDirectionsToCar(for record: ParkedCarRecord) {
@@ -438,14 +470,15 @@ private extension View {
 private struct TopBanners: View {
     let record: ParkedCarRecord?
     let holidays: [NamedHoliday]
+    let showsHolidayBanner: Bool
     let onMoveTap: () -> Void
     let onHolidayTap: () -> Void
 
     var body: some View {
-        TimelineView(.everyMinute) { context in
-            let now = context.date
+        TimelineView(.everyMinute) { _ in
+            let now = AppClock.now
             let moveDate = record?.nextMoveDate(after: now) { isHoliday($0) }
-            let holiday = upcomingHoliday(from: now)
+            let holiday = showsHolidayBanner ? upcomingHoliday(from: now) : nil
             VStack(spacing: 8) {
                 if let moveDate {
                     moveCarBanner(for: moveDate, now: now)

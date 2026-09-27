@@ -1,6 +1,17 @@
 import SwiftUI
 import UIKit
 
+/// The current time for schedule math. Debug builds can shift it (see
+/// `ScreenshotScene`) to stage App Store screenshots on a chosen day.
+enum AppClock {
+    #if DEBUG
+    static var offset: TimeInterval = 0
+    static var now: Date { Date().addingTimeInterval(offset) }
+    #else
+    static var now: Date { Date() }
+    #endif
+}
+
 /// What the map colors block faces by.
 enum MapDisplayMode: String {
     case days       // which weekdays each block is restricted
@@ -88,7 +99,7 @@ struct CountdownCalendar: Sendable {
     let days: [Day]
 
     @MainActor
-    init(now: Date = Date(), calendar: Calendar = .current, isHoliday: (Date) -> Bool) {
+    init(now: Date = AppClock.now, calendar: Calendar = .current, isHoliday: (Date) -> Bool) {
         let comps = calendar.dateComponents([.hour, .minute], from: now)
         minuteOfDay = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
         let today = calendar.startOfDay(for: now)
