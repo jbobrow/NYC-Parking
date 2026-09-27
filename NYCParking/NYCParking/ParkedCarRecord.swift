@@ -74,6 +74,34 @@ struct ParkedCarRecord: Codable, Equatable {
         return north * cos(bearing) + east * sin(bearing)
     }
 
+    // MARK: - Move deadline
+
+    /// Start of the next restriction after `now`, skipping holidays. Today counts
+    /// if its restriction hasn't started yet.
+    func nextMoveDate(after now: Date, calendar cal: Calendar = .current,
+                      isHoliday: (Date) -> Bool) -> Date? {
+        let restrictionDayValues = Set(restrictionRules.flatMap { $0.days })
+        guard !restrictionDayValues.isEmpty else { return nil }
+        let today = cal.startOfDay(for: now)
+        for offset in 0...14 {
+            guard let candidate = cal.date(byAdding: .day, value: offset, to: today) else { continue }
+            let weekday = cal.component(.weekday, from: candidate)
+            guard let day = ParkingDay.from(weekday: weekday),
+                  restrictionDayValues.contains(day.rawValue),
+                  !isHoliday(candidate) else { continue }
+            // Earliest restriction that day, when several rules apply.
+            let starts = restrictionRules
+                .filter { $0.days.contains(day.rawValue) }
+                .compactMap(\.startTimeComponents)
+                .sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
+            let (hour, minute) = starts.first ?? (8, 0)
+            guard let deadline = cal.date(bySettingHour: hour, minute: minute, second: 0, of: candidate)
+            else { continue }
+            if deadline > now { return deadline }
+        }
+        return nil
+    }
+
     // MARK: - Persistence
 
     private static let key = "parkedCarRecord"

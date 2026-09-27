@@ -25,9 +25,14 @@ struct ContentView: View {
         (UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat) ?? 44
     }
 
-    private var windowSafeAreaTop: CGFloat {
+    /// The window's top safe-area inset (the root view ignores the safe area).
+    /// Read once in `onAppear` and stored: reading UIKit insets while SwiftUI is
+    /// evaluating the body creates an AttributeGraph cycle that stalls updates.
+    @State private var windowSafeAreaTop: CGFloat = 59
+
+    private static func currentWindowSafeAreaTop() -> CGFloat? {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
-            .keyWindow?.safeAreaInsets.top ?? 59
+            .keyWindow?.safeAreaInsets.top
     }
 
     var body: some View {
@@ -65,14 +70,13 @@ struct ContentView: View {
             .ignoresSafeArea()
             .clipShape(RoundedRectangle(cornerRadius: screenCornerRadius, style: .continuous))
         .overlay(alignment: .top) {
-            if let moveDate = nextMoveDate {
-                moveCarBanner(for: moveDate)
-                    .onTapGesture { showParkedCarSheet = true }
-                    .padding(.top, windowSafeAreaTop + 10)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            TopBanners(record: parkedRecord,
+                       holidays: holidayService.holidays,
+                       onMoveTap: { showParkedCarSheet = true },
+                       onHolidayTap: { showHolidaySheet = true })
+                .padding(.horizontal, 16)
+                .padding(.top, windowSafeAreaTop + 10)
         }
-        .animation(.easeInOut(duration: 0.3), value: nextMoveDate != nil)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(.ultraThinMaterial)
@@ -150,7 +154,7 @@ struct ContentView: View {
                     Picker("Map view", selection: $displayMode) {
                         Label("Days until move", systemImage: "hourglass")
                             .tag(MapDisplayMode.countdown)
-                        Label("Cleaning days", systemImage: "nosign")
+                        Label("Cleaning days", systemImage: "nosign.app")
                             .tag(MapDisplayMode.days)
                     }
                     .pickerStyle(.inline)
@@ -213,6 +217,7 @@ struct ContentView: View {
                 .presentationDragIndicator(.hidden)
         }
         .onAppear {
+            if let top = Self.currentWindowSafeAreaTop() { windowSafeAreaTop = top }
             locationManager.requestPermission()
             if let record = ParkedCarRecord.load() {
                 parkedRecord = record
@@ -323,38 +328,7 @@ struct ContentView: View {
     // MARK: - Move car banner
 
     private var nextMoveDate: Date? {
-        guard let record = parkedRecord else { return nil }
-        let restrictionDayValues = Set(record.restrictionRules.flatMap { $0.days })
-        guard !restrictionDayValues.isEmpty else { return nil }
-        let cal = Calendar.current
-        let now = Date()
-        let today = cal.startOfDay(for: now)
-        // Start at today (offset 0): if today is a restriction day and the
-        // street-cleaning start time hasn't passed yet, that's the deadline.
-        for offset in 0...14 {
-            guard let candidate = cal.date(byAdding: .day, value: offset, to: today) else { continue }
-            let weekday = cal.component(.weekday, from: candidate)
-            guard let day = ParkingDay.from(weekday: weekday),
-                  restrictionDayValues.contains(day.rawValue) else { continue }
-            guard !holidayService.isHoliday(candidate, calendar: cal) else { continue }
-            let rule = record.restrictionRules.first { $0.days.contains(day.rawValue) }
-            let (hour, minute) = rule?.startTimeComponents ?? (8, 0)
-            guard let deadline = cal.date(bySettingHour: hour, minute: minute, second: 0, of: candidate)
-            else { continue }
-            if deadline > now { return deadline }
-        }
-        return nil
-    }
-
-    private func moveCarBanner(for date: Date) -> some View {
-        let df = DateFormatter()
-        df.dateFormat = "h:mm a, EEE MMM d"
-        return Label("Move by \(df.string(from: date))", systemImage: "calendar.badge.clock")
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .glassCapsule()
+        parkedRecord?.nextMoveDate(after: Date()) { holidayService.isHoliday($0) }
     }
 
     private func openDirectionsToCar(for record: ParkedCarRecord) {
@@ -451,6 +425,159 @@ private extension View {
             glassEffect(in: Capsule())
         } else {
             background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+}
+
+// MARK: - Banners
+
+/// The move-by and upcoming-holiday banners. A separate view so its inputs are
+/// compared on every update (state read inside the TimelineView closure would
+/// otherwise go stale until the next tick); the timeline re-evaluates each
+/// minute so urgency and wording stay current.
+private struct TopBanners: View {
+    let record: ParkedCarRecord?
+    let holidays: [NamedHoliday]
+    let onMoveTap: () -> Void
+    let onHolidayTap: () -> Void
+
+    var body: some View {
+        TimelineView(.everyMinute) { context in
+            let now = context.date
+            let moveDate = record?.nextMoveDate(after: now) { isHoliday($0) }
+            let holiday = upcomingHoliday(from: now)
+            VStack(spacing: 8) {
+                if let moveDate {
+                    moveCarBanner(for: moveDate, now: now)
+                        .onTapGesture(perform: onMoveTap)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+                if let holiday {
+                    holidayBanner(holiday.holiday, daysAway: holiday.days)
+                        .onTapGesture(perform: onHolidayTap)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: moveDate)
+            .animation(.easeInOut(duration: 0.3), value: holiday?.holiday.id)
+            .animation(.easeInOut(duration: 0.3),
+                       value: moveDate.map { MoveBannerStage(deadline: $0, now: now) })
+        }
+    }
+
+    private func isHoliday(_ date: Date) -> Bool {
+        holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
+    }
+
+    /// Yellow from the day before the move, red within the final hour.
+    private func moveCarBanner(for date: Date, now: Date) -> some View {
+        let stage = MoveBannerStage(deadline: date, now: now)
+        let time = date.formatted(date: .omitted, time: .shortened)
+        let text: String
+        switch stage {
+        case .imminent:
+            let minutes = max(1, Int((date.timeIntervalSince(now) / 60).rounded(.up)))
+            text = "Move in \(minutes) min · \(time)"
+        case .dayBefore where Calendar.current.isDate(date, inSameDayAs: now):
+            text = "Move by \(time) today"
+        case .dayBefore:
+            text = "Move by \(time) tomorrow"
+        case .normal:
+            let df = DateFormatter()
+            df.dateFormat = "h:mm a, EEE MMM d"
+            text = "Move by \(df.string(from: date))"
+        }
+        let icon = stage == .imminent ? "clock.badge.exclamationmark.fill" : "calendar.badge.clock"
+        return Label(text, systemImage: icon)
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .modifier(BannerBackground(tint: stage.tint))
+    }
+
+    /// An ASP holiday within two weeks means a skipped cleaning day.
+    private func upcomingHoliday(from now: Date) -> (holiday: NamedHoliday, days: Int)? {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        return holidays
+            .compactMap { holiday -> (holiday: NamedHoliday, days: Int)? in
+                guard let days = cal.dateComponents([.day], from: today,
+                                                    to: cal.startOfDay(for: holiday.date)).day,
+                      (0...14).contains(days) else { return nil }
+                return (holiday, days)
+            }
+            .min { $0.days < $1.days }
+    }
+
+    private func holidayBanner(_ holiday: NamedHoliday, daysAway: Int) -> some View {
+        let when: String
+        switch daysAway {
+        case 0:  when = "today"
+        case 1:  when = "tomorrow"
+        default: when = holiday.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        }
+        return Label {
+            Text("No ASP \(when) · \(holiday.name)")
+        } icon: {
+            Image(systemName: "calendar.badge.checkmark")
+                .foregroundStyle(MoveUrgency(days: MoveUrgency.maxLevel).color)
+        }
+        .font(.system(size: 14, weight: .semibold, design: .rounded))
+        .lineLimit(1)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .modifier(BannerBackground(tint: nil))
+    }
+}
+
+/// How close the move-by deadline is.
+private enum MoveBannerStage: Equatable {
+    case normal     // two or more days out
+    case dayBefore  // the day before, or the day of (more than an hour away)
+    case imminent   // within the hour
+
+    init(deadline: Date, now: Date) {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: now),
+                                      to: cal.startOfDay(for: deadline)).day ?? 0
+        if deadline.timeIntervalSince(now) <= 3600 {
+            self = .imminent
+        } else if days <= 1 {
+            self = .dayBefore
+        } else {
+            self = .normal
+        }
+    }
+
+    /// Matches the countdown map: yellow (3 days) and red (today) steps.
+    var tint: MoveUrgency? {
+        switch self {
+        case .normal:    return nil
+        case .dayBefore: return MoveUrgency(days: 3)
+        case .imminent:  return MoveUrgency(days: 0)
+        }
+    }
+}
+
+/// Glass capsule, or a solid urgency color with contrasting text.
+private struct BannerBackground: ViewModifier {
+    let tint: MoveUrgency?
+
+    func body(content: Content) -> some View {
+        if let tint {
+            content
+                .foregroundStyle(tint.textColor)
+                .background(tint.color, in: Capsule())
+                .shadow(color: tint.color.opacity(0.55), radius: 10, x: 0, y: 2)
+        } else if #available(iOS 26, *) {
+            content
+                .foregroundStyle(.primary)
+                .glassEffect(in: Capsule())
+        } else {
+            content
+                .foregroundStyle(.primary)
+                .background(.ultraThinMaterial, in: Capsule())
         }
     }
 }
