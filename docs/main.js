@@ -37,7 +37,7 @@ const LAYERS = {
 
 const readout = document.getElementById("readout");
 let blocks = null;
-let mode = "days";
+let mode = "countdown";
 let selected = -1;
 let refreshTimer = null;
 

@@ -25,16 +25,16 @@
     </header>
 
     <div class="stage">
-      <div id="map" role="region" aria-label="Map of street-cleaning days for every block, starting in Clinton Hill, Brooklyn"></div>
-      <div class="legend days" aria-hidden="true">
+      <div id="map" role="region" aria-label="Map of every block in the city, colored by days until street cleaning, starting in Clinton Hill, Brooklyn"></div>
+      <div class="legend days" aria-hidden="true" hidden>
         <span class="d mon">MON</span><span class="d tue">TUE</span><span class="d wed">WED</span><span class="d thu">THU</span><span class="d fri">FRI</span><span class="d sat">SAT</span><span class="d sun">SUN</span>
       </div>
-      <div class="legend countdown" aria-hidden="true" hidden>
+      <div class="legend countdown" aria-hidden="true">
         <span class="label">Days until move</span>
       </div>
       <div class="modes" role="group" aria-label="Map view">
-        <button type="button" data-mode="days" aria-pressed="true">Cleaning days</button>
-        <button type="button" data-mode="countdown" aria-pressed="false">Days until move</button>
+        <button type="button" data-mode="days" aria-pressed="false">Cleaning days</button>
+        <button type="button" data-mode="countdown" aria-pressed="true">Days until move</button>
       </div>
     </div>
 
