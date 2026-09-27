@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		AA1100000000000000000002 /* NYCParkingApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1100000000000000000001 /* NYCParkingApp.swift */; };
 		AA1200000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1200000000000000000001 /* ContentView.swift */; };
-		AA1300000000000000000002 /* ParkingSign.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1300000000000000000001 /* ParkingSign.swift */; };
 		AA1400000000000000000002 /* ParkingSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1400000000000000000001 /* ParkingSegment.swift */; };
 		AA1500000000000000000002 /* ParkingDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1500000000000000000001 /* ParkingDay.swift */; };
 		AA1600000000000000000002 /* SignParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1600000000000000000001 /* SignParser.swift */; };
@@ -18,7 +17,6 @@
 		AA1900000000000000000002 /* ParkingLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1900000000000000000001 /* ParkingLabel.swift */; };
 		AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1A00000000000000000001 /* ParkingDetailSheet.swift */; };
 		AA1B00000000000000000002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1B00000000000000000001 /* Assets.xcassets */; };
-		AA1C00000000000000000002 /* ParkingCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000001 /* ParkingCache.swift */; };
 		AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1D00000000000000000002 /* ParkedCarRecord.swift */; };
 		AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1E00000000000000000001 /* NYCHolidayCalendar.swift */; };
 		AA1F00000000000000000002 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1F00000000000000000001 /* NotificationService.swift */; };
@@ -27,15 +25,14 @@
 		AA2200000000000000000002 /* ParkedCarSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2200000000000000000001 /* ParkedCarSheet.swift */; };
 		AA2400000000000000000002 /* segments.db in Resources */ = {isa = PBXBuildFile; fileRef = BB2400000000000000000001 /* segments.db */; };
 		AA2500000000000000000002 /* ParkingDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2500000000000000000001 /* ParkingDatabase.swift */; };
-		AA2600000000000000000002 /* ParkingTileOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2600000000000000000001 /* ParkingTileOverlay.swift */; };
-		AA2700000000000000000002 /* ParkingDotsOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2700000000000000000001 /* ParkingDotsOverlay.swift */; };
+		AA2700000000000000000002 /* ParkingMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2700000000000000000001 /* ParkingMapView.swift */; };
+		AA2800000000000000000002 /* MoveCountdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2800000000000000000001 /* MoveCountdown.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		BB1000000000000000000001 /* NYCParking.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NYCParking.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB1100000000000000000001 /* NYCParkingApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NYCParkingApp.swift; sourceTree = "<group>"; };
 		BB1200000000000000000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		BB1300000000000000000001 /* ParkingSign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingSign.swift; sourceTree = "<group>"; };
 		BB1400000000000000000001 /* ParkingSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingSegment.swift; sourceTree = "<group>"; };
 		BB1500000000000000000001 /* ParkingDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDay.swift; sourceTree = "<group>"; };
 		BB1600000000000000000001 /* SignParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignParser.swift; sourceTree = "<group>"; };
@@ -45,7 +42,6 @@
 		BB1A00000000000000000001 /* ParkingDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDetailSheet.swift; sourceTree = "<group>"; };
 		BB1B00000000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB1C00000000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		BB1D00000000000000000001 /* ParkingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingCache.swift; sourceTree = "<group>"; };
 		BB1D00000000000000000002 /* ParkedCarRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkedCarRecord.swift; sourceTree = "<group>"; };
 		BB1E00000000000000000001 /* NYCHolidayCalendar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NYCHolidayCalendar.swift; sourceTree = "<group>"; };
 		BB1F00000000000000000001 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
@@ -54,8 +50,8 @@
 		BB2200000000000000000001 /* ParkedCarSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkedCarSheet.swift; sourceTree = "<group>"; };
 		BB2400000000000000000001 /* segments.db */ = {isa = PBXFileReference; lastKnownFileType = text; path = segments.db; sourceTree = "<group>"; };
 		BB2500000000000000000001 /* ParkingDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDatabase.swift; sourceTree = "<group>"; };
-		BB2600000000000000000001 /* ParkingTileOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingTileOverlay.swift; sourceTree = "<group>"; };
-		BB2700000000000000000001 /* ParkingDotsOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingDotsOverlay.swift; sourceTree = "<group>"; };
+		BB2700000000000000000001 /* ParkingMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingMapView.swift; sourceTree = "<group>"; };
+		BB2800000000000000000001 /* MoveCountdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveCountdown.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,7 +78,6 @@
 			children = (
 				BB1100000000000000000001 /* NYCParkingApp.swift */,
 				BB1200000000000000000001 /* ContentView.swift */,
-				BB1300000000000000000001 /* ParkingSign.swift */,
 				BB1400000000000000000001 /* ParkingSegment.swift */,
 				BB1500000000000000000001 /* ParkingDay.swift */,
 				BB1600000000000000000001 /* SignParser.swift */,
@@ -90,7 +85,6 @@
 				BB1800000000000000000001 /* LocationManager.swift */,
 				BB1900000000000000000001 /* ParkingLabel.swift */,
 				BB1A00000000000000000001 /* ParkingDetailSheet.swift */,
-				BB1D00000000000000000001 /* ParkingCache.swift */,
 				BB1D00000000000000000002 /* ParkedCarRecord.swift */,
 				BB1E00000000000000000001 /* NYCHolidayCalendar.swift */,
 				BB1F00000000000000000001 /* NotificationService.swift */,
@@ -98,8 +92,8 @@
 				BB2100000000000000000001 /* ASPHolidayService.swift */,
 				BB2200000000000000000001 /* ParkedCarSheet.swift */,
 				BB2500000000000000000001 /* ParkingDatabase.swift */,
-				BB2600000000000000000001 /* ParkingTileOverlay.swift */,
-				BB2700000000000000000001 /* ParkingDotsOverlay.swift */,
+				BB2700000000000000000001 /* ParkingMapView.swift */,
+				BB2800000000000000000001 /* MoveCountdown.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -187,7 +181,6 @@
 			files = (
 				AA1100000000000000000002 /* NYCParkingApp.swift in Sources */,
 				AA1200000000000000000002 /* ContentView.swift in Sources */,
-				AA1300000000000000000002 /* ParkingSign.swift in Sources */,
 				AA1400000000000000000002 /* ParkingSegment.swift in Sources */,
 				AA1500000000000000000002 /* ParkingDay.swift in Sources */,
 				AA1600000000000000000002 /* SignParser.swift in Sources */,
@@ -195,7 +188,6 @@
 				AA1800000000000000000002 /* LocationManager.swift in Sources */,
 				AA1900000000000000000002 /* ParkingLabel.swift in Sources */,
 				AA1A00000000000000000002 /* ParkingDetailSheet.swift in Sources */,
-				AA1C00000000000000000002 /* ParkingCache.swift in Sources */,
 				AA1C00000000000000000003 /* ParkedCarRecord.swift in Sources */,
 				AA1E00000000000000000002 /* NYCHolidayCalendar.swift in Sources */,
 				AA1F00000000000000000002 /* NotificationService.swift in Sources */,
@@ -203,8 +195,8 @@
 				AA2100000000000000000002 /* ASPHolidayService.swift in Sources */,
 				AA2200000000000000000002 /* ParkedCarSheet.swift in Sources */,
 				AA2500000000000000000002 /* ParkingDatabase.swift in Sources */,
-				AA2600000000000000000002 /* ParkingTileOverlay.swift in Sources */,
-				AA2700000000000000000002 /* ParkingDotsOverlay.swift in Sources */,
+				AA2700000000000000000002 /* ParkingMapView.swift in Sources */,
+				AA2800000000000000000002 /* MoveCountdown.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

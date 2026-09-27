@@ -1,70 +1,77 @@
 import SwiftUI
+import UIKit
 
-// Driven by map zoom level; set in ContentView.onMapCameraChange.
-enum MarkerZoomLevel: Equatable {
-    case dot       // small colored dot; radius scales with zoom
-    case smallDays // day-name pill(s) at ~2/3 size — first pill level after dots
-    case days      // day-name pill(s) at full size
-    case full      // day pill(s) + time label
-}
+/// Label size on the map, driven by zoom (meters per screen point).
+enum LabelStyle: Hashable {
+    case small  // day pill(s) at ~2/3 size — first level after stripes only
+    case days   // day pill(s) at full size
+    case full   // day pill(s) + time label
 
-struct ParkingLabel: View {
-    let segment: ParkingSegment
-    let zoomLevel: MarkerZoomLevel
-    let mapHeading: Double   // current map rotation in degrees [0, 360)
-    var dotRadius: Double = 3.5
-    var onTap: (() -> Void)? = nil
-
-    private var days: [ParkingDay] { segment.allDays }
-    private var primaryRule: ParkingRule? { segment.rules.first }
-
-    var body: some View {
-        switch zoomLevel {
-        case .dot:
-            dotView
-                .rotationEffect(days.count > 1 ? streetAngle : .degrees(0))
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?() }
-        case .smallDays:
-            dayPills
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?() }
-                .rotationEffect(streetAngle)
-                .scaleEffect(2.0 / 3.0)
-                .shadow(color: .black.opacity(0.20), radius: 2, x: 0, y: 1)
-        case .days:
-            dayPills
-                .contentShape(Rectangle())
-                .onTapGesture { onTap?() }
-                .rotationEffect(streetAngle)
-                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
-        case .full:
-            HStack(spacing: 4) {
-                dayPills
-                if let rule = primaryRule {
-                    timeLabel(rule)
-                }
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { onTap?() }
-            .rotationEffect(streetAngle)
-            .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
+    /// Style for a given zoom, or nil when zoomed out far enough to show stripes only.
+    static func forMetersPerPoint(_ mpp: Double) -> LabelStyle? {
+        switch mpp {
+        case ..<0.32: return .full
+        case ..<0.6:  return .days
+        case ..<1.0:  return .small
+        default:      return nil
         }
     }
+}
 
-    // MARK: - Dot
+/// What a block's pill says.
+enum LabelContent: Hashable {
+    case days
+    case countdown(MoveCountdown?)
+}
 
-    private var dotView: some View {
-        let diameter = dotRadius * 2
-        let spacing  = max(1, dotRadius * 0.43)
-        return HStack(spacing: spacing) {
-            ForEach(days) { day in
-                Circle()
-                    .fill(day.color)
-                    .frame(width: diameter, height: diameter)
+/// Countdown-mode pill: urgency-colored "TODAY" / "3 DAYS" / "7+ DAYS", plus
+/// the restriction's day and time at the closest zoom.
+struct CountdownLabel: View {
+    let countdown: MoveCountdown?
+    let style: LabelStyle
+
+    private var s: CGFloat { style == .small ? 2.0 / 3.0 : 1 }
+    private var urgency: MoveUrgency { MoveUrgency(days: countdown?.days) }
+
+    var body: some View {
+        HStack(spacing: 4 * s) {
+            Text(MoveCountdown.shortText(countdown))
+                .font(.system(size: 11 * s, weight: .bold, design: .rounded))
+                .foregroundStyle(urgency.textColor)
+                .padding(.horizontal, 9 * s)
+                .padding(.vertical, 5 * s)
+                .background(urgency.color, in: Capsule())
+                .fixedSize()
+            if style == .full, let countdown, countdown.days < 7 {
+                Text(countdown.timeText)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.85))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.95), in: RoundedRectangle(cornerRadius: 6))
+                    .fixedSize()
             }
         }
-        .shadow(color: .black.opacity(dotRadius < 2 ? 0 : 0.3), radius: 2, x: 0, y: 1)
+    }
+}
+
+/// The pill drawn on the map for one block face. Rendered once per unique
+/// (days, time, style) into a cached image by `ParkingLabelRenderer`; the map
+/// rotates that image to lie along the street.
+struct ParkingLabel: View {
+    let days: [ParkingDay]
+    let rule: ParkingRule?
+    let style: LabelStyle
+
+    private var s: CGFloat { style == .small ? 2.0 / 3.0 : 1 }
+
+    var body: some View {
+        HStack(spacing: 4 * s) {
+            dayPills
+            if style == .full, let rule {
+                timeLabel(rule)
+            }
+        }
     }
 
     // MARK: - Day pills
@@ -75,57 +82,24 @@ struct ParkingLabel: View {
         case 0:
             EmptyView()
         case 1:
-            singlePill(days[0])
+            segmentedPill([days[0]], text: \.short)
         case 2:
-            splitPill(days[0], days[1], wide: true)
+            segmentedPill(days, text: \.short)
         default:
-            // 3+ days: single-letter abbreviations in a multi-segment pill
-            multiPill(days)
+            // 3+ days: 1–2 letter abbreviations in a multi-segment pill
+            segmentedPill(days, text: \.letter)
         }
     }
 
-    private func singlePill(_ day: ParkingDay) -> some View {
-        Text(day.short)
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(day.color, in: Capsule())
-    }
-
-    private func splitPill(_ a: ParkingDay, _ b: ParkingDay, wide: Bool) -> some View {
+    private func segmentedPill(_ days: [ParkingDay], text: KeyPath<ParkingDay, String>) -> some View {
         HStack(spacing: 0) {
-            Text(wide ? a.short : a.letter)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.leading, 9)
-                .padding(.trailing, 5)
-                .padding(.vertical, 5)
-                .frame(maxHeight: .infinity)
-                .background(a.color)
-
-            Text(wide ? b.short : b.letter)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.leading, 5)
-                .padding(.trailing, 9)
-                .padding(.vertical, 5)
-                .frame(maxHeight: .infinity)
-                .background(b.color)
-        }
-        .fixedSize()
-        .clipShape(Capsule())
-    }
-
-    private func multiPill(_ allDays: [ParkingDay]) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Array(allDays.enumerated()), id: \.offset) { i, day in
-                Text(day.letter)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+            ForEach(Array(days.enumerated()), id: \.offset) { i, day in
+                Text(day[keyPath: text])
+                    .font(.system(size: 11 * s, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                    .padding(.leading,  i == 0             ? 9 : 5)
-                    .padding(.trailing, i == allDays.count - 1 ? 9 : 5)
-                    .padding(.vertical, 5)
+                    .padding(.leading, (i == 0 ? 9 : 5) * s)
+                    .padding(.trailing, (i == days.count - 1 ? 9 : 5) * s)
+                    .padding(.vertical, 5 * s)
                     .frame(maxHeight: .infinity)
                     .background(day.color)
             }
@@ -150,24 +124,43 @@ struct ParkingLabel: View {
             .replacingOccurrences(of: "AM", with: " AM")
             .replacingOccurrences(of: "PM", with: " PM")
     }
+}
 
-    // MARK: - Street rotation
+/// Renders and caches pill images. There are only a few hundred distinct
+/// (days, time, style) combinations city-wide, so the cache stays small.
+@MainActor
+enum ParkingLabelRenderer {
+    /// Transparent margin around the pill so its shadow isn't clipped.
+    static let shadowPadding: CGFloat = 4
 
-    private var streetAngle: Angle {
-        let bearing: Double
-        if let b = segment.streetBearing {
-            bearing = b
-        } else {
-            switch segment.side.uppercased() {
-            case "E", "W": bearing = 0
-            default:       bearing = 90
-            }
+    private static var cache: [String: UIImage] = [:]
+
+    static func image(for segment: ParkingSegment, content: LabelContent, style: LabelStyle) -> UIImage {
+        switch content {
+        case .days:
+            let days = segment.allDays
+            let rule = segment.rules.first
+            let key = days.map(\.rawValue).joined(separator: ",") + "|\(style)"
+                + (style == .full ? "|\(rule?.startTime ?? "")-\(rule?.endTime ?? "")" : "")
+            return cached(key, style: style) { ParkingLabel(days: days, rule: rule, style: style) }
+        case .countdown(let countdown):
+            let key = "countdown|\(MoveCountdown.shortText(countdown))|\(style)"
+                + (style == .full ? "|\(countdown?.timeText ?? "")" : "")
+            return cached(key, style: style) { CountdownLabel(countdown: countdown, style: style) }
         }
-        // Subtract map heading so the label stays parallel with the street
-        // as it appears on screen regardless of map rotation.
-        var b = (bearing - mapHeading).truncatingRemainder(dividingBy: 360)
-        if b < 0 { b += 360 }
-        if b >= 180 { b -= 180 }   // normalize to [0°, 180°) — text never upside-down
-        return .degrees(b - 90)    // east = 0°, north = –90°
+    }
+
+    private static func cached<V: View>(_ key: String, style: LabelStyle,
+                                        _ makeView: () -> V) -> UIImage {
+        if let cached = cache[key] { return cached }
+        let view = makeView()
+            .padding(shadowPadding)
+            .shadow(color: .black.opacity(style == .small ? 0.20 : 0.25),
+                    radius: style == .small ? 2 : 3, x: 0, y: 1)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = UIScreen.main.scale
+        let image = renderer.uiImage ?? UIImage()
+        cache[key] = image
+        return image
     }
 }

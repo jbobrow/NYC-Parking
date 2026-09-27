@@ -7,18 +7,9 @@ struct StoredRule: Codable, Equatable {
     let startTime: String
     let endTime: String
 
-    /// Hour/minute when the restriction begins, parsed from `startTime` (e.g. "9:30 AM").
+    /// Hour/minute when the restriction begins, parsed from `startTime` (e.g. "9:30AM", "11AM").
     var startTimeComponents: (hour: Int, minute: Int)? {
-        let s = startTime.trimmingCharacters(in: .whitespaces).uppercased()
-        let isPM = s.hasSuffix("PM")
-        guard isPM || s.hasSuffix("AM") else { return nil }
-        let timePart = s.dropLast(2)
-        let parts = timePart.split(separator: ":")
-        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else { return nil }
-        var h = hour
-        if isPM && h != 12 { h += 12 }
-        if !isPM && h == 12 { h = 0 }
-        return (h, minute)
+        ParkingTime.minutes(startTime).map { ($0 / 60, $0 % 60) }
     }
 }
 
@@ -55,6 +46,60 @@ struct ParkedCarRecord: Codable, Equatable {
         self.fromStreet            = segment.fromStreet
         self.toStreet              = segment.toStreet
         self.side                  = segment.side
+    }
+
+    // MARK: - Position along the block
+
+    /// The car's position: `offsetMeters` from the block midpoint along the street.
+    var carCoordinate: CLLocationCoordinate2D { coordinate(atOffset: offsetMeters) }
+
+    func coordinate(atOffset offset: Double) -> CLLocationCoordinate2D {
+        let bearing = (streetBearing ?? 0) * .pi / 180
+        let mPerDegLat = 111_320.0
+        let mPerDegLon = mPerDegLat * cos(coordinateLatitude * .pi / 180)
+        return CLLocationCoordinate2D(
+            latitude:  sidewalkLatitude  + cos(bearing) * offset / mPerDegLat,
+            longitude: sidewalkLongitude + sin(bearing) * offset / mPerDegLon
+        )
+    }
+
+    /// Signed distance (meters) of `coordinate` along the street from the block
+    /// midpoint — the inverse of `coordinate(atOffset:)`, used while dragging.
+    func offset(of coordinate: CLLocationCoordinate2D) -> Double {
+        let bearing = (streetBearing ?? 0) * .pi / 180
+        let mPerDegLat = 111_320.0
+        let mPerDegLon = mPerDegLat * cos(coordinateLatitude * .pi / 180)
+        let north = (coordinate.latitude  - sidewalkLatitude)  * mPerDegLat
+        let east  = (coordinate.longitude - sidewalkLongitude) * mPerDegLon
+        return north * cos(bearing) + east * sin(bearing)
+    }
+
+    // MARK: - Move deadline
+
+    /// Start of the next restriction after `now`, skipping holidays. Today counts
+    /// if its restriction hasn't started yet.
+    func nextMoveDate(after now: Date, calendar cal: Calendar = .current,
+                      isHoliday: (Date) -> Bool) -> Date? {
+        let restrictionDayValues = Set(restrictionRules.flatMap { $0.days })
+        guard !restrictionDayValues.isEmpty else { return nil }
+        let today = cal.startOfDay(for: now)
+        for offset in 0...14 {
+            guard let candidate = cal.date(byAdding: .day, value: offset, to: today) else { continue }
+            let weekday = cal.component(.weekday, from: candidate)
+            guard let day = ParkingDay.from(weekday: weekday),
+                  restrictionDayValues.contains(day.rawValue),
+                  !isHoliday(candidate) else { continue }
+            // Earliest restriction that day, when several rules apply.
+            let starts = restrictionRules
+                .filter { $0.days.contains(day.rawValue) }
+                .compactMap(\.startTimeComponents)
+                .sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
+            let (hour, minute) = starts.first ?? (8, 0)
+            guard let deadline = cal.date(bySettingHour: hour, minute: minute, second: 0, of: candidate)
+            else { continue }
+            if deadline > now { return deadline }
+        }
+        return nil
     }
 
     // MARK: - Persistence

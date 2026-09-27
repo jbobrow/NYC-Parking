@@ -35,15 +35,17 @@ enum ParkingDay: String, CaseIterable, Hashable, Identifiable {
         }
     }
 
-    var color: Color {
+    var color: Color { Color(uiColor: uiColor) }
+
+    var uiColor: UIColor {
         switch self {
-        case .monday:    return Color(red: 0.24, green: 0.52, blue: 0.96)  // cobalt blue
-        case .tuesday:   return Color(red: 0.96, green: 0.50, blue: 0.18)  // orange
-        case .wednesday: return Color(red: 0.20, green: 0.78, blue: 0.50)  // green
-        case .thursday:  return Color(red: 0.68, green: 0.32, blue: 0.92)  // purple
-        case .friday:    return Color(red: 0.94, green: 0.26, blue: 0.32)  // red
-        case .saturday:  return Color(red: 0.94, green: 0.74, blue: 0.12)  // yellow
-        case .sunday:    return Color(red: 0.30, green: 0.76, blue: 0.90)  // sky
+        case .monday:    return UIColor(red: 0.24, green: 0.52, blue: 0.96, alpha: 1)  // cobalt blue
+        case .tuesday:   return UIColor(red: 0.96, green: 0.50, blue: 0.18, alpha: 1)  // orange
+        case .wednesday: return UIColor(red: 0.20, green: 0.78, blue: 0.50, alpha: 1)  // green
+        case .thursday:  return UIColor(red: 0.68, green: 0.32, blue: 0.92, alpha: 1)  // purple
+        case .friday:    return UIColor(red: 0.94, green: 0.26, blue: 0.32, alpha: 1)  // red
+        case .saturday:  return UIColor(red: 0.94, green: 0.74, blue: 0.12, alpha: 1)  // yellow
+        case .sunday:    return UIColor(red: 0.30, green: 0.76, blue: 0.90, alpha: 1)  // sky
         }
     }
 
