@@ -1,66 +1,32 @@
 import Foundation
 import CoreLocation
+import MapKit
 import SwiftUI
 
+/// One block face: one side of one street between two intersections.
 struct ParkingSegment: Identifiable, Hashable {
     let id: String
     let street: String
     let fromStreet: String
     let toStreet: String
     let side: String
+    /// Midpoint of the curb line.
     let coordinate: CLLocationCoordinate2D
-    /// Compass bearing of the street in degrees [0, 360), computed from sign positions.
-    /// Nil when only one sign coordinate is available.
+    /// Compass bearing of the street at the block's midpoint, in degrees [0, 360).
     let streetBearing: Double?
-    /// Half-length of this block face in meters (centroid → end), derived from sign positions.
+    /// Half the length of the curb line, in meters.
     let halfBlockLengthMeters: Double
     let rules: [ParkingRule]
+    /// The curb line down the middle of the parking lane, trimmed back from each
+    /// intersection (built offline from the NYC street centerline).
+    let curve: [CLLocationCoordinate2D]
 
     static func == (lhs: ParkingSegment, rhs: ParkingSegment) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
-    // Offset the coordinate ~11 m toward the sidewalk.
-    // Uses the street bearing to compute the correct perpendicular direction so
-    // diagonal streets (e.g. Broadway, Union Square East) push the marker to the
-    // right side of the road, not due N/S/E/W.
-    var sidewalkCoordinate: CLLocationCoordinate2D {
-        let offsetM  = 11.0
-        let cosLat   = cos(coordinate.latitude * .pi / 180)
-        let mPerLat  = 111_320.0
-        let mPerLon  = mPerLat * cosLat
-
-        // Cardinal target for the labeled side.
-        let sideTarget: Double
-        switch side.uppercased() {
-        case "N": sideTarget = 0
-        case "S": sideTarget = 180
-        case "E": sideTarget = 90
-        case "W": sideTarget = 270
-        default:  return coordinate
-        }
-
-        // Direction of push: if we have a bearing, pick the perpendicular that is
-        // closest to the side label's cardinal direction.  Otherwise fall back to
-        // the cardinal direction itself.
-        let pushDir: Double
-        if let b = streetBearing {
-            let perp1 = (b + 90).truncatingRemainder(dividingBy: 360)
-            let perp2 = (b + 270).truncatingRemainder(dividingBy: 360)
-            func angDiff(_ a: Double, _ b: Double) -> Double {
-                let d = abs(a - b).truncatingRemainder(dividingBy: 360)
-                return min(d, 360 - d)
-            }
-            pushDir = angDiff(perp1, sideTarget) <= angDiff(perp2, sideTarget) ? perp1 : perp2
-        } else {
-            pushDir = sideTarget
-        }
-
-        let rad  = pushDir * .pi / 180
-        let dlat = cos(rad) * offsetM / mPerLat
-        let dlon = sin(rad) * offsetM / mPerLon
-        return CLLocationCoordinate2D(latitude:  coordinate.latitude  + dlat,
-                                      longitude: coordinate.longitude + dlon)
-    }
+    /// Where the label and parked car sit. The geometry is already on the curb, so
+    /// this is just the curb midpoint (kept for `ParkedCarRecord`).
+    var sidewalkCoordinate: CLLocationCoordinate2D { coordinate }
 
     var allDays: [ParkingDay] {
         let unique = Set(rules.flatMap { $0.days })
@@ -68,4 +34,63 @@ struct ParkingSegment: Identifiable, Hashable {
     }
 
     var primaryDayColor: Color { allDays.first?.color ?? .gray }
+
+    /// The curve ordered in label reading direction (pointing east-ish, bearing in
+    /// [0°, 180°)), so multi-day stripes run MON→SUN the same way the pill reads
+    /// when the map is north-up.
+    var readingOrderCurve: [CLLocationCoordinate2D] {
+        guard let first = curve.first, let last = curve.last else { return curve }
+        let p0 = MKMapPoint(first), p1 = MKMapPoint(last)
+        // Map points grow east (x) and south (y); east-ish means dx > 0, or due
+        // north when the street runs exactly north-south.
+        let dx = p1.x - p0.x, dy = p1.y - p0.y
+        let eastward = abs(dx) > 1e-9 ? dx > 0 : dy < 0
+        return eastward ? curve : curve.reversed()
+    }
+}
+
+/// Grid index over all block faces for fast viewport and hit-test queries.
+final class SegmentIndex: @unchecked Sendable {
+    let segments: [ParkingSegment]
+    private let cells: [Int64: [Int32]]
+    private static let cellDegrees = 0.004   // ≈ 450 m × 340 m in NYC
+
+    init(segments: [ParkingSegment]) {
+        self.segments = segments
+        var cells: [Int64: [Int32]] = [:]
+        for (i, seg) in segments.enumerated() {
+            let lats = seg.curve.map(\.latitude), lons = seg.curve.map(\.longitude)
+            guard let minLat = lats.min(), let maxLat = lats.max(),
+                  let minLon = lons.min(), let maxLon = lons.max() else { continue }
+            for r in Self.cell(minLat)...Self.cell(maxLat) {
+                for c in Self.cell(minLon)...Self.cell(maxLon) {
+                    cells[Self.key(r, c), default: []].append(Int32(i))
+                }
+            }
+        }
+        self.cells = cells
+    }
+
+    private static func cell(_ deg: Double) -> Int { Int((deg / cellDegrees).rounded(.down)) }
+    private static func key(_ r: Int, _ c: Int) -> Int64 { Int64(r) << 32 | Int64(UInt32(bitPattern: Int32(c))) }
+
+    func segments(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> [ParkingSegment] {
+        var seen = Set<Int32>()
+        var out: [ParkingSegment] = []
+        for r in Self.cell(minLat)...Self.cell(maxLat) {
+            for c in Self.cell(minLon)...Self.cell(maxLon) {
+                for i in cells[Self.key(r, c)] ?? [] where seen.insert(i).inserted {
+                    out.append(segments[Int(i)])
+                }
+            }
+        }
+        return out
+    }
+
+    func segments(in rect: MKMapRect) -> [ParkingSegment] {
+        let nw = MKMapPoint(x: rect.minX, y: rect.minY).coordinate
+        let se = MKMapPoint(x: rect.maxX, y: rect.maxY).coordinate
+        return segments(minLat: se.latitude, maxLat: nw.latitude,
+                        minLon: nw.longitude, maxLon: se.longitude)
+    }
 }

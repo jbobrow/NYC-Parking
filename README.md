@@ -15,10 +15,11 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
 ## Features
 
 - **Live map overlay** — parking restriction markers on every block, updated from NYC Open Data
-- **Three zoom levels**
-  - Far out: small colored dots, one per block face
-  - Mid: day-name pills (Mon, Tue, Wed…) aligned with the street
+- **Zoom levels**
+  - Far out: a run of day-colored dots on each block face
+  - Mid: day-colored stripes down each curb, with day-name pills (Mon, Tue, Wed…) lying along the street
   - Close in: pills + restriction time (e.g. 8 AM–11 AM)
+- **Countdown mode** — the hourglass button recolors every block by how soon a car parked there now would have to move: red 0–1 days, yellow 2–6, green 7+ (ASP holidays skipped)
 - **"Park here" mode** — tap any marker to record where you left your car; drag it along the block to the exact spot
 - **Next move date** — banner shows the next day you need to move, skipping holidays
 - **Reminders** — optional 8 AM notification on the day you need to move
@@ -27,36 +28,31 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
 
 ## Data
 
-Parking restriction data comes from the [NYC Open Data alternate-side parking sign dataset](https://data.cityofnewyork.us/resource/nfid-uabd.json). The app ships with a pre-built SQLite database (`segments.db`) so data is available immediately on first launch. Bearings and block-center positions are precomputed offline using `scripts/precompute_bearings.py`.
-
-The app checks for dataset updates on launch and refreshes in the background when a newer version is available.
+Parking restriction data comes from the [NYC Open Data alternate-side parking sign dataset](https://data.cityofnewyork.us/resource/nfid-uabd.json). The app ships with a pre-built SQLite database (`segments.db`), built offline by `scripts/build_segments.py`: each sign is snapped to its block on the [NYC street centerline](https://data.cityofnewyork.us/resource/inkn-q76z) and grouped by block face, giving every face a curb polyline trimmed back from the intersections.
 
 ## Architecture
 
 | File | Role |
 |---|---|
-| `ParkingDataService` | Loads segments from SQLite, provides `@Published` array to SwiftUI |
-| `ParkingDatabase` | SQLite wrapper — bbox queries, cache writes |
-| `ParkingSegment` | One block face: street, cross streets, bearing, rules, sidewalk coordinate |
-| `ParkingLabel` | SwiftUI pill/dot marker, rotated to match street bearing |
-| `ParkingDotsOverlay` | `UIView`-based canvas for the zoomed-out dot layer (performance) |
+| `ParkingDataService` | Loads every block face from SQLite in the background into a `SegmentIndex` |
+| `ParkingDatabase` | Read-only SQLite wrapper for the bundled `segments.db` |
+| `ParkingSegment` | One block face: street, cross streets, bearing, rules, curb polyline; `SegmentIndex` grid for spatial queries |
+| `ParkingMapView` | `MKMapView` wrapper: vector stripe/dot overlays, rotating pill annotations with overlap culling, tap hit-testing, draggable parked car |
+| `ParkingLabel` | SwiftUI pill design, rendered once per unique label into a cached image |
+| `MoveCountdown` | Days-until-move per block (holiday-aware) and the countdown color buckets |
 | `SignParser` | Parses raw NYC sign descriptions into structured `ParkingRule` objects |
 | `ASPHolidayService` | Fetches and caches the NYC ASP holiday calendar |
 
 ## Scripts
 
-```
-scripts/precompute_bearings.py  — run once after data refresh
-```
-
-Computes street bearings (local PCA of nearby block centroids) and block center positions (midpoint of cross-street centroids) and writes them into `segments.db`. Run this before bundling the database into the app.
-
 ```bash
-python3 scripts/precompute_bearings.py NYCParking/NYCParking/segments.db
+python3 scripts/build_segments.py
 ```
+
+Downloads the sign and centerline datasets (cached in `.data_cache/`), snaps signs to block faces, and writes `NYCParking/NYCParking/segments.db`. Rebuild the app afterwards to bundle the new data.
 
 ## Requirements
 
 - iOS 17+
 - Xcode 15+
-- Python 3 + `requests` (for the data script only)
+- Python 3 (standard library only, for the data script)
