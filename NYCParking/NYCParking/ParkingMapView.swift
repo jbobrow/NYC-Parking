@@ -22,6 +22,10 @@ final class MapController {
                                               longitudinalMeters: meters), animated: animated)
     }
 
+    func setRegion(_ region: MKCoordinateRegion, animated: Bool = true) {
+        mapView?.setRegion(region, animated: animated)
+    }
+
     /// Re-centers without changing zoom or heading.
     func setCenter(_ center: CLLocationCoordinate2D, animated: Bool = true) {
         mapView?.setCenter(center, animated: animated)
@@ -278,7 +282,9 @@ extension ParkingMapView {
 
             case .countdown:
                 if let overlays = countdownOverlays { show(overlays); return }
-                let entries = countdown?.entries ?? [:]
+                // Wait for real countdowns rather than drawing every block as
+                // "7+ days" and then redrawing the whole city moments later.
+                guard let entries = countdown?.entries else { return }
                 build("countdown", layer: layer) {
                     StripeBuilder.countdownOverlays(for: segments, entries: entries)
                 } store: { self.countdownOverlays = $0 }
@@ -598,7 +604,8 @@ extension ParkingMapView {
 // MARK: - Stripes
 
 /// A batch of same-colored curb stripes. Stripes are chunked spatially so MapKit
-/// can skip chunks outside the viewport.
+/// can skip chunks outside the viewport, but coarsely: each overlay carries real
+/// per-overlay overhead, and thousands of them make swapping layers slow.
 final class StripeOverlay: MKMultiPolyline {
     var color: UIColor = .gray
     /// Set for dot overlays: each polyline is a near-zero-length segment drawn
@@ -607,7 +614,7 @@ final class StripeOverlay: MKMultiPolyline {
 }
 
 enum StripeBuilder {
-    private static let chunkDegrees = 0.03   // ≈ 3 km
+    private static let chunkDegrees = 0.08   // ≈ 9 km
 
     /// Stripe width tracks the real parking lane (~2.6 m) when zoomed in, with a
     /// floor so stripes stay visible zoomed out; hairlines at borough scale.
@@ -697,7 +704,7 @@ enum StripeBuilder {
 /// Zoomed-out markers: a run of day-colored dots at each block's curb midpoint,
 /// laid along the street (MON first, reading west→east / south→north).
 enum DotBuilder {
-    private static let chunkDegrees = 0.03
+    private static let chunkDegrees = 0.08
 
     /// Diameter shrinks as the map zooms out; dot runs collapse to one dot (the
     /// first day) at borough scale, where multi-dot runs would just smear.
@@ -814,7 +821,11 @@ final class SegmentLabelView: MKAnnotationView {
         let bearing = segment?.streetBearing ?? 90
         var b = (bearing - heading).truncatingRemainder(dividingBy: 360)
         if b < 0 { b += 360 }
-        if b >= 180 { b -= 180 }          // keep text upright
+        // Keep text upright by folding into [−5°, 175°) rather than [0°, 180°):
+        // labels on streets within a few degrees of vertical then all read
+        // bottom-to-top, instead of flipping on 1° bearing differences when the
+        // map is rotated to line a street grid up with the screen.
+        if b >= 355 { b -= 360 } else if b >= 175 { b -= 180 }
         angle = CGFloat((b - 90) * .pi / 180)   // east = 0, north = −90°
         imageView.transform = CGAffineTransform(rotationAngle: angle)
     }
