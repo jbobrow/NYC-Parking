@@ -6,7 +6,12 @@ Usage
 -----
     python3 scripts/build_web_data.py [--db PATH] [--out PATH]
 
-Run after scripts/build_segments.py. Output format (docs/data/blocks.json):
+Run after scripts/build_segments.py. Also writes docs/data/holidays.json, the
+official NYC DOT alternate-side parking holiday calendar for this year and next,
+since browsers can't fetch it from nyc.gov directly (no CORS). Re-run when NYC
+publishes the next year's calendar.
+
+Block output format (docs/data/blocks.json):
 
     {
       "names": ["EAST 9 STREET", ...],               # street-name table
@@ -19,15 +24,45 @@ point, which keeps the city-wide file small enough to load on the web.
 """
 
 import argparse
+import datetime
 import json
 import os
+import re
 import sqlite3
+import urllib.error
+import urllib.request
+
+ICS_URL = "https://www.nyc.gov/html/dot/downloads/misc/{year}-alternate-side.ics"
+
+
+def fetch_holidays():
+    """[{"date": "2026-10-03", "name": "Shemini Atzereth"}, ...] for this year and next."""
+    year = datetime.date.today().year
+    holidays = []
+    for y in (year, year + 1):
+        req = urllib.request.Request(ICS_URL.format(year=y),
+                                     headers={"User-Agent": "Mozilla/5.0 (NYC Parking site build)"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                text = r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError:
+            continue   # next year's calendar may not be published yet
+        text = re.sub(r"\r?\n[ \t]", "", text)   # unfold continuation lines
+        for event in text.split("BEGIN:VEVENT")[1:]:
+            start = re.search(r"^DTSTART[^:]*:(\d{8})", event, re.M)
+            desc = re.search(r"^DESCRIPTION:(.*)$", event, re.M)
+            name = re.search(r"suspended for (.*?)(?:\.|$)", desc.group(1).replace("\\,", ","), re.I) if desc else None
+            if start and name:
+                d = start.group(1)
+                holidays.append({"date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "name": name.group(1).strip()})
+    return sorted(holidays, key=lambda h: h["date"])
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--db", default="NYCParking/NYCParking/segments.db")
     ap.add_argument("--out", default="docs/data/blocks.json")
+    ap.add_argument("--holidays-out", default="docs/data/holidays.json")
     args = ap.parse_args()
 
     conn = sqlite3.connect(args.db)
@@ -68,6 +103,15 @@ def main():
         json.dump({"names": names, "rules": rule_sets, "faces": faces}, f, separators=(",", ":"))
     print(f"Wrote {args.out}: {len(faces)} faces, {len(names)} names, "
           f"{len(rule_sets)} rule sets, {os.path.getsize(args.out) / 1_048_576:.1f} MB")
+
+    holidays = fetch_holidays()
+    if holidays:
+        with open(args.holidays_out, "w") as f:
+            json.dump(holidays, f, indent=1)
+        print(f"Wrote {args.holidays_out}: {len(holidays)} holidays "
+              f"({holidays[0]['date']} – {holidays[-1]['date']})")
+    else:
+        print("Could not fetch the holiday calendar; left holidays.json unchanged")
 
 
 if __name__ == "__main__":
