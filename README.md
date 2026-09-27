@@ -51,6 +51,20 @@ python3 scripts/build_segments.py
 
 Downloads the sign and centerline datasets (cached in `.data_cache/`), snaps signs to block faces, and writes `NYCParking/NYCParking/segments.db`. Rebuild the app afterwards to bundle the new data.
 
+```bash
+python3 scripts/build_web_data.py
+```
+
+Exports the same block faces to `docs/data/blocks.json` for the website's live map.
+
+## Website
+
+`docs/` is the GitHub Pages site at [nycparking.jonbobrow.com](https://nycparking.jonbobrow.com): a live, simplified version of the app's cleaning-days map (MapLibre GL on OpenFreeMap's dark style), plus the privacy and support pages. Preview it locally with:
+
+```bash
+python3 -m http.server 8765 --directory docs
+```
+
 ## Requirements
 
 - iOS 17+

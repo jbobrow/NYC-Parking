@@ -1,118 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Support — NYC Parking</title>
-  <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-      background: #fff;
-      color: #1C1C1E;
-      -webkit-font-smoothing: antialiased;
-      max-width: 640px;
-      margin: 0 auto;
-      padding: 60px 28px 80px;
-    }
-
-    a { color: #3D85F5; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    .back {
-      display: inline-block;
-      font-size: 15px;
-      color: #3D85F5;
-      margin-bottom: 48px;
-    }
-
-    h1 {
-      font-size: 34px;
-      font-weight: 700;
-      letter-spacing: -1px;
-      margin-bottom: 40px;
-    }
-
-    h2 {
-      font-size: 17px;
-      font-weight: 600;
-      margin: 36px 0 10px;
-    }
-
-    p {
-      font-size: 15px;
-      line-height: 1.65;
-      color: #3C3C43;
-    }
-
-    .faq + .faq {
-      border-top: 1px solid #E5E5EA;
-      padding-top: 28px;
-      margin-top: 28px;
-    }
-
-    .contact-box {
-      background: #F2F2F7;
-      border-radius: 16px;
-      padding: 28px;
-      margin-top: 48px;
-      text-align: center;
-    }
-
-    .contact-box p {
-      margin-bottom: 16px;
-      color: #3C3C43;
-    }
-
-    .contact-btn {
-      display: inline-block;
-      background: #3D85F5;
-      color: #fff;
-      font-size: 15px;
-      font-weight: 600;
-      padding: 12px 28px;
-      border-radius: 980px;
-      text-decoration: none;
-    }
-    .contact-btn:hover { opacity: 0.88; text-decoration: none; }
-  </style>
+  <meta name="theme-color" content="#121318">
+  <link rel="icon" href="icon.png" type="image/png">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <main class="doc">
+    <a class="back" href="./"><img src="icon.png" alt="">NYC Parking</a>
 
-  <a class="back" href="index.html">← NYC Parking</a>
+    <h1>Support</h1>
 
-  <h1>Support</h1>
+    <h2>What do the colors mean?</h2>
+    <p>The map has two views, switched from the layers button. <strong>Days until move</strong> colors every block by how soon a car parked there now would have to move, from red (today or tomorrow) through yellow to green (a week or more). <strong>Cleaning days</strong> colors each block by the weekdays it's restricted, one color per day; a split pill or stripe means more than one day.</p>
 
-  <div class="faq">
-    <h2>The map isn't showing any parking signs</h2>
-    <p>Make sure location access is enabled for the app in Settings → Privacy & Security → Location Services. The app fetches sign data from NYC Open Data when you move the map — try panning slightly or tapping the location button to trigger a refresh.</p>
-  </div>
+    <h2>How do move reminders work?</h2>
+    <p>Tap a block and choose Park Here. A banner shows when you need to move: it turns yellow the day before and red, with a countdown, in the final hour. You can also get a notification ahead of time.</p>
 
-  <div class="faq">
-    <h2>The parking data looks wrong for my block</h2>
-    <p>Sign data comes directly from <a href="https://data.cityofnewyork.us/Transportation/Parking-Regulation-Locations-and-Signs/nfid-uabd/about_data" target="_blank">NYC Open Data</a>. If a sign is missing or incorrect, it may not yet be reflected in the city's dataset. You can report errors to NYC DOT at <a href="https://portal.311.nyc.gov" target="_blank">311</a>.</p>
-  </div>
+    <h2>What about holidays?</h2>
+    <p>Alternate-side parking is suspended on NYC's ASP holidays, and the app skips them when working out your move-by time. When a holiday is coming up in the next two weeks, a banner lets you know. Open the full list from the layers button.</p>
 
-  <div class="faq">
-    <h2>What does the split-color label mean?</h2>
-    <p>A pill with two colors means that block has alternate-side rules on two different days. Each color represents a day of the week — tap the label to see the exact times.</p>
-  </div>
+    <h2>I don't see rules on my block</h2>
+    <p>Rules appear on blocks with posted street-cleaning or no-parking restrictions; some commercial areas have none. Zoom in to see day pills on each block. If the map isn't centered on you, check that location access is allowed in Settings → Privacy &amp; Security → Location Services.</p>
 
-  <div class="faq">
+    <h2>The rules look wrong for my block</h2>
+    <p>Sign data comes from the city's <a href="https://data.cityofnewyork.us/Transportation/Parking-Regulation-Locations-and-Signs/nfid-uabd/about_data">Parking Regulation Locations and Signs</a> dataset and is updated with app releases. Always check the posted sign. If a sign is missing or incorrect in the city's data, you can report it to NYC DOT through <a href="https://portal.311.nyc.gov">311</a>.</p>
+
     <h2>Does the app work outside NYC?</h2>
-    <p>No — the app uses NYC-specific sign data and is designed for the five boroughs only.</p>
-  </div>
+    <p>No. It uses NYC's sign data and covers the five boroughs only.</p>
 
-  <div class="faq">
     <h2>Is the app free?</h2>
-    <p>Yes, NYC Parking is completely free with no ads or in-app purchases.</p>
-  </div>
+    <p>Yes, NYC Parking is free, with no ads or in-app purchases.</p>
 
-  <div class="contact-box">
-    <p>Still have a question or found a bug?</p>
-    <a class="contact-btn" href="mailto:jbobrow+nycparking@gmail.com">Get in touch</a>
-  </div>
-
+    <h2>Still have a question or found a bug?</h2>
+    <p><a href="mailto:jbobrow+nycparking@gmail.com">jbobrow+nycparking@gmail.com</a></p>
+  </main>
 </body>
 </html>
