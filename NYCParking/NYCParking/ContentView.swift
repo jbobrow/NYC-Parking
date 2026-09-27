@@ -165,7 +165,7 @@ struct ContentView: View {
                     }
                 } label: {
                     // Shows the steering wheel while driving so drive mode stays visible.
-                    Image(systemName: isDrivingMode ? "steeringwheel" : "square.2.layers.3d")
+                    Image(systemName: isDrivingMode ? "steeringwheel" : "square.3.layers.3d")
                         .font(.system(size: 17))
                         .foregroundStyle(glassIconColor)
                         .frame(width: 52, height: 52)
