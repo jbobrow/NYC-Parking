@@ -14,8 +14,23 @@ struct MapCameraState {
 @MainActor
 final class MapController {
     fileprivate weak var mapView: MKMapView?
+    fileprivate weak var drive: DriveController?
 
     var camera: MKMapCamera? { mapView?.camera }
+
+    /// Drive mode: go back to following the car after the user moved the map.
+    func recenterDrive() {
+        drive?.resume()
+    }
+
+    /// Leaves drive mode's 3D camera for a flat, north-up view.
+    func endDrive(center: CLLocationCoordinate2D?) {
+        drive?.stop()
+        guard let mapView else { return }
+        let camera = MKMapCamera(lookingAtCenter: center ?? mapView.centerCoordinate,
+                                 fromDistance: 700, pitch: 0, heading: 0)
+        mapView.setCamera(camera, animated: true)
+    }
 
     func setRegion(center: CLLocationCoordinate2D, meters: CLLocationDistance, animated: Bool = true) {
         mapView?.setRegion(MKCoordinateRegion(center: center, latitudinalMeters: meters,
@@ -64,6 +79,11 @@ struct ParkingMapView: UIViewRepresentable {
     let isDrivingMode: Bool
     let displayMode: MapDisplayMode
     let countdown: CountdownSnapshot?
+    /// Latest location while driving; drives the 3D camera.
+    var driveLocation: CLLocation? = nil
+    var onDriveMatch: (DriveMatch?) -> Void = { _ in }
+    /// Whether drive mode is following the car (false after the user moves the map).
+    var onDriveFollowChange: (Bool) -> Void = { _ in }
     var onCameraChange: (MapCameraState) -> Void = { _ in }
     var onCameraSettled: (MapCameraState) -> Void = { _ in }
     var onLabelsVisibleChange: (Bool) -> Void = { _ in }
@@ -87,6 +107,7 @@ struct ParkingMapView: UIViewRepresentable {
             center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
             latitudinalMeters: 600, longitudinalMeters: 600), animated: false)
         controller.mapView = mapView
+        controller.drive = context.coordinator.drive
         context.coordinator.install(on: mapView)
         return mapView
     }
@@ -95,6 +116,7 @@ struct ParkingMapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.update(index: index, parkedRecord: parkedRecord, isDriving: isDrivingMode,
                                    displayMode: displayMode, countdown: countdown)
+        if let driveLocation { context.coordinator.drive.ingest(driveLocation) }
     }
 }
 
@@ -136,12 +158,20 @@ extension ParkingMapView {
         private var carDrag: (grabOffset: CGSize, offset: Double)?
 
         private var isDriving = false
-        private weak var arrowView: NavigationArrowAnnotationView?
+        let drive = DriveController()
+        private var normalConfiguration: MKMapConfiguration?
+        /// MapKit's own pan/pinch/rotate recognizers, for telling user moves from ours.
+        private var mapGestures: [UIGestureRecognizer] = []
 
         init(parent: ParkingMapView) { self.parent = parent }
 
         func install(on mapView: MKMapView) {
             self.mapView = mapView
+            mapGestures = Self.gestureRecognizers(in: mapView)
+            drive.mapView = mapView
+            drive.index = { [weak self] in self?.index }
+            drive.onMatch = { [weak self] in self?.parent.onDriveMatch($0) }
+            drive.onFollowChange = { [weak self] in self?.parent.onDriveFollowChange($0) }
             let tap = UITapGestureRecognizer(target: self, action: #selector(handleMapTap(_:)))
             tap.delegate = self
             // Wait out MapKit's double-tap-to-zoom so a double tap doesn't also select.
@@ -193,9 +223,45 @@ extension ParkingMapView {
             }
             if isDriving != self.isDriving, let mapView {
                 self.isDriving = isDriving
-                // Toggle so MapKit asks for the user-location view again (arrow vs dot).
-                mapView.showsUserLocation = false
-                mapView.showsUserLocation = true
+                isDriving ? enterDriveMode(mapView) : exitDriveMode(mapView)
+            }
+        }
+
+        // MARK: Drive mode
+
+        private func enterDriveMode(_ mapView: MKMapView) {
+            normalConfiguration = mapView.preferredConfiguration
+            // 3D buildings, with the base map toned down so the curb colors stand out.
+            let config = MKStandardMapConfiguration(elevationStyle: .realistic, emphasisStyle: .muted)
+            config.pointOfInterestFilter = .excludingAll
+            mapView.preferredConfiguration = config
+            mapView.showsUserLocation = false   // the drive puck replaces the blue dot
+            UIApplication.shared.isIdleTimerDisabled = true
+            applyStripeWidth(Self.driveStripeWidth)
+            layer = nil
+            updateMarks(mpp: metersPerPoint(mapView))
+            updateLabelStyle(mpp: metersPerPoint(mapView), mapView: mapView)
+            drive.start()
+        }
+
+        private func exitDriveMode(_ mapView: MKMapView) {
+            drive.stop()
+            if let normalConfiguration { mapView.preferredConfiguration = normalConfiguration }
+            mapView.showsUserLocation = true
+            UIApplication.shared.isIdleTimerDisabled = false
+            layer = nil
+            updateMarks(mpp: metersPerPoint(mapView))
+            updateLabelStyle(mpp: metersPerPoint(mapView), mapView: mapView)
+        }
+
+        /// Fixed while driving: re-rendering every stripe as the camera zooms with
+        /// speed would cause hitches.
+        private static let driveStripeWidth: CGFloat = 5
+
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            guard isDriving, drive.isFollowing else { return }
+            if mapGestures.contains(where: { $0.state == .began || $0.state == .changed }) {
+                drive.pause()
             }
         }
 
@@ -221,6 +287,9 @@ extension ParkingMapView {
         // MARK: Camera delegate
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            // Drive mode moves the camera every frame: skip SwiftUI updates, labels
+            // and decluttering, which only matter when browsing.
+            guard !isDriving else { return }
             parent.onCameraChange(cameraState(mapView))
             let mpp = metersPerPoint(mapView)
             updateMarks(mpp: mpp)
@@ -228,7 +297,6 @@ extension ParkingMapView {
 
             let heading = mapView.camera.heading
             for view in visibleLabelViews(mapView) { view.setHeading(heading) }
-            arrowView?.update(location: mapView.userLocation.location, mapHeading: heading)
 
             // Re-declutter mid-gesture only once zoom/rotation has changed enough to
             // create or resolve overlaps; panning alone never changes them.
@@ -238,6 +306,7 @@ extension ParkingMapView {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            guard !isDriving else { return }
             parent.onCameraSettled(cameraState(mapView))
             refreshLabels()
             declutter()
@@ -246,18 +315,11 @@ extension ParkingMapView {
         // MARK: Stripes & dots
 
         private func updateMarks(mpp: Double) {
-            let width = StripeBuilder.lineWidth(metersPerPoint: mpp)
-            if width != stripeWidth {
-                stripeWidth = width
-                for renderer in stripeRenderers.allObjects {
-                    renderer.lineWidth = width
-                    renderer.setNeedsDisplay()
-                }
-            }
+            if !isDriving { applyStripeWidth(StripeBuilder.lineWidth(metersPerPoint: mpp)) }
             let target: MarkLayer
             if displayMode == .countdown {
                 target = .countdown
-            } else if LabelStyle.forMetersPerPoint(mpp) != nil {
+            } else if isDriving || LabelStyle.forMetersPerPoint(mpp) != nil {
                 // Stripes where pills show: they mark each block's extent under its pill.
                 target = .dayStripes
             } else {
@@ -266,6 +328,15 @@ extension ParkingMapView {
             guard target != layer else { return }
             layer = target
             applyLayer()
+        }
+
+        private func applyStripeWidth(_ width: CGFloat) {
+            guard width != stripeWidth else { return }
+            stripeWidth = width
+            for renderer in stripeRenderers.allObjects {
+                renderer.lineWidth = width
+                renderer.setNeedsDisplay()
+            }
         }
 
         /// Shows the current layer's overlays, building them first if needed. The
@@ -337,7 +408,8 @@ extension ParkingMapView {
         // MARK: Labels
 
         private func updateLabelStyle(mpp: Double, mapView: MKMapView) {
-            let style = LabelStyle.forMetersPerPoint(mpp)
+            // No pills while driving: the side cards carry the details.
+            let style = isDriving ? nil : LabelStyle.forMetersPerPoint(mpp)
             guard style != labelStyle else { return }
             let wasVisible = labelStyle != nil
             labelStyle = style
@@ -451,13 +523,6 @@ extension ParkingMapView {
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             switch annotation {
-            case is MKUserLocation:
-                guard isDriving else { return nil }   // standard blue dot
-                let view = NavigationArrowAnnotationView(annotation: annotation, reuseIdentifier: nil)
-                view.update(location: mapView.userLocation.location, mapHeading: mapView.camera.heading)
-                arrowView = view
-                return view
-
             case let a as SegmentAnnotation:
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: SegmentLabelView.reuseID, for: a) as! SegmentLabelView
@@ -478,10 +543,6 @@ extension ParkingMapView {
             default:
                 return nil
             }
-        }
-
-        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
-            arrowView?.update(location: userLocation.location, mapHeading: mapView.camera.heading)
         }
 
         // MARK: Parked car
@@ -881,54 +942,6 @@ final class CarAnnotationView: MKAnnotationView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     @objc private func tapped() { onTap?() }
-}
-
-// MARK: - Driving-mode user location
-
-/// User location marker for driving mode: an arrow pointing along the direction
-/// of travel when moving, a dot when stationary.
-final class NavigationArrowAnnotationView: MKAnnotationView {
-    private let arrow = UIImageView(image: UIImage(systemName: "location.north.fill",
-        withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)))
-    private let dot = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 12))
-
-    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
-        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
-        frame = CGRect(x: 0, y: 0, width: 32, height: 32)
-        displayPriority = .required
-        zPriority = .max
-        collisionMode = .none
-
-        let circle = UIView(frame: bounds)
-        circle.backgroundColor = .systemBlue
-        circle.layer.cornerRadius = 16
-        circle.layer.shadowColor = UIColor.black.cgColor
-        circle.layer.shadowOpacity = 0.35
-        circle.layer.shadowRadius = 5
-        circle.layer.shadowOffset = CGSize(width: 0, height: 2)
-        addSubview(circle)
-
-        arrow.tintColor = .white
-        arrow.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        addSubview(arrow)
-
-        dot.backgroundColor = .white
-        dot.layer.cornerRadius = 6
-        dot.center = arrow.center
-        addSubview(dot)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    func update(location: CLLocation?, mapHeading: Double) {
-        let moving = (location?.course ?? -1) >= 0 && (location?.speed ?? 0) > 0.5
-        arrow.isHidden = !moving
-        dot.isHidden = moving
-        if moving, let course = location?.course {
-            // Geographic course → screen angle.
-            arrow.transform = CGAffineTransform(rotationAngle: CGFloat((course - mapHeading) * .pi / 180))
-        }
-    }
 }
 
 // MARK: - Geometry helpers
