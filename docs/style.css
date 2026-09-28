@@ -1,9 +1,15 @@
 :root {
-  --bg: #121318;
-  --fg: #f3f3f5;
-  --muted: #7c7e88;
+  /* Light page, like the Cookbo and Audio Bubble sites. */
+  --bg: #f4f3f1;
+  --fg: #16171b;
+  --muted: #77787e;
+  --pill: #34353b;
+  --blue: #0066cc;
+  /* The map card stays dark, like the app, with its own tokens. */
+  --map-bg: #16181e;
+  --map-fg: #f3f3f5;
+  --map-muted: #8b8e99;
   --card: rgb(30 31 37 / 0.82);
-  --blue: #3d85f5;
   --mon: #3d85f5;
   --tue: #f5802e;
   --wed: #33c780;
@@ -12,7 +18,7 @@
   --sat: #f0bd1f;
   --sun: #4dc2e6;
   --font: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, sans-serif;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -45,7 +51,7 @@ a { color: inherit; }
   height: auto;
   border-radius: 22.5%;
   margin: 0 auto 12px;
-  box-shadow: 0 3px 10px rgb(0 0 0 / 0.35);
+  box-shadow: 0 4px 14px rgb(22 23 27 / 0.16);
 }
 
 h1 {
@@ -71,8 +77,9 @@ h1 {
   position: relative;
   border-radius: 28px;
   overflow: hidden;
-  background: #16181e;
-  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.06), 0 18px 50px rgb(0 0 0 / 0.45);
+  background: var(--map-bg);
+  color: var(--map-fg);
+  box-shadow: 0 1px 2px rgb(22 23 27 / 0.08), 0 18px 44px rgb(22 23 27 / 0.18);
 }
 
 #map {
@@ -122,7 +129,7 @@ h1 {
   margin-right: 8px;
   font-size: 11px;
   font-weight: 700;
-  color: var(--muted);
+  color: var(--map-muted);
 }
 .legend[hidden] { display: none; }
 
@@ -158,7 +165,7 @@ h1 {
 .modes button {
   border: 0;
   background: none;
-  color: var(--muted);
+  color: var(--map-muted);
   font: 700 13px/1 var(--font);
   padding: 9px 14px;
   border-radius: 999px;
@@ -166,8 +173,8 @@ h1 {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .modes button[aria-pressed="true"] {
-  background: var(--fg);
-  color: var(--bg);
+  background: var(--map-fg);
+  color: var(--map-bg);
 }
 
 .readout {
@@ -210,8 +217,8 @@ h1 {
   gap: 8px;
   padding: 14px 26px;
   border-radius: 999px;
-  background: var(--fg);
-  color: var(--bg);
+  background: var(--pill);
+  color: #fff;
   font-size: 17px;
   font-weight: 700;
   text-decoration: none;
@@ -250,10 +257,10 @@ h1 {
 .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
 .maplibregl-ctrl-attrib {
   background: rgb(18 19 24 / 0.7) !important;
-  color: var(--muted);
+  color: var(--map-muted);
   font-family: var(--font);
 }
-.maplibregl-ctrl-attrib a, .maplibregl-ctrl-attrib-inner { color: var(--muted); }
+.maplibregl-ctrl-attrib a, .maplibregl-ctrl-attrib-inner { color: var(--map-muted); }
 .maplibregl-ctrl-attrib-button { filter: invert(1); }
 
 /* Privacy and Support */
