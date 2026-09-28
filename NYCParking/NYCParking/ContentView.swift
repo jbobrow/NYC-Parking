@@ -193,6 +193,16 @@ struct ContentView: View {
                 }
 
                 Menu {
+                    // While driving, ending drive mode is the main action: set apart in red,
+                    // nearest the button (menus opening upward list their first item last).
+                    if isDrivingMode {
+                        Section {
+                            Button("End drive mode", systemImage: "xmark.circle.fill", role: .destructive) {
+                                toggleDriving()
+                            }
+                        }
+                    }
+
                     Picker("Map view", selection: $displayMode) {
                         Label("Days until move", systemImage: "hourglass")
                             .tag(MapDisplayMode.countdown)
@@ -201,10 +211,11 @@ struct ContentView: View {
                     }
                     .pickerStyle(.inline)
 
-                    Toggle("Drive mode", systemImage: "steeringwheel", isOn: Binding(
-                        get: { isDrivingMode },
-                        set: { if $0 != isDrivingMode { toggleDriving() } }
-                    ))
+                    if !isDrivingMode {
+                        Button("Drive mode", systemImage: "steeringwheel") {
+                            toggleDriving()
+                        }
+                    }
 
                     Button("Holiday calendar", systemImage: "calendar") {
                         showHolidaySheet = true
@@ -327,7 +338,8 @@ struct ContentView: View {
             phase == .active && !showOnboarding ? driveDetector.start() : driveDetector.stop()
         }
         .fullScreenCover(isPresented: $showOnboarding) {
-            OnboardingView(locationManager: locationManager, driveDetector: driveDetector) {
+            OnboardingView(locationManager: locationManager, driveDetector: driveDetector,
+                           index: dataService.index, holidays: holidayService.holidays) {
                 hasCompletedOnboarding = true
                 showOnboarding = false
                 // The map needs location; ask now if it was skipped.
