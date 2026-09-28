@@ -603,12 +603,28 @@ final class DriveDetector: ObservableObject {
     private static let fallbackSpeed = 8.0        // m/s (≈ 18 mph), sustained, without motion data
     private static let fallbackDuration = 20.0    // seconds
 
+    /// Only once allowed (asked during onboarding), so detection never triggers
+    /// a permission prompt of its own.
     private var motionUsable: Bool {
+        CMMotionActivityManager.isActivityAvailable()
+            && CMMotionActivityManager.authorizationStatus() == .authorized
+    }
+
+    /// Shows the Motion & Fitness permission prompt; returns whether it was granted.
+    func requestMotionAccess() async -> Bool {
         guard CMMotionActivityManager.isActivityAvailable() else { return false }
-        switch CMMotionActivityManager.authorizationStatus() {
-        case .denied, .restricted: return false
-        default: return true
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            let now = Date()
+            activity.queryActivityStarting(from: now.addingTimeInterval(-60), to: now, to: .main) { _, _ in
+                done.resume()
+            }
         }
+        let granted = CMMotionActivityManager.authorizationStatus() == .authorized
+        if granted, isRunning {
+            stop()
+            start()
+        }
+        return granted
     }
 
     func start() {

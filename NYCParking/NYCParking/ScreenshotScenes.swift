@@ -73,6 +73,8 @@ struct ScreenshotScene {
             showsHolidays: true),
     ]
 
+    static var isActive: Bool { current != nil }
+
     static var current: ScreenshotScene? {
         UserDefaults.standard.string(forKey: "screenshotScene").flatMap { all[$0] }
     }
