@@ -1,4 +1,5 @@
 import SwiftUI
+import MapKit
 import CoreMotion
 import CoreLocation
 import UserNotifications
@@ -8,6 +9,9 @@ import UserNotifications
 struct OnboardingView: View {
     @ObservedObject var locationManager: LocationManager
     let driveDetector: DriveDetector
+    /// Block data and holidays for the real-map examples (nil until loaded).
+    let index: SegmentIndex?
+    let holidays: [NamedHoliday]
     let onFinish: () -> Void
 
     @State private var page = 0
@@ -38,12 +42,19 @@ struct OnboardingView: View {
                 OnboardingPage(
                     title: "Days until you move",
                     message: "Every block is colored by how soon you'd have to move a car parked there. Red means soon, green means you're set for the week."
-                ) { CountdownArt() }
+                ) {
+                    VStack(spacing: 16) {
+                        RealMapArt(kind: .countdown, index: index, holidays: holidays) { CountdownArt() }
+                        UrgencyScale()
+                    }
+                }
                     .tag(1)
                 OnboardingPage(
                     title: "Or see cleaning days",
                     message: "Switch views from the layers button to see which days each side of the street is cleaned."
-                ) { CleaningDaysArt() }
+                ) {
+                    RealMapArt(kind: .days, index: index, holidays: holidays) { CleaningDaysArt() }
+                }
                     .tag(2)
                 OnboardingPage(
                     title: "Park and get reminded",
@@ -99,10 +110,10 @@ private struct OnboardingPage<Art: View>: View {
                 .frame(maxWidth: 340)
                 .accessibilityHidden(true)
             Spacer(minLength: 28)
-            Text(title)
+            Text(title.noWidow)
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .multilineTextAlignment(.center)
-            Text(message)
+            Text(message.noWidow)
                 .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -133,8 +144,8 @@ private struct WelcomeArt: View {
     }
 }
 
-/// A few blocks of a dark map, north-up like the app zoomed in: a road between
-/// two curb lines, each curb with its own color and pill.
+/// A simplified stand-in for the map (used when the real map can't load): each
+/// street is a pair of curb lines, each with its own color and pill.
 private struct StreetsArt<TopPill: View, BottomPill: View>: View {
     struct Street {
         let top: [Color]
@@ -147,14 +158,8 @@ private struct StreetsArt<TopPill: View, BottomPill: View>: View {
     var body: some View {
         VStack(spacing: 30) {
             ForEach(streets.indices, id: \.self) { i in
-                VStack(spacing: 0) {
-                    // Curbs (and their pills) draw above the road between them.
-                    curb(streets[i].top).overlay(topPill(i).offset(x: i.isMultiple(of: 2) ? -52 : 40))
-                        .zIndex(1)
-                    Rectangle().fill(Color(red: 0.17, green: 0.18, blue: 0.23)).frame(height: 30)
-                    curb(streets[i].bottom).overlay(bottomPill(i).offset(x: i.isMultiple(of: 2) ? 58 : -46))
-                        .zIndex(1)
-                }
+                curb(streets[i].top).overlay(topPill(i).offset(x: i.isMultiple(of: 2) ? -52 : 40))
+                curb(streets[i].bottom).overlay(bottomPill(i).offset(x: i.isMultiple(of: 2) ? 58 : -46))
             }
         }
         .padding(.vertical, 34)
@@ -168,7 +173,141 @@ private struct StreetsArt<TopPill: View, BottomPill: View>: View {
             ForEach(colors.indices, id: \.self) { colors[$0] }
         }
         .frame(height: 6)
-        .padding(.horizontal, 10)
+    }
+}
+
+/// A real example: a snapshot of Clinton Hill with the app's curb lines and
+/// pills drawn on the actual blocks, using live countdowns.
+private struct RealMapArt<Fallback: View>: View {
+    enum Kind { case countdown, days }
+
+    let kind: Kind
+    let index: SegmentIndex?
+    let holidays: [NamedHoliday]
+    @ViewBuilder let fallback: Fallback
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    private static var size: CGSize { CGSize(width: 340, height: 280) }
+    private static var region: MKCoordinateRegion {
+        MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 40.6886, longitude: -73.9655),
+                           latitudinalMeters: 390, longitudinalMeters: 475)
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.06)))
+                    .transition(.opacity)
+            } else if failed {
+                fallback
+            } else {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color(red: 0.11, green: 0.12, blue: 0.16))
+                    .aspectRatio(Self.size, contentMode: .fit)
+                    .overlay(ProgressView())
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: image != nil)
+        .task(id: index != nil) { await render() }
+    }
+
+    private func render() async {
+        guard image == nil, let index else { return }
+        let options = MKMapSnapshotter.Options()
+        options.region = Self.region
+        options.size = Self.size
+        options.traitCollection = UITraitCollection(traitsFrom: [
+            UITraitCollection(userInterfaceStyle: .dark),
+            UITraitCollection(displayScale: UIScreen.main.scale),
+        ])
+        options.pointOfInterestFilter = .excludingAll
+        do {
+            let snapshot = try await MKMapSnapshotter(options: options).start()
+            image = draw(snapshot, index: index)
+        } catch {
+            failed = true
+        }
+    }
+
+    private func draw(_ snapshot: MKMapSnapshotter.Snapshot, index: SegmentIndex) -> UIImage {
+        let calendar = CountdownCalendar { date in
+            holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
+        }
+        let r = Self.region
+        let segments = index.segments(minLat: r.center.latitude - r.span.latitudeDelta,
+                                      maxLat: r.center.latitude + r.span.latitudeDelta,
+                                      minLon: r.center.longitude - r.span.longitudeDelta,
+                                      maxLon: r.center.longitude + r.span.longitudeDelta)
+        let countdowns = Dictionary(uniqueKeysWithValues: segments.map {
+            ($0.id, MoveCountdown.next(for: $0.rules, in: calendar))
+        })
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = snapshot.image.scale
+        return UIGraphicsImageRenderer(size: Self.size, format: format).image { ctx in
+            snapshot.image.draw(at: .zero)
+            let cg = ctx.cgContext
+            // Keep the Apple Maps logo (required attribution, bottom-left) clear.
+            let logo = CGRect(x: 0, y: Self.size.height - 30, width: 70, height: 30)
+            cg.addRect(CGRect(origin: .zero, size: Self.size))
+            cg.addRect(logo)
+            cg.clip(using: .evenOdd)
+            cg.setLineWidth(4)
+            cg.setLineCap(.butt)
+            cg.setLineJoin(.round)
+
+            func stroke(_ coords: [CLLocationCoordinate2D], _ color: UIColor) {
+                guard let first = coords.first else { return }
+                cg.beginPath()
+                cg.move(to: snapshot.point(for: first))
+                for c in coords.dropFirst() { cg.addLine(to: snapshot.point(for: c)) }
+                cg.setStrokeColor(color.cgColor)
+                cg.strokePath()
+            }
+
+            for seg in segments {
+                switch kind {
+                case .countdown:
+                    stroke(seg.curve, MoveUrgency(days: countdowns[seg.id].flatMap { $0 }?.days).uiColor)
+                case .days:
+                    let days = seg.allDays
+                    for (day, piece) in zip(days, StripeBuilder.split(seg.readingOrderCurve, into: days.count)) {
+                        stroke(piece, day.uiColor)
+                    }
+                }
+            }
+
+            // Pills on the longest blocks first, skipping any that would overlap.
+            var placed: [OrientedRect] = []
+            let bounds = CGRect(origin: .zero, size: Self.size).insetBy(dx: 12, dy: 12)
+            for seg in segments.sorted(by: { $0.halfBlockLengthMeters > $1.halfBlockLengthMeters }) {
+                let content: LabelContent = kind == .countdown ? .countdown(countdowns[seg.id].flatMap { $0 }) : .days
+                let pill = ParkingLabelRenderer.image(for: seg, content: content, style: .small)
+                let pad = ParkingLabelRenderer.shadowPadding
+                let center = snapshot.point(for: seg.coordinate)
+                var b = ((seg.streetBearing ?? 90).truncatingRemainder(dividingBy: 360) + 360)
+                    .truncatingRemainder(dividingBy: 360)
+                if b >= 355 { b -= 360 } else if b >= 175 { b -= 180 }   // keep text upright
+                let angle = CGFloat((b - 90) * .pi / 180)
+                let rect = OrientedRect(center: center,
+                                        size: CGSize(width: pill.size.width - 2 * pad, height: pill.size.height - 2 * pad),
+                                        angle: angle, margin: 4)
+                guard bounds.contains(center), !logo.insetBy(dx: -20, dy: -12).contains(center),
+                      !placed.contains(where: { $0.intersects(rect) }) else { continue }
+                placed.append(rect)
+                cg.saveGState()
+                cg.translateBy(x: center.x, y: center.y)
+                cg.rotate(by: angle)
+                pill.draw(in: CGRect(x: -pill.size.width / 2, y: -pill.size.height / 2,
+                                     width: pill.size.width, height: pill.size.height))
+                cg.restoreGState()
+            }
+        }
     }
 }
 
@@ -176,21 +315,10 @@ private struct CountdownArt: View {
     private let levels = [(1, 3), (0, 5), (6, 7)]
 
     var body: some View {
-        VStack(spacing: 16) {
-            StreetsArt(
-                streets: levels.map { .init(top: [MoveUrgency(days: $0.0).color], bottom: [MoveUrgency(days: $0.1).color]) },
-                topPill: { pill(levels[$0].0) },
-                bottomPill: { pill(levels[$0].1) })
-            HStack(spacing: 3) {
-                ForEach(MoveUrgency.allCases, id: \.self) { u in
-                    Text(u.legendLabel)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(u.textColor)
-                        .frame(width: 30, height: 20)
-                        .background(u.color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                }
-            }
-        }
+        StreetsArt(
+            streets: levels.map { .init(top: [MoveUrgency(days: $0.0).color], bottom: [MoveUrgency(days: $0.1).color]) },
+            topPill: { pill(levels[$0].0) },
+            bottomPill: { pill(levels[$0].1) })
     }
 
     private func pill(_ days: Int) -> some View {
@@ -198,6 +326,21 @@ private struct CountdownArt: View {
                                                 endMinutes: 660, isUnderway: false),
                        style: .days)
             .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+    }
+}
+
+/// The 0–7+ days color scale.
+private struct UrgencyScale: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(MoveUrgency.allCases, id: \.self) { u in
+                Text(u.legendLabel)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(u.textColor)
+                    .frame(width: 30, height: 20)
+                    .background(u.color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+            }
+        }
     }
 }
 
@@ -227,12 +370,6 @@ private struct ParkArt: View {
             banner("Move by 9:30 AM, Mon Sep 28", icon: "calendar.badge.clock", tint: nil)
             banner("Move by 9:30 AM tomorrow", icon: "calendar.badge.clock", tint: MoveUrgency(days: 3))
             banner("Move in 20 min · 9:30 AM", icon: "clock.badge.exclamationmark.fill", tint: MoveUrgency(days: 0))
-            Label("Park Here", systemImage: "car.fill")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: 260, minHeight: 50)
-                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .padding(.top, 14)
         }
     }
 
@@ -305,7 +442,7 @@ private struct PermissionsPage: View {
                 Text("Drive mode")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .padding(.top, 24)
-                Text("A 3D view with the rules for each side of the street you're driving down.")
+                Text("A 3D view with the rules for each side of the street you're driving down.".noWidow)
                     .font(.system(size: 17, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -391,7 +528,7 @@ private struct PermissionRow: View {
                 .background(Color.blue, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 16, weight: .bold, design: .rounded))
-                Text(detail)
+                Text(detail.noWidow)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -423,5 +560,14 @@ private struct PermissionRow: View {
         }
         .padding(14)
         .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private extension String {
+    /// Joins the last two words with a non-breaking space so a line never ends
+    /// with a single word on its own.
+    var noWidow: String {
+        guard let space = range(of: " ", options: .backwards) else { return self }
+        return replacingCharacters(in: space, with: "\u{00A0}")
     }
 }
