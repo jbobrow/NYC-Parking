@@ -1,6 +1,7 @@
 import SwiftUI
 import MapKit
 import QuartzCore
+import CoreMotion
 
 // MARK: - Street matching
 
@@ -576,6 +577,117 @@ enum StreetName {
         case 3: return "rd"
         default: return "th"
         }
+    }
+}
+
+// MARK: - Driving detection
+
+/// Notices when you're driving, so the app can offer drive mode.
+///
+/// Uses the motion coprocessor's activity classification (which recognizes being
+/// in a vehicle from its motion, even in slow traffic), confirmed by GPS showing
+/// you've actually been moving recently, so sitting in a parked car doesn't count.
+/// Without motion access, falls back to sustained driving speed.
+@MainActor
+final class DriveDetector: ObservableObject {
+    @Published private(set) var isLikelyDriving = false
+
+    private let activity = CMMotionActivityManager()
+    private var isRunning = false
+    private var inVehicle = false
+    private var lastMovingAt: Date?
+    private var fastSince: Date?
+
+    private static let movingSpeed = 4.0          // m/s (≈ 9 mph): clearly not walking
+    private static let recentWindow = 180.0       // seconds: a long light doesn't end a drive
+    private static let fallbackSpeed = 8.0        // m/s (≈ 18 mph), sustained, without motion data
+    private static let fallbackDuration = 20.0    // seconds
+
+    private var motionUsable: Bool {
+        guard CMMotionActivityManager.isActivityAvailable() else { return false }
+        switch CMMotionActivityManager.authorizationStatus() {
+        case .denied, .restricted: return false
+        default: return true
+        }
+    }
+
+    func start() {
+        guard !isRunning else { return }
+        isRunning = true
+        if motionUsable {
+            activity.startActivityUpdates(to: .main) { [weak self] a in
+                guard let self, let a else { return }
+                self.inVehicle = a.automotive && a.confidence != .low
+                self.evaluate()
+            }
+        }
+    }
+
+    func stop() {
+        guard isRunning else { return }
+        isRunning = false
+        activity.stopActivityUpdates()
+        inVehicle = false
+        isLikelyDriving = false
+    }
+
+    func ingest(_ location: CLLocation) {
+        let now = Date()
+        if location.speed >= Self.movingSpeed { lastMovingAt = now }
+        if location.speed >= Self.fallbackSpeed {
+            if fastSince == nil { fastSince = now }
+        } else {
+            fastSince = nil
+        }
+        evaluate()
+    }
+
+    private func evaluate() {
+        guard isRunning else { return }
+        let now = Date()
+        let driving: Bool
+        if motionUsable {
+            let recentlyMoving = lastMovingAt.map { now.timeIntervalSince($0) < Self.recentWindow } ?? false
+            driving = inVehicle && recentlyMoving
+        } else {
+            driving = fastSince.map { now.timeIntervalSince($0) >= Self.fallbackDuration } ?? false
+        }
+        if driving != isLikelyDriving { isLikelyDriving = driving }
+    }
+}
+
+/// "Driving? Switch to drive mode" — a banner rather than an alert, so it never
+/// blocks the map while you're on the road.
+struct DrivePrompt: View {
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "steeringwheel")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.blue)
+            Text("Driving?")
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+            Spacer(minLength: 4)
+            Button("Not now", action: onDismiss)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+                .frame(minHeight: 44)
+                .padding(.horizontal, 6)
+            Button(action: onAccept) {
+                Text("Drive mode")
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 40)
+                    .background(Color.blue, in: Capsule())
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .modifier(GlassRoundedBackground())
     }
 }
 

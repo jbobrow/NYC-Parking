@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var locationManager       = LocationManager()
     @StateObject private var notificationService   = NotificationService()
     @StateObject private var holidayService        = ASPHolidayService()
+    @StateObject private var driveDetector         = DriveDetector()
 
     @State private var mapController = MapController()
     @State private var selectedSegment: ParkingSegment?
@@ -16,6 +17,9 @@ struct ContentView: View {
     @State private var isDrivingMode = false
     @State private var driveMatch: DriveMatch?
     @State private var isDriveFollowing = true
+    @State private var showDrivePrompt = false
+    /// "Not now" (or ignoring the prompt) stops it asking again until then.
+    @State private var drivePromptSnoozedUntil = Date.distantPast
     @State private var parkedRecord: ParkedCarRecord?
     @State private var showParkedCarSheet = false
     @State private var isCenteredOnCar = false
@@ -83,14 +87,29 @@ struct ContentView: View {
                         .padding(.top, windowSafeAreaTop + 6)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
-                    TopBanners(record: parkedRecord,
+                    VStack(spacing: 8) {
+                        if showDrivePrompt {
+                            DrivePrompt(onAccept: {
+                                showDrivePrompt = false
+                                toggleDriving()
+                            }, onDismiss: snoozeDrivePrompt)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                            .task {
+                                // Treat an ignored prompt like "Not now".
+                                try? await Task.sleep(for: .seconds(30))
+                                if showDrivePrompt { snoozeDrivePrompt() }
+                            }
+                        }
+                        TopBanners(record: parkedRecord,
                                holidays: holidayService.holidays,
                                showsHolidayBanner: showsHolidayBanner,
                                onMoveTap: { showParkedCarSheet = true },
                                onHolidayTap: { showHolidaySheet = true })
-                        .padding(.horizontal, 16)
-                        .padding(.top, windowSafeAreaTop + 10)
-                        .transition(.opacity)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, windowSafeAreaTop + 10)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.3), value: showDrivePrompt)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: isDrivingMode)
@@ -270,6 +289,7 @@ struct ContentView: View {
         }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
+            driveDetector.ingest(loc)
             if !hasSnappedToUserLocation {
                 hasSnappedToUserLocation = true
                 isFollowingUser = true
@@ -292,8 +312,19 @@ struct ContentView: View {
         #if DEBUG
         .task { await applyScreenshotScene() }
         #endif
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            phase == .active ? driveDetector.start() : driveDetector.stop()
+        }
+        .onChange(of: driveDetector.isLikelyDriving) { _, driving in
+            if driving, !isDrivingMode, Date() >= drivePromptSnoozedUntil {
+                showDrivePrompt = true
+            } else if !driving {
+                showDrivePrompt = false
+            }
+        }
         .onChange(of: isDrivingMode) { _, driving in
             if driving {
+                showDrivePrompt = false
                 locationManager.startNavigationMode()
             } else {
                 locationManager.stopNavigationMode()
@@ -358,6 +389,11 @@ struct ContentView: View {
             isFollowingUser = true
             isDriveFollowing = true
         }
+    }
+
+    private func snoozeDrivePrompt() {
+        showDrivePrompt = false
+        drivePromptSnoozedUntil = Date().addingTimeInterval(30 * 60)
     }
 
     /// Restarts the countdown refresh loop whenever its inputs change.
