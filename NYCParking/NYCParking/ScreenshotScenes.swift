@@ -62,6 +62,11 @@ struct ScreenshotScene {
             center: .init(latitude: 40.6897, longitude: -73.9740), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
             startsDriving: true),
+        // Drive mode on a Thursday morning while cleaning is under way on one side.
+        "drive-now": ScreenshotScene(
+            center: .init(latitude: 40.6897, longitude: -73.9740), spanMeters: (600, 280),
+            heading: 0, mode: .countdown, clock: "2026-10-01T09:45:00-04:00",
+            startsDriving: true),
         "holidays": ScreenshotScene(
             center: .init(latitude: 40.7352, longitude: -73.9838), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
