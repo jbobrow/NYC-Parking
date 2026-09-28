@@ -32,6 +32,15 @@ enum ParkingTime {
         return h * 60 + minute
     }
 
+    /// "9–11 AM", "8:30–10 AM", "11:30 AM–1 PM"; just the start when there's no end.
+    static func formatRange(_ start: Int, _ end: Int?) -> String {
+        let s = format(minutes: start % (24 * 60))
+        guard let end else { return s }
+        let e = format(minutes: end % (24 * 60))
+        let sameHalf = (start % (24 * 60) < 720) == (end % (24 * 60) < 720)
+        return sameHalf ? "\(s.dropLast(3))–\(e)" : "\(s)–\(e)"
+    }
+
     /// "8:30 AM", "11 AM"
     static func format(minutes: Int) -> String {
         let h = minutes / 60, m = minutes % 60
@@ -118,6 +127,9 @@ struct MoveCountdown: Hashable, Sendable {
     let days: Int
     let weekday: ParkingDay
     let startMinutes: Int
+    let endMinutes: Int?
+    /// The restriction has already started today.
+    let isUnderway: Bool
 
     var urgency: MoveUrgency { MoveUrgency(days: days) }
 
@@ -138,17 +150,20 @@ struct MoveCountdown: Hashable, Sendable {
     /// in the coming week. A restriction already under way today counts as today.
     static func next(for rules: [ParkingRule], in cal: CountdownCalendar) -> MoveCountdown? {
         for (offset, day) in cal.days.enumerated() where !day.isHoliday {
-            var earliest: Int?
+            var earliest: (start: Int, end: Int?)?
             for rule in rules where rule.days.contains(day.weekday) {
                 guard let start = ParkingTime.minutes(rule.startTime) else { continue }
-                if offset == 0, var end = ParkingTime.minutes(rule.endTime) {
+                let end = ParkingTime.minutes(rule.endTime)
+                if offset == 0, var end {
                     if end <= start { end += 24 * 60 }   // runs past midnight
                     if cal.minuteOfDay >= end { continue }  // already over today
                 }
-                earliest = min(earliest ?? start, start)
+                if earliest == nil || start < earliest!.start { earliest = (start, end) }
             }
-            if let start = earliest {
-                return MoveCountdown(days: offset, weekday: day.weekday, startMinutes: start)
+            if let (start, end) = earliest {
+                return MoveCountdown(days: offset, weekday: day.weekday, startMinutes: start,
+                                     endMinutes: end,
+                                     isUnderway: offset == 0 && cal.minuteOfDay >= start)
             }
         }
         return nil

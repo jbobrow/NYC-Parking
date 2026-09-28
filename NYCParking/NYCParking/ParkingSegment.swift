@@ -53,6 +53,7 @@ struct ParkingSegment: Identifiable, Hashable {
 final class SegmentIndex: @unchecked Sendable {
     let segments: [ParkingSegment]
     private let cells: [Int64: [Int32]]
+    private let byID: [String: Int32]
     private static let cellDegrees = 0.004   // ≈ 450 m × 340 m in NYC
 
     init(segments: [ParkingSegment]) {
@@ -69,6 +70,14 @@ final class SegmentIndex: @unchecked Sendable {
             }
         }
         self.cells = cells
+        var byID: [String: Int32] = [:]
+        byID.reserveCapacity(segments.count)
+        for (i, seg) in segments.enumerated() { byID[seg.id] = Int32(i) }
+        self.byID = byID
+    }
+
+    func segment(id: String) -> ParkingSegment? {
+        byID[id].map { segments[Int($0)] }
     }
 
     private static func cell(_ deg: Double) -> Int { Int((deg / cellDegrees).rounded(.down)) }

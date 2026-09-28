@@ -22,6 +22,8 @@ struct ScreenshotScene {
     var showsHolidays = false
     /// Off by default so most screenshots show a clean map.
     var showsHolidayBanner = false
+    /// Starts drive mode (pair with `xcrun simctl location … start` to replay a drive).
+    var startsDriving = false
 
     static let manhattanGrid = 29.0
 
@@ -55,6 +57,11 @@ struct ScreenshotScene {
             heading: manhattanGrid, mode: .days, clock: "2026-09-30T17:30:00-04:00",
             selectedSegmentID: "16644L"),
         // The ASP holiday calendar.
+        // 3D drive mode along DeKalb Ave in Clinton Hill.
+        "drive": ScreenshotScene(
+            center: .init(latitude: 40.6897, longitude: -73.9740), spanMeters: (600, 280),
+            heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
+            startsDriving: true),
         "holidays": ScreenshotScene(
             center: .init(latitude: 40.7352, longitude: -73.9838), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",

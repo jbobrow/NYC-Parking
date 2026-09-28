@@ -14,6 +14,8 @@ struct ContentView: View {
     @State private var hasSnappedToUserLocation = false
     @State private var isFollowingUser = false
     @State private var isDrivingMode = false
+    @State private var driveMatch: DriveMatch?
+    @State private var isDriveFollowing = true
     @State private var parkedRecord: ParkedCarRecord?
     @State private var showParkedCarSheet = false
     @State private var isCenteredOnCar = false
@@ -47,16 +49,18 @@ struct ContentView: View {
                 isDrivingMode: isDrivingMode,
                 displayMode: displayMode,
                 countdown: dataService.countdown,
+                driveLocation: isDrivingMode ? locationManager.location : nil,
+                onDriveMatch: { driveMatch = $0 },
+                onDriveFollowChange: { isDriveFollowing = $0 },
                 onCameraChange: { camera in
                     if camera.heading != mapHeading { mapHeading = camera.heading }
                 },
                 onCameraSettled: { camera in
                     let mapCenter = CLLocation(latitude: camera.center.latitude,
                                                longitude: camera.center.longitude)
-                    if isFollowingUser, let userLoc = locationManager.location,
+                    if isFollowingUser, !isDrivingMode, let userLoc = locationManager.location,
                        mapCenter.distance(from: userLoc) > 80 {
                         isFollowingUser = false
-                        isDrivingMode = false
                     }
                     if let parked = parkedRecord {
                         let coord = parked.carCoordinate
@@ -72,13 +76,24 @@ struct ContentView: View {
             .ignoresSafeArea()
             .clipShape(RoundedRectangle(cornerRadius: screenCornerRadius, style: .continuous))
         .overlay(alignment: .top) {
-            TopBanners(record: parkedRecord,
-                       holidays: holidayService.holidays,
-                       showsHolidayBanner: showsHolidayBanner,
-                       onMoveTap: { showParkedCarSheet = true },
-                       onHolidayTap: { showHolidaySheet = true })
-                .padding(.horizontal, 16)
-                .padding(.top, windowSafeAreaTop + 10)
+            Group {
+                if isDrivingMode {
+                    DriveHUD(match: driveMatch, holidays: holidayService.holidays)
+                        .padding(.horizontal, 12)
+                        .padding(.top, windowSafeAreaTop + 6)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    TopBanners(record: parkedRecord,
+                               holidays: holidayService.holidays,
+                               showsHolidayBanner: showsHolidayBanner,
+                               onMoveTap: { showParkedCarSheet = true },
+                               onHolidayTap: { showHolidaySheet = true })
+                        .padding(.horizontal, 16)
+                        .padding(.top, windowSafeAreaTop + 10)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: isDrivingMode)
         }
         .overlay(alignment: .top) {
             Rectangle()
@@ -101,7 +116,9 @@ struct ContentView: View {
         }
         .overlay(alignment: .bottomLeading) {
             Group {
-                if displayMode == .countdown {
+                if isDrivingMode {
+                    EmptyView()
+                } else if displayMode == .countdown {
                     countdownLegend
                 } else if !labelsVisible {
                     dotLegend
@@ -115,7 +132,7 @@ struct ContentView: View {
         .animation(.easeInOut(duration: 0.2), value: displayMode)
         .overlay(alignment: .bottomTrailing) {
             VStack(spacing: 10) {
-                if abs(mapHeading) > 1 {
+                if abs(mapHeading) > 1 && !isDrivingMode {
                     Button {
                         if let cam = mapController.camera {
                             mapController.setCamera(center: cam.centerCoordinate, heading: 0)
@@ -131,7 +148,8 @@ struct ContentView: View {
                 Button {
                     centerOnUser()
                 } label: {
-                    Image(systemName: isFollowingUser ? "location.fill" : "location")
+                    Image(systemName: (isDrivingMode ? isDriveFollowing : isFollowingUser)
+                                      ? "location.fill" : "location")
                         .font(.system(size: 17))
                 }
                 .buttonStyle(GlassCircleButtonStyle())
@@ -256,14 +274,10 @@ struct ContentView: View {
                 hasSnappedToUserLocation = true
                 isFollowingUser = true
                 mapController.setRegion(center: loc.coordinate, meters: 600)
-            } else if isFollowingUser {
-                if isDrivingMode {
-                    // Driving mode: course-up, rotate map to match travel direction
-                    mapController.setCamera(center: loc.coordinate, heading: drivingHeading(for: loc))
-                } else {
-                    // Normal follow: re-center, keep current zoom and heading
-                    mapController.setCenter(loc.coordinate)
-                }
+            } else if isFollowingUser && !isDrivingMode {
+                // Normal follow: re-center, keep current zoom and heading.
+                // (Drive mode's camera follows the car itself, every frame.)
+                mapController.setCenter(loc.coordinate)
             }
         }
         .task(id: countdownRefreshID) {
@@ -312,6 +326,7 @@ struct ContentView: View {
         try? await Task.sleep(for: .milliseconds(500))
         selectedSegment = scene.selectedSegmentID.flatMap { id in segments.first { $0.id == id } }
         showHolidaySheet = scene.showsHolidays
+        if scene.startsDriving && !isDrivingMode { toggleDriving() }
     }
     #endif
 
@@ -319,37 +334,30 @@ struct ContentView: View {
 
     /// Centers on the user and follows them (keeping course-up in drive mode).
     private func centerOnUser() {
+        if isDrivingMode {
+            mapController.recenterDrive()
+            return
+        }
         isFollowingUser = true
         guard let loc = locationManager.location else {
             mapController.followUser()
             return
         }
-        if isDrivingMode {
-            mapController.setCamera(center: loc.coordinate, heading: drivingHeading(for: loc))
-        } else {
-            mapController.setRegion(center: loc.coordinate, meters: 300)
-        }
+        mapController.setRegion(center: loc.coordinate, meters: 300)
     }
 
-    /// Drive mode: follow the user with the map rotated to the direction of travel.
+    /// Drive mode: a 3D camera that follows the car, with the parking rules for
+    /// each side of the street you're on.
     private func toggleDriving() {
         if isDrivingMode {
             isDrivingMode = false
-            let center = locationManager.location?.coordinate ?? mapController.camera?.centerCoordinate
-            if let center { mapController.setCamera(center: center, heading: 0) }
+            driveMatch = nil
+            mapController.endDrive(center: locationManager.location?.coordinate)
         } else {
             isDrivingMode = true
             isFollowingUser = true
-            guard let loc = locationManager.location else {
-                mapController.followUser()
-                return
-            }
-            mapController.setCamera(center: loc.coordinate, heading: drivingHeading(for: loc))
+            isDriveFollowing = true
         }
-    }
-
-    private func drivingHeading(for loc: CLLocation) -> Double {
-        (loc.course >= 0 && loc.speed > 0.5) ? loc.course : mapHeading
     }
 
     /// Restarts the countdown refresh loop whenever its inputs change.

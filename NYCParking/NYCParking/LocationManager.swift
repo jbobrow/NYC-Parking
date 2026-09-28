@@ -21,11 +21,14 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     func startNavigationMode() {
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.distanceFilter = kCLDistanceFilterNone
+        // Tells Core Location this is in-car use, so it tunes fixes for driving.
+        manager.activityType = .automotiveNavigation
     }
 
     func stopNavigationMode() {
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 50
+        manager.activityType = .other
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
