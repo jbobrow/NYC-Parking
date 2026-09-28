@@ -594,6 +594,10 @@ final class DriveDetector: ObservableObject {
 
     private let activity = CMMotionActivityManager()
     private var isRunning = false
+    /// Whether motion updates are actually on. Core Motion calls, even
+    /// `stopActivityUpdates()`, can show the permission prompt, so only make them
+    /// once access is granted.
+    private var receivingActivity = false
     private var inVehicle = false
     private var lastMovingAt: Date?
     private var fastSince: Date?
@@ -631,6 +635,7 @@ final class DriveDetector: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         if motionUsable {
+            receivingActivity = true
             activity.startActivityUpdates(to: .main) { [weak self] a in
                 guard let self, let a else { return }
                 self.inVehicle = a.automotive && a.confidence != .low
@@ -642,7 +647,10 @@ final class DriveDetector: ObservableObject {
     func stop() {
         guard isRunning else { return }
         isRunning = false
-        activity.stopActivityUpdates()
+        if receivingActivity {
+            activity.stopActivityUpdates()
+            receivingActivity = false
+        }
         inVehicle = false
         isLikelyDriving = false
     }
