@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var driveMatch: DriveMatch?
     @State private var isDriveFollowing = true
     @State private var showDrivePrompt = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @State private var showOnboarding = false
     /// "Not now" (or ignoring the prompt) stops it asking again until then.
     @State private var drivePromptSnoozedUntil = Date.distantPast
     @State private var parkedRecord: ParkedCarRecord?
@@ -207,6 +209,10 @@ struct ContentView: View {
                     Button("Holiday calendar", systemImage: "calendar") {
                         showHolidaySheet = true
                     }
+
+                    Button("How it works", systemImage: "questionmark.circle") {
+                        showOnboarding = true
+                    }
                 } label: {
                     // Shows the steering wheel while driving so drive mode stays visible.
                     Image(systemName: isDrivingMode ? "steeringwheel" : "square.3.layers.3d")
@@ -258,7 +264,12 @@ struct ContentView: View {
         }
         .onAppear {
             if let top = Self.currentWindowSafeAreaTop() { windowSafeAreaTop = top }
-            locationManager.requestPermission()
+            if hasCompletedOnboarding || isStagingScreenshot {
+                locationManager.requestPermission()
+            } else {
+                // Onboarding asks for permissions in context.
+                showOnboarding = true
+            }
             if let record = ParkedCarRecord.load() {
                 parkedRecord = record
             }
@@ -313,7 +324,18 @@ struct ContentView: View {
         .task { await applyScreenshotScene() }
         #endif
         .onChange(of: scenePhase, initial: true) { _, phase in
-            phase == .active ? driveDetector.start() : driveDetector.stop()
+            phase == .active && !showOnboarding ? driveDetector.start() : driveDetector.stop()
+        }
+        .fullScreenCover(isPresented: $showOnboarding) {
+            OnboardingView(locationManager: locationManager, driveDetector: driveDetector) {
+                hasCompletedOnboarding = true
+                showOnboarding = false
+                // The map needs location; ask now if it was skipped.
+                if locationManager.authorizationStatus == .notDetermined {
+                    locationManager.requestPermission()
+                }
+                if scenePhase == .active { driveDetector.start() }
+            }
         }
         .onChange(of: driveDetector.isLikelyDriving) { _, driving in
             if driving, !isDrivingMode, Date() >= drivePromptSnoozedUntil {
@@ -389,6 +411,14 @@ struct ContentView: View {
             isFollowingUser = true
             isDriveFollowing = true
         }
+    }
+
+    private var isStagingScreenshot: Bool {
+        #if DEBUG
+        return ScreenshotScene.isActive
+        #else
+        return false
+        #endif
     }
 
     private func snoozeDrivePrompt() {
