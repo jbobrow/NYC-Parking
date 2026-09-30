@@ -55,6 +55,7 @@ struct ContentView: View {
                 isDrivingMode: isDrivingMode,
                 displayMode: displayMode,
                 countdown: dataService.countdown,
+                meters: dataService.meters,
                 driveLocation: isDrivingMode ? locationManager.location : nil,
                 onDriveMatch: { driveMatch = $0 },
                 onDriveFollowChange: { isDriveFollowing = $0 },
@@ -141,6 +142,8 @@ struct ContentView: View {
                     EmptyView()
                 } else if displayMode == .countdown {
                     countdownLegend
+                } else if displayMode == .meters {
+                    meterLegend
                 } else if !labelsVisible {
                     dotLegend
                 }
@@ -208,6 +211,8 @@ struct ContentView: View {
                             .tag(MapDisplayMode.countdown)
                         Label("Cleaning days", systemImage: "nosign.app")
                             .tag(MapDisplayMode.days)
+                        Label("Meters", systemImage: "parkingsign")
+                            .tag(MapDisplayMode.meters)
                     }
                     .pickerStyle(.inline)
 
@@ -251,6 +256,8 @@ struct ContentView: View {
         .sheet(item: $selectedSegment) { segment in
             ParkingDetailSheet(
                 segment: segment,
+                holidays: holidayService.holidays,
+                sourceDates: dataService.sourceDates,
                 isParked: parkedRecord?.segmentID == segment.id,
                 hasAnyParkedCar: parkedRecord != nil,
                 onPark: {
@@ -268,7 +275,6 @@ struct ContentView: View {
                     }
                 }
             )
-                .presentationDetents([.fraction(0.42)])
                 .presentationCornerRadius(22)
                 .presentationBackground(.regularMaterial)
                 .presentationDragIndicator(.hidden)
@@ -322,13 +328,19 @@ struct ContentView: View {
                 mapController.setCenter(loc.coordinate)
             }
         }
-        .task(id: countdownRefreshID) {
-            // Countdowns shift at midnight and as restrictions end; a few minutes'
-            // staleness is fine, and unchanged results don't redraw the map.
-            guard displayMode == .countdown, scenePhase == .active else { return }
+        .task(id: mapRefreshID) {
+            // Countdowns shift at midnight and as restrictions end, so a few
+            // minutes' staleness is fine; meters flip on the hour, so check each
+            // minute. Unchanged results don't redraw the map.
+            guard displayMode != .days, scenePhase == .active else { return }
             while !Task.isCancelled {
-                dataService.refreshCountdown(calendar: CountdownCalendar { holidayService.isHoliday($0) })
-                try? await Task.sleep(for: .seconds(300))
+                let calendar = CountdownCalendar(holidays: holidayService.holidays)
+                if displayMode == .countdown {
+                    dataService.refreshCountdown(calendar: calendar)
+                } else {
+                    dataService.refreshMeters(calendar: calendar)
+                }
+                try? await Task.sleep(for: .seconds(displayMode == .meters ? 60 : 300))
             }
         }
         #if DEBUG
@@ -438,8 +450,8 @@ struct ContentView: View {
         drivePromptSnoozedUntil = Date().addingTimeInterval(30 * 60)
     }
 
-    /// Restarts the countdown refresh loop whenever its inputs change.
-    private var countdownRefreshID: String {
+    /// Restarts the map refresh loop whenever its inputs change.
+    private var mapRefreshID: String {
         "\(displayMode.rawValue)|\(dataService.index != nil)|\(holidayService.holidays.count)|\(scenePhase == .active)"
     }
 
@@ -498,6 +510,24 @@ struct ContentView: View {
                             .foregroundStyle(.primary)
                             .fixedSize()
                     }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassRoundedRect()
+    }
+
+    private var meterLegend: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach([MeterState.Kind.free, .paid, .commercialOnly], id: \.self) { kind in
+                HStack(spacing: 7) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(kind.color)
+                        .frame(width: 16, height: 8)
+                    Text(kind.legendLabel)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.primary)
                 }
             }
         }

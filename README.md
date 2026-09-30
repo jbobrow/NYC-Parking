@@ -19,16 +19,20 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
   - Far out: a run of day-colored dots on each block face
   - Mid: day-colored stripes down each curb, with day-name pills (Mon, Tue, Wed…) lying along the street
   - Close in: pills + restriction time (e.g. 8 AM–11 AM)
+- **Meters view** — every metered curb colored by whether it's free, paid or commercial-only right now, with rate and time limit ("$2.50 · 2 HR") on the pills; meters off on Sundays and the holidays DOT suspends them
+- **Pay with ParkNYC** — a metered block's sheet shows its limit, hours, rate and six-digit ParkNYC zone, and hands off to ParkNYC with the zone copied
 - **Countdown mode** — the hourglass button recolors every block by how soon a car parked there now would have to move: red 0–1 days, yellow 2–6, green 7+ (ASP holidays skipped)
 - **"Park here" mode** — tap any marker to record where you left your car; drag it along the block to the exact spot
 - **Next move date** — banner shows the next day you need to move, skipping holidays
 - **Reminders** — optional 8 AM notification on the day you need to move
-- **Driving mode** — course-up navigation with a live heading arrow
+- **Driving mode** — a 3D view with the parking rules on each side of you, including meters
 - **Holiday calendar** — browse the full NYC ASP holiday list
 
 ## Data
 
-Parking restriction data comes from the [NYC Open Data alternate-side parking sign dataset](https://data.cityofnewyork.us/resource/nfid-uabd.json). The app ships with a pre-built SQLite database (`segments.db`), built offline by `scripts/build_segments.py`: each sign is snapped to its block on the [NYC street centerline](https://data.cityofnewyork.us/resource/inkn-q76z) and grouped by block face, giving every face a curb polyline trimmed back from the intersections.
+Parking restriction data comes from the [NYC Open Data alternate-side parking sign dataset](https://data.cityofnewyork.us/resource/nfid-uabd.json), and meters from [ParkNYC Block Faces](https://data.cityofnewyork.us/d/e7yp-wx55) (hours, limits, rates and zone per metered curb). The app ships with a pre-built SQLite database (`segments.db`), built offline by `scripts/build_segments.py`: each sign, and points along each metered curb, are snapped to their block on the [NYC street centerline](https://data.cityofnewyork.us/resource/inkn-q76z) and grouped by block face, giving every face a curb polyline trimmed back from the intersections. Meter hours shared by many curbs are stored once in a `meter_profiles` table. The dates NYC last updated each dataset are stored too, and shown in the app as "data as of".
+
+Meter holidays come from the same DOT holiday calendar as ASP holidays: each entry says whether meters are in effect.
 
 ## Architecture
 
@@ -40,6 +44,7 @@ Parking restriction data comes from the [NYC Open Data alternate-side parking si
 | `ParkingMapView` | `MKMapView` wrapper: vector stripe/dot overlays, rotating pill annotations with overlap culling, tap hit-testing, draggable parked car |
 | `ParkingLabel` | SwiftUI pill design, rendered once per unique label into a cached image |
 | `MoveCountdown` | Days-until-move per block (holiday-aware) and the countdown color buckets |
+| `Meters` | Meter profiles, free/paid/commercial-only status at a moment, and the ParkNYC hand-off |
 | `SignParser` | Parses raw NYC sign descriptions into structured `ParkingRule` objects |
 | `ASPHolidayService` | Fetches and caches the NYC ASP holiday calendar |
 

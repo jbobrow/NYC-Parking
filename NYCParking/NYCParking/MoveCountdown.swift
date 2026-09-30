@@ -16,6 +16,12 @@ enum AppClock {
 enum MapDisplayMode: String {
     case days       // which weekdays each block is restricted
     case countdown  // how many days until you'd have to move a car parked there now
+    case meters     // metered curbs: free, paid or commercial-only right now
+
+    /// Whether this view draws the block face at all.
+    func shows(_ segment: ParkingSegment) -> Bool {
+        self == .meters ? segment.meter != nil : segment.hasCleaning
+    }
 }
 
 /// Parses sign times ("8AM", "8:30AM", "8:30 AM") into minutes after midnight.
@@ -95,20 +101,22 @@ struct MoveUrgency: Hashable, Sendable {
     var legendLabel: String { level == Self.maxLevel ? "7+" : "\(level)" }
 }
 
-/// The calendar facts countdowns need (weekday and holiday status for the next
-/// week), gathered on the main actor so the per-block math can run off-main.
+/// The calendar facts countdowns and meters need (weekday and holiday status
+/// for the next week), gathered up front so the per-block math can run off-main.
 struct CountdownCalendar: Sendable {
     struct Day: Sendable {
         let weekday: ParkingDay
+        /// Alternate-side parking is suspended.
         let isHoliday: Bool
+        /// Meters are suspended too (only a few major holidays).
+        let metersOff: Bool
     }
 
     let minuteOfDay: Int
     /// Index 0 is today.
     let days: [Day]
 
-    @MainActor
-    init(now: Date = AppClock.now, calendar: Calendar = .current, isHoliday: (Date) -> Bool) {
+    init(now: Date = AppClock.now, calendar: Calendar = .current, holidays: [NamedHoliday]) {
         let comps = calendar.dateComponents([.hour, .minute], from: now)
         minuteOfDay = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
         let today = calendar.startOfDay(for: now)
@@ -116,7 +124,9 @@ struct CountdownCalendar: Sendable {
             guard let date = calendar.date(byAdding: .day, value: offset, to: today),
                   let weekday = ParkingDay.from(weekday: calendar.component(.weekday, from: date))
             else { return nil }
-            return Day(weekday: weekday, isHoliday: isHoliday(date))
+            let onDay = holidays.filter { calendar.isDate($0.date, inSameDayAs: date) }
+            return Day(weekday: weekday, isHoliday: !onDay.isEmpty,
+                       metersOff: onDay.contains { $0.metersSuspended })
         }
     }
 }

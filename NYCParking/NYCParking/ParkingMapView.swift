@@ -79,6 +79,7 @@ struct ParkingMapView: UIViewRepresentable {
     let isDrivingMode: Bool
     let displayMode: MapDisplayMode
     let countdown: CountdownSnapshot?
+    let meters: MeterSnapshot?
     /// Latest location while driving; drives the 3D camera.
     var driveLocation: CLLocation? = nil
     var onDriveMatch: (DriveMatch?) -> Void = { _ in }
@@ -115,7 +116,7 @@ struct ParkingMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.update(index: index, parkedRecord: parkedRecord, isDriving: isDrivingMode,
-                                   displayMode: displayMode, countdown: countdown)
+                                   displayMode: displayMode, countdown: countdown, meters: meters)
         if let driveLocation { context.coordinator.drive.ingest(driveLocation) }
     }
 }
@@ -131,17 +132,20 @@ extension ParkingMapView {
         private var index: SegmentIndex?
         private var displayMode: MapDisplayMode = .days
         private var countdown: CountdownSnapshot?
+        private var meters: MeterSnapshot?
 
         /// The overlay layer that should be on the map, and what actually is.
         private enum MarkLayer: Equatable {
             case dayStripes
             case dots(bucket: Int)   // dot spacing is in screen points, so rebuilt per half zoom level
             case countdown
+            case meters
         }
         private var layer: MarkLayer?
         private var shownOverlays: [StripeOverlay] = []
         private var dayStripeOverlays: [StripeOverlay]?
         private var countdownOverlays: [StripeOverlay]?
+        private var meterOverlays: [StripeOverlay]?
         private var dotCache: (bucket: Int, overlays: [StripeOverlay])?
         private var buildTasks: [String: Task<Void, Never>] = [:]
         private let stripeRenderers = NSHashTable<MKMultiPolylineRenderer>.weakObjects()
@@ -190,7 +194,7 @@ extension ParkingMapView {
         // MARK: State from SwiftUI
 
         func update(index: SegmentIndex?, parkedRecord: ParkedCarRecord?, isDriving: Bool,
-                    displayMode: MapDisplayMode, countdown: CountdownSnapshot?) {
+                    displayMode: MapDisplayMode, countdown: CountdownSnapshot?, meters: MeterSnapshot?) {
             var marksChanged = false
             if index !== self.index {
                 self.index = index
@@ -198,6 +202,7 @@ extension ParkingMapView {
                 buildTasks = [:]
                 dayStripeOverlays = nil
                 countdownOverlays = nil
+                meterOverlays = nil
                 dotCache = nil
                 marksChanged = true
             }
@@ -205,6 +210,12 @@ extension ParkingMapView {
                 self.countdown = countdown
                 countdownOverlays = nil
                 buildTasks["countdown"]?.cancel()
+                marksChanged = true
+            }
+            if meters !== self.meters {
+                self.meters = meters
+                meterOverlays = nil
+                buildTasks["meters"]?.cancel()
                 marksChanged = true
             }
             if displayMode != self.displayMode {
@@ -319,6 +330,8 @@ extension ParkingMapView {
             let target: MarkLayer
             if displayMode == .countdown {
                 target = .countdown
+            } else if displayMode == .meters {
+                target = .meters
             } else if isDriving || LabelStyle.forMetersPerPoint(mpp) != nil {
                 // Stripes where pills show: they mark each block's extent under its pill.
                 target = .dayStripes
@@ -359,6 +372,13 @@ extension ParkingMapView {
                 build("countdown", layer: layer) {
                     StripeBuilder.countdownOverlays(for: segments, entries: entries)
                 } store: { self.countdownOverlays = $0 }
+
+            case .meters:
+                if let overlays = meterOverlays { show(overlays); return }
+                guard let entries = meters?.entries else { return }
+                build("meters", layer: layer) {
+                    StripeBuilder.meterOverlays(for: segments, entries: entries)
+                } store: { self.meterOverlays = $0 }
 
             case .dots(let bucket):
                 if let cache = dotCache, cache.bucket == bucket { show(cache.overlays); return }
@@ -415,7 +435,7 @@ extension ParkingMapView {
             labelStyle = style
             if let style {
                 for view in allLabelViews(mapView) {
-                    view.setStyle(style, content: labelContent(for: view.segmentID),
+                    view.setStyle(style, content: labelContent(for: view.segment),
                                   heading: mapView.camera.heading)
                 }
             }
@@ -426,15 +446,20 @@ extension ParkingMapView {
             declutter()
         }
 
-        private func labelContent(for segmentID: String) -> LabelContent {
-            displayMode == .countdown ? .countdown(countdown?.entries[segmentID]) : .days
+        private func labelContent(for segment: ParkingSegment?) -> LabelContent {
+            guard let segment else { return .days }
+            switch displayMode {
+            case .days:      return .days
+            case .countdown: return .countdown(countdown?.entries[segment.id])
+            case .meters:    return .meter(MeterPill(meter: segment.meter, state: meters?.entries[segment.id]))
+            }
         }
 
         /// Re-renders existing pills after the display mode or countdowns change.
         private func refreshLabelContent(_ mapView: MKMapView) {
             guard let style = labelStyle else { return }
             for view in allLabelViews(mapView) {
-                view.setStyle(style, content: labelContent(for: view.segmentID),
+                view.setStyle(style, content: labelContent(for: view.segment),
                               heading: mapView.camera.heading)
             }
             declutter()
@@ -453,7 +478,7 @@ extension ParkingMapView {
             let visible = mapView.visibleMapRect
             let rect = visible.insetBy(dx: -visible.width * 0.5, dy: -visible.height * 0.5)
             var wanted: [String: ParkingSegment] = [:]
-            for seg in index.segments(in: rect) { wanted[seg.id] = seg }
+            for seg in index.segments(in: rect) where displayMode.shows(seg) { wanted[seg.id] = seg }
 
             let stale = labelAnnotations.filter { wanted[$0.key] == nil }
             if !stale.isEmpty {
@@ -527,7 +552,7 @@ extension ParkingMapView {
                 let view = mapView.dequeueReusableAnnotationView(
                     withIdentifier: SegmentLabelView.reuseID, for: a) as! SegmentLabelView
                 view.configure(segment: a.segment, style: labelStyle ?? .small,
-                               content: labelContent(for: a.segment.id),
+                               content: labelContent(for: a.segment),
                                heading: mapView.camera.heading)
                 return view
 
@@ -638,7 +663,7 @@ extension ParkingMapView {
             let candidates = index.segments(minLat: lats.min()!, maxLat: lats.max()!,
                                             minLon: lons.min()!, maxLon: lons.max()!)
             var best: (ParkingSegment, CGFloat)?
-            for seg in candidates {
+            for seg in candidates where displayMode.shows(seg) {
                 let pts = seg.curve.map { mapView.convert($0, toPointTo: mapView) }
                 let dist = zip(pts, pts.dropFirst()).map { distance(point, $0, $1) }.min() ?? .infinity
                 if dist <= tolerance, dist < (best?.1 ?? .infinity) { best = (seg, dist) }
@@ -690,7 +715,7 @@ enum StripeBuilder {
                                   entries: [String: MoveCountdown]) -> [StripeOverlay] {
         struct Key: Hashable { let row: Int; let col: Int; let urgency: MoveUrgency }
         var groups: [Key: [MKPolyline]] = [:]
-        for seg in segments where seg.curve.count >= 2 {
+        for seg in segments where seg.hasCleaning && seg.curve.count >= 2 {
             let urgency = MoveUrgency(days: entries[seg.id]?.days)
             let row = Int((seg.coordinate.latitude / chunkDegrees).rounded(.down))
             let col = Int((seg.coordinate.longitude / chunkDegrees).rounded(.down))
@@ -702,6 +727,28 @@ enum StripeBuilder {
             .map { key, lines in
                 let overlay = StripeOverlay(lines)
                 overlay.color = key.urgency.uiColor
+                return overlay
+            }
+    }
+
+    /// One solid line per metered curb, colored by whether it's free, paid or
+    /// commercial-only right now.
+    static func meterOverlays(for segments: [ParkingSegment],
+                              entries: [String: MeterState]) -> [StripeOverlay] {
+        struct Key: Hashable { let row: Int; let col: Int; let kind: MeterState.Kind }
+        var groups: [Key: [MKPolyline]] = [:]
+        for seg in segments where seg.curve.count >= 2 {
+            guard let kind = entries[seg.id]?.kind else { continue }
+            let row = Int((seg.coordinate.latitude / chunkDegrees).rounded(.down))
+            let col = Int((seg.coordinate.longitude / chunkDegrees).rounded(.down))
+            groups[Key(row: row, col: col, kind: kind), default: []]
+                .append(MKPolyline(coordinates: seg.curve, count: seg.curve.count))
+        }
+        return groups
+            .sorted { $0.key.kind.rawValue > $1.key.kind.rawValue }   // free curbs on top
+            .map { key, lines in
+                let overlay = StripeOverlay(lines)
+                overlay.color = key.kind.uiColor
                 return overlay
             }
     }

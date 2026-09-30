@@ -4,15 +4,18 @@ import Foundation
 final class ParkingDataService: ObservableObject {
     /// All block faces, indexed. Nil until the bundled database has loaded.
     @Published private(set) var index: SegmentIndex?
+    /// When NYC last updated the sign and meter data bundled in the app.
+    @Published private(set) var sourceDates = DataSourceDates()
 
     init() {
         removeLegacyCache()
         Task {
-            let index = await Task.detached(priority: .userInitiated) { () -> SegmentIndex? in
-                guard let db = ParkingDatabase() else { return nil }
-                return SegmentIndex(segments: db.allSegments())
+            let (index, dates) = await Task.detached(priority: .userInitiated) { () -> (SegmentIndex?, DataSourceDates) in
+                guard let db = ParkingDatabase() else { return (nil, DataSourceDates()) }
+                return (SegmentIndex(segments: db.allSegments()), db.sourceDates)
             }.value
             self.index = index
+            self.sourceDates = dates
             print("ParkingDataService: loaded \(index?.segments.count ?? 0) block faces")
         }
     }
@@ -32,6 +35,23 @@ final class ParkingDataService: ObservableObject {
             }.value
             guard !Task.isCancelled, snapshot.entries != countdown?.entries else { return }
             countdown = snapshot
+        }
+    }
+
+    /// Meter status for every metered curb; nil until first computed.
+    @Published private(set) var meters: MeterSnapshot?
+    private var metersTask: Task<Void, Never>?
+
+    /// Recomputes meter status off the main thread, publishing only on change.
+    func refreshMeters(calendar: CountdownCalendar) {
+        guard let segments = index?.segments else { return }
+        metersTask?.cancel()
+        metersTask = Task {
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                MeterSnapshot.compute(for: segments, calendar: calendar)
+            }.value
+            guard !Task.isCancelled, snapshot.entries != meters?.entries else { return }
+            meters = snapshot
         }
     }
 

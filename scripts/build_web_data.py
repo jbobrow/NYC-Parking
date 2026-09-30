@@ -83,7 +83,8 @@ def main():
 
     faces = []
     for street, from_st, to_st, side, rules, geom in conn.execute(
-            "SELECT street, from_st, to_st, side, rules, geom FROM segments"):
+            # Metered curbs with no cleaning rules aren't part of the site's map.
+            "SELECT street, from_st, to_st, side, rules, geom FROM segments WHERE rules != '[]'"):
         pts = [tuple(map(float, p.split(","))) for p in (geom or "").split(";") if p]
         if len(pts) < 2:
             continue

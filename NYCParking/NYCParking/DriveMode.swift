@@ -426,9 +426,7 @@ struct DriveHUD: View {
 
     var body: some View {
         TimelineView(.everyMinute) { _ in
-            let calendar = CountdownCalendar { date in
-                holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
-            }
+            let calendar = CountdownCalendar(holidays: holidays)
             VStack(spacing: 8) {
                 header
                 if let match {
@@ -487,8 +485,14 @@ private struct SideCard: View {
 
     var body: some View {
         let countdown = segment.flatMap { MoveCountdown.next(for: $0.rules, in: calendar) }
-        let urgency = segment.map { _ in MoveUrgency(days: countdown?.days) }
-        let (title, detail) = texts(countdown)
+        let meter = segment?.meter.map { MeterPill(meter: $0, state: $0.profile.state(in: calendar)) }
+        let hasCleaning = segment?.hasCleaning ?? false
+        // Cleaning leads when posted; a metered-only curb leads with its meter.
+        let fill = hasCleaning ? segment.map { _ in MoveUrgency(days: countdown?.days).color }
+                               : meter?.kind?.color
+        let textColor = hasCleaning ? MoveUrgency(days: countdown?.days).textColor : .white
+        let (title, detail) = hasCleaning || meter == nil ? texts(countdown) : meterTexts(meter!)
+        let meterLine = hasCleaning ? meter.map(meterLineText) : nil
 
         VStack(alignment: side == .left ? .leading : .trailing, spacing: 2) {
             HStack(spacing: 4) {
@@ -507,19 +511,27 @@ private struct SideCard: View {
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            if let meterLine {
+                Label(meterLine, systemImage: "parkingsign")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.top, 2)
+            }
         }
-        .foregroundStyle(urgency?.textColor ?? .primary)
+        .foregroundStyle(fill == nil ? .primary : textColor)
         .frame(maxWidth: .infinity, alignment: side == .left ? .leading : .trailing)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background {
-            if let urgency {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(urgency.color)
+            if let fill {
+                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(fill)
             }
         }
-        .modifier(GlassRoundedBackground(enabled: urgency == nil))
+        .modifier(GlassRoundedBackground(enabled: fill == nil))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(side == .left ? "Left" : "Right") side: \(title), \(detail)")
+        .accessibilityLabel("\(side == .left ? "Left" : "Right") side: \(title), \(detail)"
+                            + (meterLine.map { ", meter: \($0)" } ?? ""))
     }
 
     private func texts(_ c: MoveCountdown?) -> (String, String) {
@@ -530,6 +542,28 @@ private struct SideCard: View {
         }
         let day = c.weekday.short.capitalized
         return (MoveCountdown.shortText(c), "\(day) \(ParkingTime.formatRange(c.startMinutes, c.endMinutes))")
+    }
+
+    /// A metered curb with no cleaning: "$2 · 2 HR" / "Meter until 7 PM".
+    private func meterTexts(_ pill: MeterPill) -> (String, String) {
+        let until = pill.detail.map { " \($0)" } ?? ""
+        switch pill.kind {
+        case .paid:           return (pill.title, "Meter\(until)")
+        case .commercialOnly: return ("COMMERCIAL", "Trucks only\(until)")
+        case .free:           return ("FREE", "Meters off\(until)")
+        case nil:             return (pill.title, "")
+        }
+    }
+
+    /// Under a cleaning countdown: "$2 · 2 HR until 7 PM", "Free until 9 AM".
+    private func meterLineText(_ pill: MeterPill) -> String {
+        let until = pill.detail.map { " \($0)" } ?? ""
+        switch pill.kind {
+        case .paid:           return "\(pill.title)\(until)"
+        case .commercialOnly: return "Commercial\(until)"
+        case .free:           return "Free\(until)"
+        case nil:             return pill.title
+        }
     }
 }
 

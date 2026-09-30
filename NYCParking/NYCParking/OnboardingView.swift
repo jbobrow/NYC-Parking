@@ -236,14 +236,13 @@ private struct RealMapArt<Fallback: View>: View {
     }
 
     private func draw(_ snapshot: MKMapSnapshotter.Snapshot, index: SegmentIndex) -> UIImage {
-        let calendar = CountdownCalendar { date in
-            holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
-        }
+        let calendar = CountdownCalendar(holidays: holidays)
         let r = Self.region
         let segments = index.segments(minLat: r.center.latitude - r.span.latitudeDelta,
                                       maxLat: r.center.latitude + r.span.latitudeDelta,
                                       minLon: r.center.longitude - r.span.longitudeDelta,
                                       maxLon: r.center.longitude + r.span.longitudeDelta)
+            .filter(\.hasCleaning)
         let countdowns = Dictionary(uniqueKeysWithValues: segments.map {
             ($0.id, MoveCountdown.next(for: $0.rules, in: calendar))
         })

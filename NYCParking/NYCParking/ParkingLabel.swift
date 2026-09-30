@@ -22,6 +22,65 @@ enum LabelStyle: Hashable {
 enum LabelContent: Hashable {
     case days
     case countdown(MoveCountdown?)
+    case meter(MeterPill)
+}
+
+/// Meters-view pill text: "$2 · 2 HR" while paid, "FREE", or "COMMERCIAL",
+/// with when that changes at the closest zoom. A neutral "METER" until the
+/// status is known, so a paid curb never flashes "FREE".
+struct MeterPill: Hashable {
+    let kind: MeterState.Kind?
+    let title: String
+    let detail: String?
+
+    init(meter: MeterInfo?, state: MeterState?) {
+        guard let state else {
+            kind = nil
+            title = "METER"
+            detail = nil
+            return
+        }
+        kind = state.kind
+        detail = state.untilText
+        switch state {
+        case .paid:
+            let tier = meter?.profile.paid
+            let parts = [tier?.priceText, tier?.limitText].compactMap { $0 }
+            title = parts.isEmpty ? "PAID" : parts.joined(separator: " · ")
+        case .commercialOnly:
+            title = "COMMERCIAL"
+        case .free:
+            title = "FREE"
+        }
+    }
+}
+
+struct MeterLabel: View {
+    let pill: MeterPill
+    let style: LabelStyle
+
+    private var s: CGFloat { style == .small ? 2.0 / 3.0 : 1 }
+
+    var body: some View {
+        HStack(spacing: 4 * s) {
+            Text(pill.title)
+                .font(.system(size: 11 * s, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 9 * s)
+                .padding(.vertical, 5 * s)
+                .background(pill.kind?.color ?? .gray, in: Capsule())
+                .fixedSize()
+            if style == .full, let detail = pill.detail {
+                Text(detail)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.black.opacity(0.85))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.95), in: RoundedRectangle(cornerRadius: 6))
+                    .fixedSize()
+            }
+        }
+    }
 }
 
 /// Countdown-mode pill: urgency-colored "TODAY" / "3 DAYS" / "7+ DAYS", plus
@@ -147,6 +206,9 @@ enum ParkingLabelRenderer {
             let key = "countdown|\(MoveCountdown.shortText(countdown))|\(style)"
                 + (style == .full ? "|\(countdown?.timeText ?? "")" : "")
             return cached(key, style: style) { CountdownLabel(countdown: countdown, style: style) }
+        case .meter(let pill):
+            let key = "meter|\(pill.kind.map { "\($0)" } ?? "unknown")|\(pill.title)|\(style)" + (style == .full ? "|\(pill.detail ?? "")" : "")
+            return cached(key, style: style) { MeterLabel(pill: pill, style: style) }
         }
     }
 
