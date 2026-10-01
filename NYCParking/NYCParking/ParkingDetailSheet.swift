@@ -26,6 +26,8 @@ struct ParkingDetailSheet: View {
     }
     /// The sheet fits its content, which varies with the rules and meter shown.
     @State private var contentHeight: CGFloat = 380
+    /// The posted rules, hidden to start: the verdict is what matters at a glance.
+    @State private var showsDetails = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -77,33 +79,14 @@ struct ParkingDetailSheet: View {
             .padding(.horizontal, 20)
             .padding(.top, 16)
 
-            Divider()
+            detailsToggle
                 .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                .padding(.top, 14)
 
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(sections.enumerated()), id: \.element) { i, section in
-                    if i > 0 {
-                        Divider().padding(.vertical, 16)
-                    }
-                    switch section {
-                    case .cleaning:
-                        VStack(alignment: .leading, spacing: 14) {
-                            SectionTitle(text: "Street cleaning", systemImage: "nosign.app")
-                            ForEach(segment.rules) { rule in
-                                RuleRow(rule: rule)
-                            }
-                        }
-                    case .restrictions:
-                        RestrictionsSection(restrictions: segment.restrictions)
-                    case .meter:
-                        if let meter = segment.meter {
-                            MeterSection(meter: meter, holidays: holidays, moveWindows: segment.moveWindows)
-                        }
-                    }
-                }
+            if showsDetails {
+                details
+                    .transition(.opacity)
             }
-            .padding(.horizontal, 20)
 
             Spacer(minLength: 24)
 
@@ -224,7 +207,65 @@ struct ParkingDetailSheet: View {
         return "Only commercial vehicles can park here \(when).\(move)"
     }
 
+    /// "Street cleaning · No standing · Meter" · Show / Hide
+    private var detailsToggle: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.3)) { showsDetails.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Text(sections.map(sectionTitle).joined(separator: " · "))
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Text(showsDetails ? "Hide" : "Show")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.accentColor)
+                    .rotationEffect(.degrees(showsDetails ? 180 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(showsDetails ? "Hide posted rules" : "Show posted rules")
+    }
+
+    /// Every posted rule: cleaning, no standing / stopping, and the meter.
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(sections, id: \.self) { section in
+                Divider().padding(.vertical, 16)
+                switch section {
+                case .cleaning:
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionTitle(text: "Street cleaning", systemImage: "nosign.app")
+                        ForEach(segment.rules) { rule in
+                            RuleRow(rule: rule)
+                        }
+                    }
+                case .restrictions:
+                    RestrictionsSection(restrictions: segment.restrictions)
+                case .meter:
+                    if let meter = segment.meter {
+                        MeterSection(meter: meter, holidays: holidays, moveWindows: segment.moveWindows)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
     private enum Section: Hashable { case cleaning, restrictions, meter }
+
+    private func sectionTitle(_ section: Section) -> String {
+        switch section {
+        case .cleaning:     return "Street cleaning"
+        case .restrictions: return Set(segment.restrictions.map(\.title)).sorted().joined(separator: " · ")
+        case .meter:        return "Meter"
+        }
+    }
 
     private var sections: [Section] {
         var out: [Section] = []
@@ -378,23 +419,27 @@ private struct MeterSection: View {
                 }
             }
 
-            Button(action: pay) {
-                HStack {
-                    Label("Pay with ParkNYC", systemImage: "arrow.up.forward.app")
-                        .font(.system(size: 15, weight: .semibold))
-                    Spacer()
-                    Text(copied ? "Zone copied" : "Zone \(meter.zone)")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.opacity)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Copies zone \(meter.zone) and opens ParkNYC")
+            payButton
         }
+    }
+
+    private var payButton: some View {
+        Button(action: pay) {
+            HStack {
+                Label("Pay with ParkNYC", systemImage: "arrow.up.forward.app")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Text(copied ? "Zone copied" : "Zone \(meter.zone)")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Copies zone \(meter.zone) and opens ParkNYC")
     }
 
     /// "Paid now · until 7 PM", "Meters off today · Christmas Day · free until Mon 9 AM"
