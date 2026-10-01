@@ -561,9 +561,17 @@ private struct SideCard: View {
                 let lines = parts.sorted { $0.order < $1.order }.map { Self.capitalized($0.text) }
                 return Content(title: "FREE", detail: lines.first ?? "Meters off", more: lines.dropFirst().first,
                                fill: MeterState.Kind.free.color)
-            case .commercialOnly:
-                break   // can't park: shown like any other restriction below
+            case .commercialOnly, .noParking:
+                break   // shown below
             }
+        }
+
+        // Commercial-only hours: the commercial color, as in the Meters view.
+        if let c = countdown, c.isUnderway, c.kind == .commercial {
+            let kind = MeterState.Kind.commercialOnly
+            let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? ""
+            return Content(title: "COMMERCIAL", detail: "Trucks only" + until,
+                           fill: kind.color, textColor: kind.textColor)
         }
 
         let urgency = MoveUrgency(days: countdown?.days)

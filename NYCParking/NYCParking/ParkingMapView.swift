@@ -756,7 +756,7 @@ enum StripeBuilder {
                 .append(MKPolyline(coordinates: seg.curve, count: seg.curve.count))
         }
         return groups
-            .sorted { $0.key.kind.rawValue > $1.key.kind.rawValue }   // free curbs on top
+            .sorted { $0.key.kind.rawValue < $1.key.kind.rawValue }   // no-parking curbs on top
             .map { key, lines in
                 let overlay = StripeOverlay(lines)
                 overlay.color = key.kind.uiColor
