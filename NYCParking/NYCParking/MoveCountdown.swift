@@ -60,16 +60,42 @@ enum ParkingTime {
     }
 }
 
+/// How countdown colors read. The default spreads red → green over a week,
+/// for leaving a car a while; day parking only warns about today, since a
+/// spot that's good until tomorrow is fine for the day.
+enum CountdownScale: String, CaseIterable, Sendable {
+    case standard
+    case dayParking
+
+    static let storageKey = "countdownScale"
+
+    var title: String { self == .standard ? "Default" : "Day parking" }
+
+    var subtitle: String {
+        self == .standard ? "For leaving the car a while" : "For parking just today"
+    }
+
+    /// The color step for `days` until the move (nil: not this week).
+    func level(forDays days: Int?) -> Int {
+        let d = min(max(days ?? MoveUrgency.maxLevel, 0), MoveUrgency.maxLevel)
+        switch self {
+        case .standard:   return d
+        case .dayParking: return d < 4 ? [0, 3, 5, 6][d] : MoveUrgency.maxLevel   // today red, 1 day yellow
+        }
+    }
+}
+
 /// Countdown color: one step per day until the move, running red → yellow →
 /// green, with a week or more (or nothing scheduled) as the last, greenest step.
 struct MoveUrgency: Hashable, Sendable {
     static let maxLevel = 7
     static let allCases = (0...maxLevel).map(MoveUrgency.init(level:))
 
-    /// Days until the move, capped at `maxLevel`.
+    /// Step on the red → green scale: days until the move, capped at
+    /// `maxLevel`, on the default scale.
     let level: Int
 
-    init(days: Int?) { self.init(level: min(max(days ?? Self.maxLevel, 0), Self.maxLevel)) }
+    init(days: Int?, scale: CountdownScale = .standard) { self.init(level: scale.level(forDays: days)) }
     private init(level: Int) { self.level = level }
 
     /// One hand-tuned (hue°, saturation, brightness) per level. A straight hue

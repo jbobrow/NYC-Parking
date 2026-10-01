@@ -21,7 +21,7 @@ enum LabelStyle: Hashable {
 /// What a block's pill says.
 enum LabelContent: Hashable {
     case days
-    case countdown(MoveCountdown?)
+    case countdown(MoveCountdown?, scale: CountdownScale = .standard)
     case meter(MeterPill)
 }
 
@@ -90,9 +90,10 @@ struct MeterLabel: View {
 struct CountdownLabel: View {
     let countdown: MoveCountdown?
     let style: LabelStyle
+    var scale: CountdownScale = .standard
 
     private var s: CGFloat { style == .small ? 2.0 / 3.0 : 1 }
-    private var urgency: MoveUrgency { MoveUrgency(days: countdown?.days) }
+    private var urgency: MoveUrgency { MoveUrgency(days: countdown?.days, scale: scale) }
 
     var body: some View {
         HStack(spacing: 4 * s) {
@@ -204,10 +205,10 @@ enum ParkingLabelRenderer {
             let key = days.map(\.rawValue).joined(separator: ",") + "|\(style)"
                 + (style == .full ? "|\(rule?.startTime ?? "")-\(rule?.endTime ?? "")" : "")
             return cached(key, style: style) { ParkingLabel(days: days, rule: rule, style: style) }
-        case .countdown(let countdown):
-            let key = "countdown|\(MoveCountdown.shortText(countdown))|\(style)"
+        case .countdown(let countdown, let scale):
+            let key = "countdown|\(scale.rawValue)|\(MoveCountdown.shortText(countdown))|\(style)"
                 + (style == .full ? "|\(countdown?.timeText ?? "")" : "")
-            return cached(key, style: style) { CountdownLabel(countdown: countdown, style: style) }
+            return cached(key, style: style) { CountdownLabel(countdown: countdown, style: style, scale: scale) }
         case .meter(let pill):
             let key = "meter|\(pill.kind.map { "\($0)" } ?? "unknown")|\(pill.title)|\(style)" + (style == .full ? "|\(pill.detail ?? "")" : "")
             return cached(key, style: style) { MeterLabel(pill: pill, style: style) }
