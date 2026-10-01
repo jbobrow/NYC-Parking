@@ -329,9 +329,7 @@ private struct VerdictRow: View {
         let (title, detail) = texts(countdown)
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle()
-                .fill(countdown.map { $0.isUnderway && $0.kind == .commercial }  == true
-                      ? MeterState.Kind.commercialOnly.color   // as in the Meters view
-                      : MoveUrgency(days: countdown?.days, scale: scale).color)
+                .fill(dotColor(countdown))
                 .frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -344,6 +342,16 @@ private struct VerdictRow: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Meter colors while the meter or commercial hours apply, as in the Meters
+    /// view, so red only ever means no one can park; the countdown's otherwise.
+    private func dotColor(_ c: MoveCountdown?) -> Color {
+        switch c {
+        case let c? where c.isUnderway && c.kind == .meter:      return MeterState.Kind.paid.color
+        case let c? where c.isUnderway && c.kind == .commercial: return MeterState.Kind.commercialOnly.color
+        default: return MoveUrgency(days: c?.days, scale: scale).color
+        }
     }
 
     private func texts(_ c: MoveCountdown?) -> (String, String?) {
