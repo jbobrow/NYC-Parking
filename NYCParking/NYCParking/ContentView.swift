@@ -55,6 +55,7 @@ struct ContentView: View {
                 isDrivingMode: isDrivingMode,
                 displayMode: displayMode,
                 countdown: dataService.countdown,
+                meters: dataService.meters,
                 driveLocation: isDrivingMode ? locationManager.location : nil,
                 onDriveMatch: { driveMatch = $0 },
                 onDriveFollowChange: { isDriveFollowing = $0 },
@@ -141,6 +142,8 @@ struct ContentView: View {
                     EmptyView()
                 } else if displayMode == .countdown {
                     countdownLegend
+                } else if displayMode == .meters {
+                    meterLegend
                 } else if !labelsVisible {
                     dotLegend
                 }
@@ -208,6 +211,8 @@ struct ContentView: View {
                             .tag(MapDisplayMode.countdown)
                         Label("Cleaning days", systemImage: "nosign.app")
                             .tag(MapDisplayMode.days)
+                        Label("Meters", systemImage: "parkingsign")
+                            .tag(MapDisplayMode.meters)
                     }
                     .pickerStyle(.inline)
 
@@ -251,24 +256,26 @@ struct ContentView: View {
         .sheet(item: $selectedSegment) { segment in
             ParkingDetailSheet(
                 segment: segment,
+                holidays: holidayService.holidays,
+                sourceDates: dataService.sourceDates,
                 isParked: parkedRecord?.segmentID == segment.id,
                 hasAnyParkedCar: parkedRecord != nil,
-                onPark: {
+                onPark: { isCommercialVehicle in
                     if parkedRecord?.segmentID == segment.id {
                         parkedRecord = nil
                         ParkedCarRecord.clear()
                         notificationService.cancelPendingNotifications()
                     } else {
-                        let record = ParkedCarRecord(segment: segment, offsetMeters: 20)
+                        let record = ParkedCarRecord(segment: segment, offsetMeters: 20,
+                                                     isCommercialVehicle: isCommercialVehicle)
                         parkedRecord = record
                         record.save()
-                        if let date = nextMoveDate {
-                            Task { await notificationService.scheduleNotifications(for: record, moveDate: date) }
+                        if let deadline = record.nextMove(after: AppClock.now, holidays: holidayService.holidays) {
+                            Task { await notificationService.scheduleNotifications(for: deadline) }
                         }
                     }
                 }
             )
-                .presentationDetents([.fraction(0.42)])
                 .presentationCornerRadius(22)
                 .presentationBackground(.regularMaterial)
                 .presentationDragIndicator(.hidden)
@@ -293,7 +300,7 @@ struct ContentView: View {
             if let parked = parkedRecord {
                 ParkedCarSheet(
                     record: parked,
-                    nextMoveDate: nextMoveDate,
+                    nextMove: nextMove,
                     onDirections: { openDirectionsToCar(for: parked) },
                     onUnpark: {
                         notificationService.cancelPendingNotifications()
@@ -322,13 +329,19 @@ struct ContentView: View {
                 mapController.setCenter(loc.coordinate)
             }
         }
-        .task(id: countdownRefreshID) {
-            // Countdowns shift at midnight and as restrictions end; a few minutes'
-            // staleness is fine, and unchanged results don't redraw the map.
-            guard displayMode == .countdown, scenePhase == .active else { return }
+        .task(id: mapRefreshID) {
+            // Countdowns shift at midnight and as restrictions end, so a few
+            // minutes' staleness is fine; meters flip on the hour, so check each
+            // minute. Unchanged results don't redraw the map.
+            guard displayMode != .days, scenePhase == .active else { return }
             while !Task.isCancelled {
-                dataService.refreshCountdown(calendar: CountdownCalendar { holidayService.isHoliday($0) })
-                try? await Task.sleep(for: .seconds(300))
+                let calendar = CountdownCalendar(holidays: holidayService.holidays)
+                if displayMode == .countdown {
+                    dataService.refreshCountdown(calendar: calendar)
+                } else {
+                    dataService.refreshMeters(calendar: calendar)
+                }
+                try? await Task.sleep(for: .seconds(displayMode == .meters ? 60 : 300))
             }
         }
         #if DEBUG
@@ -438,15 +451,15 @@ struct ContentView: View {
         drivePromptSnoozedUntil = Date().addingTimeInterval(30 * 60)
     }
 
-    /// Restarts the countdown refresh loop whenever its inputs change.
-    private var countdownRefreshID: String {
+    /// Restarts the map refresh loop whenever its inputs change.
+    private var mapRefreshID: String {
         "\(displayMode.rawValue)|\(dataService.index != nil)|\(holidayService.holidays.count)|\(scenePhase == .active)"
     }
 
     // MARK: - Move car banner
 
-    private var nextMoveDate: Date? {
-        parkedRecord?.nextMoveDate(after: AppClock.now) { holidayService.isHoliday($0) }
+    private var nextMove: MoveDeadline? {
+        parkedRecord?.nextMove(after: AppClock.now, holidays: holidayService.holidays)
     }
 
     private func openDirectionsToCar(for record: ParkedCarRecord) {
@@ -489,15 +502,40 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 3) {
                 ForEach(MoveUrgency.allCases, id: \.self) { urgency in
-                    VStack(spacing: 3) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(urgency.color)
-                            .frame(width: 16, height: 8)
-                        Text(urgency.legendLabel)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.primary)
-                            .fixedSize()
-                    }
+                    legendSwatch(urgency.color, label: urgency.legendLabel)
+                }
+                // Metered curbs: meter blue, with the countdown on their pills.
+                legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
+                    .padding(.leading, 6)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassRoundedRect()
+    }
+
+    private func legendSwatch(_ color: Color, label: String) -> some View {
+        VStack(spacing: 3) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(color)
+                .frame(width: 16, height: 8)
+            Text(label)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .fixedSize()
+        }
+    }
+
+    private var meterLegend: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach([MeterState.Kind.free, .paid, .commercialOnly], id: \.self) { kind in
+                HStack(spacing: 7) {
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(kind.color)
+                        .frame(width: 16, height: 8)
+                    Text(kind.legendLabel)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.primary)
                 }
             }
         }
@@ -563,11 +601,18 @@ private struct TopBanners: View {
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let now = AppClock.now
-            let moveDate = record?.nextMoveDate(after: now) { isHoliday($0) }
+            // A rule in effect right now (parked anyway, or it started while
+            // parked) comes before the next deadline.
+            let inEffect = record?.restrictionInEffect(at: now, holidays: holidays)
+            let move = inEffect == nil ? record?.nextMove(after: now, holidays: holidays) : nil
             let holiday = showsHolidayBanner ? upcomingHoliday(from: now) : nil
             VStack(spacing: 8) {
-                if let moveDate {
-                    moveCarBanner(for: moveDate, now: now)
+                if let inEffect {
+                    moveNowBanner(inEffect)
+                        .onTapGesture(perform: onMoveTap)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if let move {
+                    moveCarBanner(for: move, now: now)
                         .onTapGesture(perform: onMoveTap)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -577,34 +622,44 @@ private struct TopBanners: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: moveDate)
+            .animation(.easeInOut(duration: 0.3), value: move)
+            .animation(.easeInOut(duration: 0.3), value: inEffect)
             .animation(.easeInOut(duration: 0.3), value: holiday?.holiday.id)
             .animation(.easeInOut(duration: 0.3),
-                       value: moveDate.map { MoveBannerStage(deadline: $0, now: now) })
+                       value: move.map { MoveBannerStage(deadline: $0.date, now: now) })
         }
     }
 
-    private func isHoliday(_ date: Date) -> Bool {
-        holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
+    /// "Move now · No standing until 7 PM", in the countdown's red.
+    private func moveNowBanner(_ rule: MoveCountdown) -> some View {
+        Label("Move now · \(rule.inEffectText)", systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .modifier(BannerBackground(tint: MoveUrgency(days: 0)))
     }
 
     /// Yellow from the day before the move, red within the final hour.
-    private func moveCarBanner(for date: Date, now: Date) -> some View {
+    /// "Move by 8:30 AM tomorrow"; "Pay or move by …" when it's the meter.
+    private func moveCarBanner(for move: MoveDeadline, now: Date) -> some View {
+        let date = move.date
         let stage = MoveBannerStage(deadline: date, now: now)
         let time = date.formatted(date: .omitted, time: .shortened)
         let text: String
         switch stage {
         case .imminent:
             let minutes = max(1, Int((date.timeIntervalSince(now) / 60).rounded(.up)))
-            text = "Move in \(minutes) min · \(time)"
+            text = "\(move.kind.isMeter ? "Pay or move" : "Move") in \(minutes) min · \(time)"
         case .dayBefore where Calendar.current.isDate(date, inSameDayAs: now):
-            text = "Move by \(time) today"
+            text = "\(move.verb) \(time) today"
         case .dayBefore:
-            text = "Move by \(time) tomorrow"
+            text = "\(move.verb) \(time) tomorrow"
         case .normal:
             let df = DateFormatter()
             df.dateFormat = "h:mm a, EEE MMM d"
-            text = "Move by \(df.string(from: date))"
+            text = "\(move.verb) \(df.string(from: date))"
         }
         let icon = stage == .imminent ? "clock.badge.exclamationmark.fill" : "calendar.badge.clock"
         return Label(text, systemImage: icon)

@@ -65,14 +65,15 @@ final class ASPHolidayService: ObservableObject {
         var inEvent = false
         var startStr: String?
         var summaryStr: String?
+        var metersSuspended: Bool?
 
         for raw in unfolded.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line == "BEGIN:VEVENT" {
-                inEvent = true; startStr = nil; summaryStr = nil
+                inEvent = true; startStr = nil; summaryStr = nil; metersSuspended = nil
             } else if line == "END:VEVENT" {
                 if let s = startStr, let name = summaryStr, let date = parseDate(s) {
-                    results.append(NamedHoliday(name: name, date: date))
+                    results.append(NamedHoliday(name: name, date: date, metersSuspended: metersSuspended))
                 }
                 inEvent = false
             } else if inEvent {
@@ -81,7 +82,14 @@ final class ASPHolidayService: ObservableObject {
                 } else if line.hasPrefix("DESCRIPTION:") {
                     // Holiday name lives in DESCRIPTION, e.g.
                     // "Alternate Side Parking suspended for Memorial Day. Parking meters..."
-                    summaryStr = extractHolidayName(String(line.dropFirst("DESCRIPTION:".count)))
+                    let description = String(line.dropFirst("DESCRIPTION:".count))
+                    summaryStr = extractHolidayName(description)
+                    // "Parking meters will be in effect." or "…will not be in effect."
+                    if description.localizedCaseInsensitiveContains("meters will not be in effect") {
+                        metersSuspended = true
+                    } else if description.localizedCaseInsensitiveContains("meters will be in effect") {
+                        metersSuspended = false
+                    }
                 }
             }
         }
@@ -116,6 +124,8 @@ final class ASPHolidayService: ObservableObject {
     private struct CachedEntry: Codable {
         let name: String
         let timestamp: Double
+        /// Missing in caches from before meters were tracked.
+        let metersSuspended: Bool?
     }
 
     private static func loadCache() -> [NamedHoliday]? {
@@ -123,13 +133,15 @@ final class ASPHolidayService: ObservableObject {
               let entries = try? JSONDecoder().decode([CachedEntry].self, from: data) else { return nil }
         let today = Calendar.current.startOfDay(for: Date())
         let holidays = entries
-            .map { NamedHoliday(name: $0.name, date: Date(timeIntervalSince1970: $0.timestamp)) }
+            .map { NamedHoliday(name: $0.name, date: Date(timeIntervalSince1970: $0.timestamp),
+                                metersSuspended: $0.metersSuspended) }
             .filter { $0.date >= today }
         return holidays.isEmpty ? nil : holidays
     }
 
     private static func saveCache(_ holidays: [NamedHoliday]) {
-        let entries = holidays.map { CachedEntry(name: $0.name, timestamp: $0.date.timeIntervalSince1970) }
+        let entries = holidays.map { CachedEntry(name: $0.name, timestamp: $0.date.timeIntervalSince1970,
+                                                 metersSuspended: $0.metersSuspended) }
         if let data = try? JSONEncoder().encode(entries) {
             UserDefaults.standard.set(data, forKey: cacheKey)
         }

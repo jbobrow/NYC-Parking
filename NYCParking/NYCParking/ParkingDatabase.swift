@@ -2,6 +2,12 @@ import Foundation
 import CoreLocation
 import SQLite3
 
+/// When NYC last updated each source dataset.
+struct DataSourceDates: Equatable {
+    var signs: Date?
+    var meters: Date?
+}
+
 /// Read-only access to the bundled `segments.db` (built by scripts/build_segments.py).
 final class ParkingDatabase {
     private var db: OpaquePointer?
@@ -15,30 +21,62 @@ final class ParkingDatabase {
 
     deinit { sqlite3_close(db) }
 
-    var generatedAt: Date? {
+    /// When NYC last updated each source dataset, for "data as of" notes.
+    var sourceDates: DataSourceDates {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone(identifier: "America/New_York")
+        df.dateFormat = "yyyy-MM-dd"
+        var meta: [String: String] = [:]
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, "SELECT value FROM meta WHERE key='generated_at'", -1, &stmt, nil) == SQLITE_OK else { return nil }
-        defer { sqlite3_finalize(stmt) }
-        guard sqlite3_step(stmt) == SQLITE_ROW,
-              let cStr = sqlite3_column_text(stmt, 0) else { return nil }
-        return ISO8601DateFormatter().date(from: String(cString: cStr))
+        if sqlite3_prepare_v2(db, "SELECT key, value FROM meta", -1, &stmt, nil) == SQLITE_OK {
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let k = sqlite3_column_text(stmt, 0), let v = sqlite3_column_text(stmt, 1) {
+                    meta[String(cString: k)] = String(cString: v)
+                }
+            }
+        }
+        sqlite3_finalize(stmt)
+        return DataSourceDates(signs: meta["signs_updated"].flatMap(df.date(from:)),
+                               meters: meta["meters_updated"].flatMap(df.date(from:)))
     }
 
-    /// Every block face in the city (~45k rows; a fraction of a second to load).
+    /// Every block face in the city (~60k rows; a fraction of a second to load).
     func allSegments() -> [ParkingSegment] {
+        let profiles = meterProfiles()
         var stmt: OpaquePointer?
-        let sql = "SELECT id,street,from_st,to_st,side,lat,lon,bearing,half_len,rules,geom FROM segments"
+        let sql = """
+            SELECT id,street,from_st,to_st,side,lat,lon,bearing,half_len,rules,geom,meter_zone,meter_profile,
+                   restrictions
+            FROM segments
+            """
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
         var result: [ParkingSegment] = []
-        result.reserveCapacity(50_000)
+        result.reserveCapacity(65_000)
         while sqlite3_step(stmt) == SQLITE_ROW {
-            if let seg = parseRow(stmt) { result.append(seg) }
+            if let seg = parseRow(stmt, profiles: profiles) { result.append(seg) }
         }
         return result
     }
 
-    private func parseRow(_ s: OpaquePointer?) -> ParkingSegment? {
+    /// The shared meter profiles, by id (a few hundred).
+    private func meterProfiles() -> [Int32: MeterProfile] {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT id, spec FROM meter_profiles", -1, &stmt, nil) == SQLITE_OK
+        else { return [:] }
+        defer { sqlite3_finalize(stmt) }
+        var profiles: [Int32: MeterProfile] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let spec = sqlite3_column_text(stmt, 1),
+               let profile = MeterProfile(json: String(cString: spec)) {
+                profiles[sqlite3_column_int(stmt, 0)] = profile
+            }
+        }
+        return profiles
+    }
+
+    private func parseRow(_ s: OpaquePointer?, profiles: [Int32: MeterProfile]) -> ParkingSegment? {
         func str(_ col: Int32) -> String {
             sqlite3_column_text(s, col).map { String(cString: $0) } ?? ""
         }
@@ -48,7 +86,10 @@ final class ParkingDatabase {
         let bearing: Double? = sqlite3_column_type(s, 7) == SQLITE_NULL ? nil
                                                                         : sqlite3_column_double(s, 7)
         let rules = Self.parseRules(str(9))
-        guard !rules.isEmpty else { return nil }
+        let meter: MeterInfo? = sqlite3_column_type(s, 12) == SQLITE_NULL ? nil
+            : profiles[sqlite3_column_int(s, 12)].map { MeterInfo(zone: str(11), profile: $0) }
+        let restrictions = Self.parseRestrictions(str(13))
+        guard !rules.isEmpty || meter != nil || !restrictions.isEmpty else { return nil }
         var curve = Self.parseGeometry(str(10))
         if curve.count < 2 { curve = [coord, coord] }
 
@@ -58,6 +99,9 @@ final class ParkingDatabase {
             streetBearing: bearing,
             halfBlockLengthMeters: sqlite3_column_double(s, 8),
             rules: rules,
+            meter: meter,
+            restrictions: restrictions,
+            moveWindows: ParkingSegment.moveWindows(rules: rules, restrictions: restrictions, meter: meter),
             curve: curve
         )
     }
@@ -71,6 +115,21 @@ final class ParkingDatabase {
             let days = entry[0].split(separator: ",").compactMap { ParkingDay(rawValue: String($0)) }
             guard !days.isEmpty else { return nil }
             return ParkingRule(days: days, startTime: entry[1], endTime: entry[2], rawDescription: "")
+        }
+    }
+
+    /// [["standing", [[day mask, start, end], ...], school days, part of block], ...]
+    private static func parseRestrictions(_ json: String) -> [CurbRestriction] {
+        guard !json.isEmpty, let data = json.data(using: .utf8),
+              let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[Any]] else { return [] }
+        return arr.compactMap { entry in
+            guard entry.count == 4,
+                  let kind = (entry[0] as? String).flatMap(CurbRestriction.Kind.init(rawValue:)),
+                  let raw = entry[1] as? [[Int]] else { return nil }
+            let windows = raw.compactMap { w in w.count == 3 ? DayWindow(dayMask: w[0], start: w[1], end: w[2]) : nil }
+            guard !windows.isEmpty else { return nil }
+            return CurbRestriction(kind: kind, windows: windows,
+                                   schoolDays: (entry[2] as? Int) == 1, partOfBlock: (entry[3] as? Int) == 1)
         }
     }
 

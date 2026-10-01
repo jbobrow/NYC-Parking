@@ -29,6 +29,8 @@
 		AA2800000000000000000002 /* MoveCountdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2800000000000000000001 /* MoveCountdown.swift */; };
 		AA2900000000000000000002 /* ScreenshotScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2900000000000000000001 /* ScreenshotScenes.swift */; };
 		AA2A00000000000000000002 /* DriveMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2A00000000000000000001 /* DriveMode.swift */; };
+		AA2D00000000000000000002 /* CurbRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2D00000000000000000001 /* CurbRules.swift */; };
+		AA2C00000000000000000002 /* Meters.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2C00000000000000000001 /* Meters.swift */; };
 		AA2B00000000000000000002 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2B00000000000000000001 /* OnboardingView.swift */; };
 /* End PBXBuildFile section */
 
@@ -57,6 +59,8 @@
 		BB2800000000000000000001 /* MoveCountdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoveCountdown.swift; sourceTree = "<group>"; };
 		BB2900000000000000000001 /* ScreenshotScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotScenes.swift; sourceTree = "<group>"; };
 		BB2A00000000000000000001 /* DriveMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveMode.swift; sourceTree = "<group>"; };
+		BB2D00000000000000000001 /* CurbRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurbRules.swift; sourceTree = "<group>"; };
+		BB2C00000000000000000001 /* Meters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meters.swift; sourceTree = "<group>"; };
 		BB2B00000000000000000001 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -103,6 +107,8 @@
 				BB2900000000000000000001 /* ScreenshotScenes.swift */,
 				BB2A00000000000000000001 /* DriveMode.swift */,
 				BB2B00000000000000000001 /* OnboardingView.swift */,
+				BB2C00000000000000000001 /* Meters.swift */,
+				BB2D00000000000000000001 /* CurbRules.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -209,6 +215,8 @@
 				AA2900000000000000000002 /* ScreenshotScenes.swift in Sources */,
 				AA2A00000000000000000002 /* DriveMode.swift in Sources */,
 				AA2B00000000000000000002 /* OnboardingView.swift in Sources */,
+				AA2C00000000000000000002 /* Meters.swift in Sources */,
+				AA2D00000000000000000002 /* CurbRules.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,7 +346,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -352,7 +360,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -367,7 +375,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 13;
+				CURRENT_PROJECT_VERSION = 14;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -381,7 +389,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -16,7 +16,14 @@ struct ParkingSegment: Identifiable, Hashable {
     let streetBearing: Double?
     /// Half the length of the curb line, in meters.
     let halfBlockLengthMeters: Double
+    /// Alternate-side cleaning rules; empty on metered curbs without cleaning.
     let rules: [ParkingRule]
+    /// Set on metered curbs.
+    let meter: MeterInfo?
+    /// Posted no-standing / no-stopping rules limited to set hours.
+    let restrictions: [CurbRestriction]
+    /// Every time the curb's rules say move or pay (see `moveWindows`).
+    let moveWindows: [CurbWindow]
     /// The curb line down the middle of the parking lane, trimmed back from each
     /// intersection (built offline from the NYC street centerline).
     let curve: [CLLocationCoordinate2D]
@@ -27,6 +34,8 @@ struct ParkingSegment: Identifiable, Hashable {
     /// Where the label and parked car sit. The geometry is already on the curb, so
     /// this is just the curb midpoint (kept for `ParkedCarRecord`).
     var sidewalkCoordinate: CLLocationCoordinate2D { coordinate }
+
+    var hasCleaning: Bool { !rules.isEmpty }
 
     var allDays: [ParkingDay] {
         let unique = Set(rules.flatMap { $0.days })

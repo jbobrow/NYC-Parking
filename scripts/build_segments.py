@@ -17,10 +17,16 @@ are grouped by (centerline segment, side of centerline). The curb polyline is th
 centerline offset by half the street width, trimmed back from each intersection
 by half the cross street's width.
 
+Metered curbs (from the ParkNYC block-face dataset) and time-limited
+no-standing / no-stopping signs (rush hour, school days, overnight) are snapped
+to the same (centerline block, side) keys, so a face can carry any mix of
+cleaning rules, a meter and restrictions.
+
 Sources
 -------
   Signs:       https://data.cityofnewyork.us/resource/nfid-uabd  (Parking Regulation Signs)
   Centerline:  https://data.cityofnewyork.us/resource/inkn-q76z  (CSCL)
+  Meters:      https://data.cityofnewyork.us/resource/e7yp-wx55  (ParkNYC Block Faces)
 
 Usage
 -----
@@ -45,6 +51,8 @@ from collections import Counter, defaultdict
 
 SIGNS_URL = "https://data.cityofnewyork.us/resource/nfid-uabd.json"
 CSCL_URL = "https://data.cityofnewyork.us/resource/inkn-q76z.json"
+METERS_URL = "https://data.cityofnewyork.us/resource/e7yp-wx55.json"
+DATASET_META_URL = "https://data.cityofnewyork.us/api/views/{id}.json"
 PAGE = 50_000
 
 # CSCL roadway types that can carry curbside parking: 1 = street, 10 = alley.
@@ -55,6 +63,8 @@ SIMILAR_RADIUS_M = 20.0    # tighter radius when the street name only loosely ma
 DEFAULT_WIDTH_FT = 34.0    # typical one-way side street, used when width is missing
 PARKING_LANE_M = 2.4       # the stripe is drawn down the middle of the parking lane
 CORNER_CLEARANCE_M = 2.0   # extra gap between the stripe end and the cross street's curb
+METER_SAMPLE_M = 15.0      # spacing of the points snapped along a metered curb
+PARTIAL_BLOCK_M = 40.0     # a no-standing rule signed once on a longer block covers part of it
 
 
 # ── Download ──────────────────────────────────────────────────────────────────
@@ -92,6 +102,35 @@ def fetch_centerline(cache_dir):
         "$select": "physicalid,full_street_name,stname_label,boroughcode,streetwidth,"
                    "number_park_lanes,rw_type,the_geom",
     }, os.path.join(cache_dir, "centerline.json"))
+
+
+def fetch_standing_signs(cache_dir):
+    return fetch_paged(SIGNS_URL, {
+        "$where": "upper(sign_description) LIKE '%NO STANDING%' OR upper(sign_description) LIKE '%NO STOPPING%'",
+        "$select": "order_number,borough,on_street,from_street,to_street,side_of_street,"
+                   "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code",
+    }, os.path.join(cache_dir, "standing.json"))
+
+
+def fetch_meters(cache_dir):
+    return fetch_paged(METERS_URL, {}, os.path.join(cache_dir, "meters.json"))
+
+
+def fetch_updated_dates(cache_dir):
+    """When NYC last updated each source, shown in the app as "data as of"."""
+    path = os.path.join(cache_dir, "updated.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    dates = {}
+    for key, dataset in (("signs_updated", "nfid-uabd"), ("meters_updated", "e7yp-wx55")):
+        with urllib.request.urlopen(DATASET_META_URL.format(id=dataset), timeout=60) as r:
+            ts = json.load(r).get("rowsUpdatedAt")
+        if ts:
+            dates[key] = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%d")
+    with open(path, "w") as f:
+        json.dump(dates, f)
+    return dates
 
 
 # ── State Plane (EPSG:2263, US ft) → WGS84 ────────────────────────────────────
@@ -198,6 +237,223 @@ def parse_rule(desc):
     if not days:
         return None
     return (",".join(days), m.group(1), m.group(2))
+
+
+# ── No standing / no stopping (read by Swift CurbRestriction) ────────────────
+
+_SIGN_TOKEN_RE = re.compile(
+    r"(?P<time>(\d{1,2}(?::\d\d)?)\s*(AM|PM)?\s*-\s*(\d{1,2}(?::\d\d)?)\s*(AM|PM)"
+    r"|(MIDNIGHT|NOON|\d{1,2}(?::\d\d)?\s*(?:AM|PM))\s*-\s*(MIDNIGHT|NOON|\d{1,2}(?::\d\d)?\s*(?:AM|PM)))"
+    r"|\b(?:(?P<d0>MON)(?:DAY)?|(?P<d1>TUE)(?:S|SDAY)?|(?P<d2>WED)(?:NESDAY)?|(?P<d3>THU)(?:RS|RSDAY)?"
+    r"|(?P<d4>FRI)(?:DAY)?|(?P<d5>SAT)(?:URDAY)?|(?P<d6>SUN)(?:DAY)?)\b"
+    r"|(?P<range>-|\bTHRU\b|\bTHROUGH\b)")
+_DAY_WORDS = r"(?:MON|TUE|WED|THU|FRI|SAT|SUN)[A-Z]*"
+# "EXCEPT SUNDAY", "EXCEPT SAT & SUN": only days right after EXCEPT are exempt
+# ("EXCEPT TRUCKS LOADING … MON-FRI" exempts trucks, not weekdays).
+_EXCEPT_DAYS_RE = re.compile(r"\bEXCEPT\s+(" + _DAY_WORDS + r"(?:\s*(?:&|,|AND|-|THRU)\s*" + _DAY_WORDS + r")*)")
+
+
+def _sign_clock(t):
+    t = t.replace(" ", "")
+    if t == "MIDNIGHT":
+        return 0
+    if t == "NOON":
+        return 12 * 60
+    m = re.match(r"(\d{1,2})(?::(\d\d))?(AM|PM)", t)
+    return _clock(m.group(1), m.group(2), m.group(3))
+
+
+def _sign_range(m):
+    """(start, end) minutes for a time-range token. "7-10AM" takes the end's
+    half of the day for the start, unless that would put it after the end."""
+    if m.group(6):
+        return _sign_clock(m.group(6)), _sign_clock(m.group(7))
+    end = _sign_clock(m.group(4) + m.group(5))
+    if m.group(3):
+        return _sign_clock(m.group(2) + m.group(3)), end
+    start = _sign_clock(m.group(2) + m.group(5))
+    if start >= end:
+        start = _sign_clock(m.group(2) + ("AM" if m.group(5) == "PM" else "PM"))
+    return start, end
+
+
+def _day_bits(start, end):
+    """Bits for one day, or the range start…end."""
+    if start is None:
+        return 1 << end
+    return sum(1 << i for i in range(start, end + 1))
+
+
+def _sign_days(text):
+    mask, prev, dash = 0, None, False
+    for m in _SIGN_TOKEN_RE.finditer(text):
+        if m.group("range"):
+            dash = prev is not None
+        elif not m.group("time"):
+            d = next(i for i in range(7) if m.group(f"d{i}"))
+            mask |= _day_bits(prev if dash else None, d)
+            prev, dash = d, False
+    return mask
+
+
+def parse_standing(desc):
+    """A time-limited no-standing or no-stopping sign, as
+    ("standing" | "stopping", [[day mask, start, end], ...], school days?).
+
+    None for anything that isn't limited to set hours. "Anytime" signs, bus
+    stops and fire zones mark a stretch of curb (often by a corner or hydrant)
+    rather than the block, and their reach isn't in the data, so they're left
+    to the posted signs. "School days" are read as Monday to Friday; there's no
+    school calendar to narrow them, so they err toward the rule applying, as do
+    seasonal signs ("MAY-SEPTEMBER"), which are read as year-round.
+    """
+    u = desc.upper().replace("–", "-")
+    if "NO STOPPING" in u:
+        kind = "stopping"
+    elif "NO STANDING" in u:
+        kind = "standing"
+    else:
+        return None
+    if "ANYTIME" in u or ("BUS" in u and "STOP" in u) or "OTHER TIMES" in u:
+        return None
+    u = re.sub(r"\([^)]*\)", " ", u)            # "(SUPERSEDES SP-1120B)", "(SYMBOLS)"
+    u = re.sub(r"<?-{2,}>?|<-+|->", " ", u)     # arrows
+    school = "SCHOOL DAYS" in u
+
+    exempt = 0
+    for m in _EXCEPT_DAYS_RE.finditer(u):
+        exempt |= _sign_days(m.group(1))
+    u = _EXCEPT_DAYS_RE.sub(" ", u)
+
+    # Days apply to the times that follow them ("MONDAY-FRIDAY 7AM-10PM SUNDAY
+    # 7AM-5PM"), or to the times before them when named last ("7-10AM MON THRU
+    # FRI").
+    groups = []          # [day mask, [(start, end), ...]]
+    days, prev, dash, trailing = 0, None, False, False
+    for m in _SIGN_TOKEN_RE.finditer(u):
+        if m.group("time"):
+            if days or not groups or trailing:
+                groups.append([days, []])
+            groups[-1][1].append(_sign_range(m))
+            days, prev, dash, trailing = 0, None, False, False
+        elif m.group("range"):
+            dash = prev is not None
+        else:
+            d = next(i for i in range(7) if m.group(f"d{i}"))
+            bits = _day_bits(prev if dash else None, d)
+            if groups and not groups[-1][0] and not days:
+                groups[-1][0] |= bits        # days named after their times
+                trailing = True
+            elif trailing:
+                groups[-1][0] |= bits
+            else:
+                days |= bits
+            prev, dash = d, False
+    if not groups:
+        return None
+    default = 0x1F if school else 0x7F
+    windows = []
+    for mask, times in groups:
+        mask = (mask or default) & ~exempt
+        for start, end in times:
+            if end <= start:
+                end += 24 * 60      # overnight: "10PM-5AM"
+            if mask:
+                windows.append([mask, start, end])
+    return (kind, windows, school) if windows else None
+
+
+# ── Meter parsing (read by Swift MeterInfo) ───────────────────────────────────
+
+_WEEKDAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
+# Time ranges before days, so a range's own dash isn't read as a day range.
+_METER_TOKEN_RE = re.compile(
+    r"(?P<time>(\d{1,2})(?::(\d\d))?\s*(AM|PM)\s*-\s*(\d{1,2})(?::(\d\d))?\s*(AM|PM))"
+    r"|(?P<day>MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)(?:DAY)?"
+    r"|(?P<dash>-)")
+_VEHICLES = {"All Vehicles": "all", "Dual (Commercial / All Vehicles)": "dual",
+             "Commercial Only": "commercial"}
+
+
+def _clock(h, m, ampm):
+    return (int(h) % 12 + (12 if ampm == "PM" else 0)) * 60 + int(m or 0)
+
+
+def parse_meter_hours(text):
+    """"Monday-Friday 8:30 AM-12 PM, 2 PM-7 PM, Saturday 8 AM-7 PM" →
+    [[day mask, start, end], ...] with Monday as bit 0 and minutes after
+    midnight; an end at or before the start runs past midnight.
+
+    A time range applies to the days most recently named. Seasonal variants
+    ("… Jan-May, … June-Aug") keep every window, so the union errs toward
+    meters being on.
+    """
+    windows, days, prev_day, dash, after_time = [], 0, None, False, False
+    for m in _METER_TOKEN_RE.finditer((text or "").upper()):
+        if m.group("time"):
+            g = m.groups()
+            start, end = _clock(g[1], g[2], g[3]), _clock(g[4], g[5], g[6])
+            if end <= start:
+                end += 24 * 60
+            windows.append([days or 0x7F, start, end])
+            after_time, dash = True, False
+        elif m.group("day"):
+            d = _WEEKDAYS.index(m.group("day"))
+            if after_time:
+                days, after_time = 0, False
+            if dash and prev_day is not None:
+                for i in range(prev_day, d + 1):
+                    days |= 1 << i
+            else:
+                days |= 1 << d
+            prev_day, dash = d, False
+        else:
+            dash = prev_day is not None and not after_time
+    return windows
+
+
+def _first_hour_cents(rate):
+    m = re.search(r"\$(\d+(?:\.\d\d)?) (?:1st Hour|per Hour|per 30 Minutes)", rate or "")
+    if not m:
+        return None
+    cents = round(float(m.group(1)) * 100)
+    return cents * 2 if "per 30 Minutes" in m.group(0) else cents
+
+
+def _limit_minutes(limit):
+    m = re.search(r"(\d+) (Hour|Minute)", limit or "")
+    return int(m.group(1)) * (60 if m.group(2) == "Hour" else 1) if m else None
+
+
+def _na(value):
+    value = (value or "").strip()
+    return None if value in ("", "N/A") else value
+
+
+def parse_meter(row):
+    """Compact meter record for one ParkNYC block face, or None if unusable."""
+    vehicles = _VEHICLES.get((row.get("vehicle_ty") or "").strip())
+    zone = (row.get("pay_by_cel") or "").strip()
+    if not vehicles or not zone:
+        return None
+    meter = {"zone": zone, "vehicles": vehicles}
+    for prefix, fields in (("", ("all_vehicl", "all_vehi_1", "all_vehi_2")),
+                           ("commercial_", ("commercial", "commerci_1", "commerci_2"))):
+        limit, hours, rate = (_na(row.get(f)) for f in fields)
+        windows = parse_meter_hours(hours)
+        if not windows:
+            continue
+        meter[prefix + "windows"] = windows
+        meter[prefix + "hours"] = hours
+        if limit:
+            meter[prefix + "limit"] = limit
+            meter[prefix + "limit_min"] = _limit_minutes(limit)
+        if rate:
+            meter[prefix + "rate"] = rate
+            meter[prefix + "first_hour"] = _first_hour_cents(rate)
+    if "windows" not in meter and "commercial_windows" not in meter:
+        return None
+    return {k: v for k, v in meter.items() if v is not None}
 
 
 # ── Street-name normalisation ─────────────────────────────────────────────────
@@ -393,7 +649,7 @@ def compass_side(nx, ny):
 
 # ── Main build ────────────────────────────────────────────────────────────────
 
-def build(signs_raw, cscl_raw):
+def build(signs_raw, cscl_raw, meters_raw, standing_raw):
     # Centerline segments, in metres.
     segs = {}
     for r in cscl_raw:
@@ -504,28 +760,10 @@ def build(signs_raw, cscl_raw):
         c = display.get(key)
         return c.most_common(1)[0][0] if c else " ".join(fallback.upper().split())
 
-    # Snap signs.
-    faces = defaultdict(lambda: {"rules": [], "rule_keys": set(), "names": Counter(),
-                                 "n": 0})
-    stats = Counter()
-    for sg in signs_raw:
-        rule = parse_rule(sg.get("sign_description") or "")
-        if not rule:
-            stats["no_rule"] += 1
-            continue
-        try:
-            x_ft = float(sg.get("sign_x_coord") or 0)
-            y_ft = float(sg.get("sign_y_coord") or 0)
-        except ValueError:
-            x_ft = y_ft = 0
-        if not x_ft or not y_ft:
-            stats["no_coord"] += 1
-            continue
-        lat, lon = sp_to_latlon(x_ft, y_ft)
-        px, py = to_xy(lat, lon)
-        want = name_key(sg.get("on_street"))
-        boro = BORO_CODES.get((sg.get("borough") or "").upper())
-
+    def face_key(px, py, street, borough, side_label, stats, kind):
+        """(block id, "L"/"R") of the block face nearest a point, or None."""
+        want = name_key(street)
+        boro = BORO_CODES.get((borough or "").strip().upper())
         gx, gy = int(px // CELL), int(py // CELL)
         cands = set()
         for dx in (-1, 0, 1):
@@ -550,45 +788,125 @@ def build(signs_raw, cscl_raw):
 
         if best_named:
             hit = best_named
-            stats["snapped_named"] += 1
+            stats[f"{kind} snapped_named"] += 1
         elif best_similar:
             hit = best_similar
-            stats["snapped_similar"] += 1
+            stats[f"{kind} snapped_similar"] += 1
         else:
-            stats["unmatched"] += 1
-            continue
+            stats[f"{kind} unmatched"] += 1
+            return None
 
         _, pid, side, (dx, dy) = hit
         # Which side of the street: the posted side_of_street. Sign coordinates
         # are geocoded onto the centerline (median ~1 m from it), so their
         # position only decides the side when the label is missing or runs
         # along the street.
-        label = SIDE_VECTORS.get((sg.get("side_of_street") or "").strip().upper())
+        label = SIDE_VECTORS.get((side_label or "").strip().upper())
         left_dot = (-dy * label[0] + dx * label[1]) if label else 0.0
         if abs(left_dot) >= 0.15:
             on_left = left_dot > 0
-            stats["side_from_label"] += 1
+            stats[f"{kind} side_from_label"] += 1
             if (side > 0) != on_left:
-                stats["side_label_overrode_position"] += 1
+                stats[f"{kind} side_label_overrode_position"] += 1
         elif abs(side) > 1e-9:
             on_left = side > 0
-            stats["side_from_position"] += 1
+            stats[f"{kind} side_from_position"] += 1
         else:
-            stats["side_unknown"] += 1
-            continue
+            stats[f"{kind} side_unknown"] += 1
+            return None
         bid, rev = seg_block[pid]
-        is_left = on_left != rev
-        key = (bid, "L" if is_left else "R")
+        return (bid, "L" if on_left != rev else "R")
+
+    # Snap signs.
+    faces = defaultdict(lambda: {"rules": [], "rule_keys": set(), "names": Counter(),
+                                 "n": 0, "meter": None, "meter_len": 0.0,
+                                 "standing": defaultdict(list)})
+    stats = Counter()
+    for sg in signs_raw:
+        rule = parse_rule(sg.get("sign_description") or "")
+        if not rule:
+            stats["signs no_rule"] += 1
+            continue
+        try:
+            x_ft = float(sg.get("sign_x_coord") or 0)
+            y_ft = float(sg.get("sign_y_coord") or 0)
+        except ValueError:
+            x_ft = y_ft = 0
+        if not x_ft or not y_ft:
+            stats["signs no_coord"] += 1
+            continue
+        px, py = to_xy(*sp_to_latlon(x_ft, y_ft))
+        key = face_key(px, py, sg.get("on_street"), sg.get("borough"),
+                       sg.get("side_of_street"), stats, "signs")
+        if not key:
+            continue
         f = faces[key]
         f["n"] += 1
         f["names"][sg.get("on_street") or ""] += 1
         if rule not in f["rule_keys"]:
             f["rule_keys"].add(rule)
             f["rules"].append(rule)
+    print(f"Block faces with rules: {len(faces)}")
+
+    # Snap time-limited no-standing / no-stopping signs, keeping where along
+    # the block each one stands, to judge how much of the block a rule covers.
+    for sg in standing_raw:
+        parsed = parse_standing(sg.get("sign_description") or "")
+        if not parsed:
+            stats["standing not_time_limited"] += 1
+            continue
+        try:
+            x_ft = float(sg.get("sign_x_coord") or 0)
+            y_ft = float(sg.get("sign_y_coord") or 0)
+        except ValueError:
+            x_ft = y_ft = 0
+        if not x_ft or not y_ft:
+            stats["standing no_coord"] += 1
+            continue
+        px, py = to_xy(*sp_to_latlon(x_ft, y_ft))
+        key = face_key(px, py, sg.get("on_street"), sg.get("borough"),
+                       sg.get("side_of_street"), stats, "standing")
+        if not key:
+            continue
+        _, along, _, _ = project_on_polyline(px, py, blocks[key[0]]["pts"])
+        rule = json.dumps(parsed, separators=(",", ":"))
+        faces[key]["standing"][rule].append(along)
+
+    # Snap metered curbs. One ParkNYC face can span several blocks, so sample
+    # points along it; each block face that collects enough samples gets the
+    # meter. Where two meters land on one face (a block split between zones),
+    # the one covering more of it wins.
+    for row in meters_raw:
+        meter = parse_meter(row)
+        lines = (row.get("the_geom") or {}).get("coordinates") or []
+        pts = [to_xy(lat, lon) for line in lines for lon, lat in line]
+        if not meter or len(pts) < 2:
+            stats["meters unusable"] += 1
+            continue
+        length = polyline_length(pts)
+        n = max(1, round(length / METER_SAMPLE_M))
+        hits = Counter()
+        for i in range(n):
+            (px, py), _ = point_and_bearing_at(pts, (i + 0.5) * length / n)
+            key = face_key(px, py, row.get("on_street"), row.get("borough"),
+                           row.get("side_of_st"), Counter(), "meters")
+            if key:
+                hits[key] += 1
+        # Ignore strays near the ends that fall on the next block.
+        keys = [k for k, c in hits.items() if c >= min(2, n) or c == max(hits.values())]
+        stats["meters snapped" if keys else "meters unmatched"] += 1
+        stats["meter faces"] += len(keys)
+        for key in keys:
+            f = faces[key]
+            covered = hits[key] * length / n
+            if f["meter"] is not None:
+                stats["meters sharing_a_face"] += 1
+            if covered > f["meter_len"]:
+                f["meter"], f["meter_len"] = meter, covered
 
     for k, v in sorted(stats.items()):
-        print(f"  signs {k}: {v}")
-    print(f"Block faces with rules: {len(faces)}")
+        print(f"  {k}: {v}")
+    print(f"Block faces with rules or meters: {len(faces)}")
 
     # Build geometry per face.
     out = []
@@ -644,13 +962,30 @@ def build(signs_raw, cscl_raw):
             "bearing": round(bearing, 2),
             "half_len": round(length / 2, 1),
             "rules": [list(r) for r in rules],
+            "meter": f["meter"],
+            "restrictions": restrictions(f["standing"], polyline_length(pts)),
             "geom": geom,
         })
     print(f"Block faces written: {len(out)}")
     return out
 
 
-def write_db(faces, path):
+def restrictions(standing, block_len):
+    """[[kind, windows, school days?, part of block?], ...] for a face.
+
+    Each sign applies until the next one, so a rule's signs rarely span its
+    whole stretch; but a rule posted only once on a longer block is likely a
+    short zone (by a school entrance, say) rather than the block.
+    """
+    out = []
+    for rule, positions in sorted(standing.items()):
+        kind, windows, school = json.loads(rule)
+        partial = len(positions) == 1 and block_len > PARTIAL_BLOCK_M
+        out.append([kind, windows, int(school), int(partial)])
+    return out
+
+
+def write_db(faces, path, updated):
     tmp = path + ".tmp"
     if os.path.exists(tmp):
         os.remove(tmp)
@@ -665,21 +1000,40 @@ def write_db(faces, path):
             bearing REAL,
             half_len REAL NOT NULL,
             rules TEXT NOT NULL,
-            geom TEXT
+            geom TEXT,
+            meter_zone TEXT,
+            meter_profile INTEGER,
+            restrictions TEXT
         );
         CREATE INDEX idx_bbox ON segments(lat, lon);
+        -- Meter hours, limits and rates, shared by every curb that has them
+        -- (a few hundred distinct profiles across ~12k metered curbs).
+        CREATE TABLE meter_profiles (id INTEGER PRIMARY KEY, spec TEXT NOT NULL);
     """)
     generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     c.execute("INSERT INTO meta VALUES ('generated_at', ?)", (generated_at,))
-    c.execute("INSERT INTO meta VALUES ('schema', '2')")
+    c.execute("INSERT INTO meta VALUES ('schema', '4')")
+    for key, value in updated.items():
+        c.execute("INSERT INTO meta VALUES (?, ?)", (key, value))
+    profiles = {}
     for f in faces:
-        c.execute("INSERT OR REPLACE INTO segments VALUES (?,?,?,?,?,?,?,?,?,?,?)", (
+        zone = profile = None
+        if f["meter"]:
+            spec = dict(f["meter"])
+            zone = spec.pop("zone")
+            key = json.dumps(spec, separators=(",", ":"), sort_keys=True)
+            profile = profiles.setdefault(key, len(profiles))
+        c.execute("INSERT OR REPLACE INTO segments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
             f["id"], f["street"], f["from"], f["to"], f["side"],
             f["lat"], f["lon"], f["bearing"], f["half_len"],
             json.dumps(f["rules"], separators=(",", ":")),
             # "lat,lon;lat,lon;…" — compact and trivial to parse in Swift.
             ";".join(f"{la},{lo}" for la, lo in f["geom"]),
+            zone, profile,
+            json.dumps(f["restrictions"], separators=(",", ":")) if f["restrictions"] else None,
         ))
+    c.executemany("INSERT INTO meter_profiles VALUES (?, ?)",
+                  [(i, spec) for spec, i in profiles.items()])
     conn.commit()
     c.execute("VACUUM")
     conn.close()
@@ -699,8 +1053,16 @@ def main():
     print("Fetching street centerline…")
     cscl = fetch_centerline(args.cache)
     print(f"  {len(cscl)} centerline segments")
-    faces = build(signs, cscl)
-    write_db(faces, args.out)
+    print("Fetching metered block faces…")
+    meters = fetch_meters(args.cache)
+    print("Fetching no-standing / no-stopping signs…")
+    standing = fetch_standing_signs(args.cache)
+    print(f"  {len(standing)} signs")
+    print(f"  {len(meters)} metered block faces")
+    updated = fetch_updated_dates(args.cache)
+    print(f"  source dates: {updated}")
+    faces = build(signs, cscl, meters, standing)
+    write_db(faces, args.out, updated)
 
 
 if __name__ == "__main__":

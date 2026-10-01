@@ -19,16 +19,23 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
   - Far out: a run of day-colored dots on each block face
   - Mid: day-colored stripes down each curb, with day-name pills (Mon, Tue, Wed…) lying along the street
   - Close in: pills + restriction time (e.g. 8 AM–11 AM)
-- **Countdown mode** — the hourglass button recolors every block by how soon a car parked there now would have to move: red 0–1 days, yellow 2–6, green 7+ (ASP holidays skipped)
+- **Meters view** — every metered curb colored by whether it's free, paid or commercial-only right now, with rate and time limit ("$2.50 · 2 HR") on the pills; meters off on Sundays and the holidays DOT suspends them
+- **Pay with ParkNYC** — a metered block's sheet shows its limit, hours, rate and six-digit ParkNYC zone, and hands off to ParkNYC with the zone copied
+- **Countdown mode** — recolors every block by how soon a car parked there now would have to move, or pay the meter: red 0–1 days, yellow 2–6, green 7+. Counts street cleaning, rush-hour / school / overnight no-standing and no-stopping rules, and meter hours, each skipping the holidays it's suspended on. Metered curbs are drawn in meter blue, with the countdown on their pills ("P · 1 DAY")
+- **Curb verdict** — a block's sheet leads with what its rules mean right now, strictest first ("No standing until 7 PM", "Free until tomorrow 8:30 AM · then street cleaning")
 - **"Park here" mode** — tap any marker to record where you left your car; drag it along the block to the exact spot
 - **Next move date** — banner shows the next day you need to move, skipping holidays
-- **Reminders** — optional 8 AM notification on the day you need to move
-- **Driving mode** — course-up navigation with a live heading arrow
+- **Reminders** — notifications the evening before, an hour before and ten minutes before the next cleaning, no-standing rule or meter start
+- **Driving mode** — a 3D view with the parking rules on each side of you, including meters
 - **Holiday calendar** — browse the full NYC ASP holiday list
 
 ## Data
 
-Parking restriction data comes from the [NYC Open Data alternate-side parking sign dataset](https://data.cityofnewyork.us/resource/nfid-uabd.json). The app ships with a pre-built SQLite database (`segments.db`), built offline by `scripts/build_segments.py`: each sign is snapped to its block on the [NYC street centerline](https://data.cityofnewyork.us/resource/inkn-q76z) and grouped by block face, giving every face a curb polyline trimmed back from the intersections.
+Parking restriction data comes from the [NYC Open Data alternate-side parking sign dataset](https://data.cityofnewyork.us/resource/nfid-uabd.json), and meters from [ParkNYC Block Faces](https://data.cityofnewyork.us/d/e7yp-wx55) (hours, limits, rates and zone per metered curb). The app ships with a pre-built SQLite database (`segments.db`), built offline by `scripts/build_segments.py`: each sign, and points along each metered curb, are snapped to their block on the [NYC street centerline](https://data.cityofnewyork.us/resource/inkn-q76z) and grouped by block face, giving every face a curb polyline trimmed back from the intersections. Meter hours shared by many curbs are stored once in a `meter_profiles` table. The dates NYC last updated each dataset are stored too, and shown in the app as "data as of".
+
+Meter holidays come from the same DOT holiday calendar as ASP holidays: each entry says whether meters are in effect.
+
+No-standing and no-stopping signs limited to set hours (rush hour, school days, overnight) are parsed and snapped the same way. "Anytime" signs, bus stops and fire zones mark a stretch of curb whose reach isn't in the data, so they're left to the posted signs. A rule signed only once on a longer block is flagged as covering part of it, shown on the block's sheet but not counted on the map. School days are read as Monday to Friday, since there's no school calendar to narrow them.
 
 ## Architecture
 
@@ -40,6 +47,8 @@ Parking restriction data comes from the [NYC Open Data alternate-side parking si
 | `ParkingMapView` | `MKMapView` wrapper: vector stripe/dot overlays, rotating pill annotations with overlap culling, tap hit-testing, draggable parked car |
 | `ParkingLabel` | SwiftUI pill design, rendered once per unique label into a cached image |
 | `MoveCountdown` | Days-until-move per block (holiday-aware) and the countdown color buckets |
+| `CurbRules` | Day windows, no-standing / no-stopping rules, and the move-or-pay windows countdowns and reminders run on |
+| `Meters` | Meter profiles, free/paid/commercial-only status at a moment, and the ParkNYC hand-off |
 | `SignParser` | Parses raw NYC sign descriptions into structured `ParkingRule` objects |
 | `ASPHolidayService` | Fetches and caches the NYC ASP holiday calendar |
 

@@ -4,6 +4,21 @@ struct NamedHoliday: Identifiable {
     let id = UUID()
     let name: String
     let date: Date
+    /// Parking meters are off too. DOT's calendar says so for each holiday;
+    /// otherwise it's the six major legal holidays.
+    let metersSuspended: Bool
+
+    init(name: String, date: Date, metersSuspended: Bool? = nil) {
+        self.name = name
+        self.date = date
+        self.metersSuspended = metersSuspended ?? Self.majorLegalHolidays.contains { name.hasPrefix($0) }
+    }
+
+    /// The holidays when meters (and most stopping, standing and parking rules)
+    /// are suspended. Prefixes, so "Lunar New Year" doesn't count.
+    private static let majorLegalHolidays = [
+        "New Year", "Memorial Day", "Independence Day", "Labor Day", "Thanksgiving", "Christmas",
+    ]
 }
 
 /// Returns whether a date falls on an NYC alternate-side parking holiday.

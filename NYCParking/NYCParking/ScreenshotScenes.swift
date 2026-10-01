@@ -67,6 +67,50 @@ struct ScreenshotScene {
             center: .init(latitude: 40.6897, longitude: -73.9740), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-10-01T09:45:00-04:00",
             startsDriving: true),
+        // Meters view along Park Slope's 7th Ave on a weekday evening, paid until 7 PM.
+        "meters": ScreenshotScene(
+            center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (420, 190),
+            heading: 30, mode: .meters, clock: "2026-09-30T17:30:00-04:00"),
+        // A metered block with cleaning rules, in the detail sheet.
+        "meter-detail": ScreenshotScene(
+            center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (700, 320),
+            heading: 30, mode: .meters, clock: "2026-09-30T17:30:00-04:00",
+            selectedSegmentID: "56342L"),
+        // The same block on a Sunday, and on Thanksgiving: meters off.
+        "meter-sunday": ScreenshotScene(
+            center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (700, 320),
+            heading: 30, mode: .meters, clock: "2026-10-04T12:00:00-04:00",
+            selectedSegmentID: "56342L"),
+        "meter-holiday": ScreenshotScene(
+            center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (700, 320),
+            heading: 30, mode: .meters, clock: "2026-11-26T12:00:00-05:00",
+            selectedSegmentID: "56342L"),
+        // Drive mode down 7th Ave while the meters run; replay with
+        // xcrun simctl location booted start --speed=8 40.674155,-73.975679 40.670219,-73.978813
+        "drive-meters": ScreenshotScene(
+            center: .init(latitude: 40.6741, longitude: -73.9757), spanMeters: (600, 280),
+            heading: 210, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
+            startsDriving: true),
+        // The same drive after the meters stop for the night.
+        "drive-meters-night": ScreenshotScene(
+            center: .init(latitude: 40.6741, longitude: -73.9757), spanMeters: (600, 280),
+            heading: 210, mode: .countdown, clock: "2026-09-30T20:30:00-04:00",
+            startsDriving: true),
+        // Franklin Ave in Crown Heights during the evening rush: no standing 4–7 PM
+        // outranks the meter; side streets keep their cleaning countdowns.
+        "rush-hour": ScreenshotScene(
+            center: .init(latitude: 40.6800, longitude: -73.9555), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00"),
+        "rush-detail": ScreenshotScene(
+            center: .init(latitude: 40.6800, longitude: -73.9555), spanMeters: (600, 280),
+            heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
+            selectedSegmentID: "63757L"),
+        // A commercial-only curb in the Financial District during its hours:
+        // parking here asks whether it's a commercial vehicle.
+        "commercial": ScreenshotScene(
+            center: .init(latitude: 40.7075, longitude: -74.0084), spanMeters: (600, 280),
+            heading: 0, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "820R"),
         "holidays": ScreenshotScene(
             center: .init(latitude: 40.7352, longitude: -73.9838), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",

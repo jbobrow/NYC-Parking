@@ -3,7 +3,7 @@ import CoreLocation
 
 struct ParkedCarSheet: View {
     let record: ParkedCarRecord
-    let nextMoveDate: Date?
+    let nextMove: MoveDeadline?
     let onDirections: () -> Void
     let onUnpark: () -> Void
 
@@ -55,8 +55,8 @@ struct ParkedCarSheet: View {
                 .padding(.vertical, 16)
 
             // Move-by date
-            if let date = nextMoveDate {
-                Label("Move by \(moveDateString(date))", systemImage: "calendar.badge.clock")
+            if let move = nextMove {
+                Label("\(move.verb) \(moveDateString(move.date))", systemImage: "calendar.badge.clock")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 20)

@@ -426,9 +426,7 @@ struct DriveHUD: View {
 
     var body: some View {
         TimelineView(.everyMinute) { _ in
-            let calendar = CountdownCalendar { date in
-                holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
-            }
+            let calendar = CountdownCalendar(holidays: holidays)
             VStack(spacing: 8) {
                 header
                 if let match {
@@ -486,9 +484,7 @@ private struct SideCard: View {
     let calendar: CountdownCalendar
 
     var body: some View {
-        let countdown = segment.flatMap { MoveCountdown.next(for: $0.rules, in: calendar) }
-        let urgency = segment.map { _ in MoveUrgency(days: countdown?.days) }
-        let (title, detail) = texts(countdown)
+        let c = content()
 
         VStack(alignment: side == .left ? .leading : .trailing, spacing: 2) {
             HStack(spacing: 4) {
@@ -499,37 +495,118 @@ private struct SideCard: View {
             .font(.system(size: 11, weight: .heavy, design: .rounded))
             .opacity(0.75)
 
-            Text(title)
+            Text(c.title)
                 .font(.system(size: 26, weight: .heavy, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text(detail)
+            Text(c.detail)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            if let more = c.more {
+                Text(more)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .opacity(0.85)
+            }
         }
-        .foregroundStyle(urgency?.textColor ?? .primary)
+        .foregroundStyle(c.fill == nil ? .primary : c.textColor)
         .frame(maxWidth: .infinity, alignment: side == .left ? .leading : .trailing)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background {
-            if let urgency {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(urgency.color)
+            if let fill = c.fill {
+                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(fill)
             }
         }
-        .modifier(GlassRoundedBackground(enabled: urgency == nil))
+        .modifier(GlassRoundedBackground(enabled: c.fill == nil))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(side == .left ? "Left" : "Right") side: \(title), \(detail)")
+        .accessibilityLabel("\(side == .left ? "Left" : "Right") side: \(c.title), \(c.detail)"
+                            + (c.more.map { ", \($0)" } ?? ""))
     }
 
-    private func texts(_ c: MoveCountdown?) -> (String, String) {
-        guard segment != nil else { return ("NO RULES", "No posted cleaning") }
-        guard let c else { return ("7+ DAYS", "No cleaning this week") }
-        if c.isUnderway {
-            return ("NOW", c.endMinutes.map { "Until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "Cleaning now")
+    private struct Content {
+        let title: String
+        let detail: String
+        /// A second, smaller line: what comes after.
+        var more: String? = nil
+        let fill: Color?
+        var textColor: Color = .white
+    }
+
+    private func content() -> Content {
+        guard let segment else { return Content(title: "NO RULES", detail: "No posted rules", fill: nil) }
+        let countdown = MoveCountdown.next(for: segment.moveWindows, in: calendar)
+        let cantPark = countdown.map { $0.isUnderway && $0.kind != .meter } ?? false
+
+        // Metered curbs say what you can do right now: pay (blue) or park free
+        // (green), with the next cleaning or no-standing time after it. Red is
+        // kept for when you can't park at all.
+        if let meter = segment.meter, !cantPark {
+            let state = meter.profile.state(in: calendar)
+            let pill = MeterPill(meter: meter, state: state)
+            let next = MoveCountdown.next(for: segment.moveWindows.filter { $0.kind != .meter && $0.kind != .commercial },
+                                          in: calendar)
+            switch state {
+            case .paid:
+                return Content(title: pill.title, detail: pill.detail.map(Self.capitalized) ?? "Pay the meter",
+                               more: next.map { Self.capitalized(Self.eventText($0)) },
+                               fill: MeterState.Kind.paid.color)
+            case .free(let resumes):
+                // Soonest first: "Clean Thu 8:30 AM", then "Pay Thu 9 AM".
+                var parts: [(order: Int, text: String)] = []
+                if let next { parts.append((next.days * 1440 + next.startMinutes, Self.eventText(next))) }
+                if let resumes { parts.append((resumes.days * 1440 + resumes.minutes, "pay \(resumes.text)")) }
+                let lines = parts.sorted { $0.order < $1.order }.map { Self.capitalized($0.text) }
+                return Content(title: "FREE", detail: lines.first ?? "Meters off", more: lines.dropFirst().first,
+                               fill: MeterState.Kind.free.color)
+            case .commercialOnly:
+                break   // can't park: shown like any other restriction below
+            }
         }
-        let day = c.weekday.short.capitalized
-        return (MoveCountdown.shortText(c), "\(day) \(ParkingTime.formatRange(c.startMinutes, c.endMinutes))")
+
+        let urgency = MoveUrgency(days: countdown?.days)
+        let (title, detail) = texts(countdown, segment: segment)
+        return Content(title: title, detail: detail, fill: urgency.color, textColor: urgency.textColor)
+    }
+
+    private func texts(_ c: MoveCountdown?, segment: ParkingSegment) -> (String, String) {
+        guard let c else { return ("7+ DAYS", segment.hasCleaning ? "No cleaning this week" : "Nothing this week") }
+        if c.isUnderway {
+            let end = c.endMinutes.map { ParkingTime.format(minutes: $0 % (24 * 60)) }
+            let until = end.map { " until \($0)" } ?? " now"
+            switch c.kind {
+            case .cleaning:   return ("NOW", end.map { "Until \($0)" } ?? "Cleaning now")
+            case .noStanding: return ("NOW", "No standing" + until)
+            case .noStopping: return ("NOW", "No stopping" + until)
+            case .commercial: return ("NOW", "Trucks only" + until)
+            case .meter:      return ("PAY", "Paid" + until)
+            }
+        }
+        if c.kind == .cleaning {
+            let day = c.weekday.short.capitalized
+            return (MoveCountdown.shortText(c), "\(day) \(ParkingTime.formatRange(c.startMinutes, c.endMinutes))")
+        }
+        return (MoveCountdown.shortText(c), Self.capitalized(Self.eventText(c)))
+    }
+
+    /// "clean Thu 8:30 AM", "no standing 4 PM", "pay 9 AM"
+    private static func eventText(_ c: MoveCountdown) -> String {
+        let what: String
+        switch c.kind {
+        case .cleaning:   what = "clean"
+        case .noStanding: what = "no standing"
+        case .noStopping: what = "no stopping"
+        case .commercial: what = "trucks only"
+        case .meter:      what = "pay"
+        }
+        let time = ParkingTime.format(minutes: c.startMinutes)
+        return "\(what) \(c.days == 0 ? time : "\(c.weekday.short.capitalized) \(time)")"
+    }
+
+    private static func capitalized(_ text: String) -> String {
+        text.prefix(1).uppercased() + text.dropFirst()
     }
 }
 
