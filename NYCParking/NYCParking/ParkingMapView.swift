@@ -711,7 +711,7 @@ enum StripeBuilder {
 
     /// One solid line per block, colored by days until the move. Greener lines are drawn last so
     /// long-term parking stands out where lines overlap at far zoom. Metered curbs are drawn in
-    /// neutral gray underneath (they're never long-term parking); their pills carry the countdown.
+    /// meter blue underneath, as everywhere in the app; their pills carry the countdown.
     static func countdownOverlays(for segments: [ParkingSegment],
                                   entries: [String: MoveCountdown]) -> [StripeOverlay] {
         struct Key: Hashable { let row: Int; let col: Int; let urgency: MoveUrgency?; }
@@ -732,11 +732,8 @@ enum StripeBuilder {
             }
     }
 
-    /// Metered curbs in the countdown view: charcoal, which reads against both
-    /// the gray road and the pale sidewalk (lighter on the dark map).
-    static let meteredCurbColor = UIColor { traits in
-        UIColor(white: traits.userInterfaceStyle == .dark ? 0.72 : 0.36, alpha: 1)
-    }
+    /// Metered curbs in the countdown view: the same blue as paid meters.
+    static let meteredCurbColor = MeterState.Kind.paid.uiColor
 
     /// One solid line per metered curb, colored by whether it's free, paid or
     /// commercial-only right now.

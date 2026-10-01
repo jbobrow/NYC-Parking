@@ -260,13 +260,14 @@ struct ContentView: View {
                 sourceDates: dataService.sourceDates,
                 isParked: parkedRecord?.segmentID == segment.id,
                 hasAnyParkedCar: parkedRecord != nil,
-                onPark: {
+                onPark: { isCommercialVehicle in
                     if parkedRecord?.segmentID == segment.id {
                         parkedRecord = nil
                         ParkedCarRecord.clear()
                         notificationService.cancelPendingNotifications()
                     } else {
-                        let record = ParkedCarRecord(segment: segment, offsetMeters: 20)
+                        let record = ParkedCarRecord(segment: segment, offsetMeters: 20,
+                                                     isCommercialVehicle: isCommercialVehicle)
                         parkedRecord = record
                         record.save()
                         if let deadline = record.nextMove(after: AppClock.now, holidays: holidayService.holidays) {
@@ -503,7 +504,7 @@ struct ContentView: View {
                 ForEach(MoveUrgency.allCases, id: \.self) { urgency in
                     legendSwatch(urgency.color, label: urgency.legendLabel)
                 }
-                // Metered curbs: gray, with the countdown on their pills.
+                // Metered curbs: meter blue, with the countdown on their pills.
                 legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
                     .padding(.leading, 6)
             }

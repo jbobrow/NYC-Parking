@@ -43,12 +43,16 @@ struct ParkedCarRecord: Codable, Equatable {
     /// Every time the curb's rules say move or pay. Missing in records saved
     /// before standing rules and meters were tracked (cleaning only, then).
     let moveWindows: [CurbWindow]?
+    /// Asked when parking at a curb with commercial-only hours: commercial
+    /// vehicles pay the meter then, other cars have to move. Nil elsewhere.
+    let isCommercialVehicle: Bool?
     let street: String
     let fromStreet: String
     let toStreet: String
     let side: String
 
-    init(segment: ParkingSegment, offsetMeters: Double) {
+    init(segment: ParkingSegment, offsetMeters: Double, isCommercialVehicle: Bool? = nil) {
+        self.isCommercialVehicle   = isCommercialVehicle
         self.segmentID             = segment.id
         self.coordinateLatitude    = segment.coordinate.latitude
         self.coordinateLongitude   = segment.coordinate.longitude
@@ -100,12 +104,16 @@ struct ParkedCarRecord: Codable, Equatable {
     /// count: the car is assumed fine until the next one starts.
     func nextMove(after now: Date, holidays: [NamedHoliday],
                   calendar cal: Calendar = .current) -> MoveDeadline? {
-        let windows = moveWindows ?? ParkingSegment.moveWindows(
+        var windows = moveWindows ?? ParkingSegment.moveWindows(
             rules: restrictionRules.map {
                 ParkingRule(days: $0.days.compactMap(ParkingDay.init(rawValue:)),
                             startTime: $0.startTime, endTime: $0.endTime, rawDescription: "")
             },
             restrictions: [], meter: nil)
+        if isCommercialVehicle == true {
+            // Commercial hours are for this car: it pays then, like any meter.
+            windows = windows.map { $0.kind == .commercial ? CurbWindow(kind: .meter, window: $0.window) : $0 }
+        }
         let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
         guard let next = MoveCountdown.next(for: windows, in: calendar, upcomingOnly: true),
               let day = cal.date(byAdding: .day, value: next.days, to: cal.startOfDay(for: now)),

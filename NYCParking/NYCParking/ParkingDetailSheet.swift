@@ -6,11 +6,17 @@ struct ParkingDetailSheet: View {
     let sourceDates: DataSourceDates
     let isParked: Bool
     let hasAnyParkedCar: Bool
-    let onPark: () -> Void
+    /// Parks (or unparks) here. On curbs with commercial-only hours, whether
+    /// the car is a commercial vehicle; nil elsewhere.
+    let onPark: (_ isCommercialVehicle: Bool?) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var showUnparkConfirm = false
     @State private var showMoveConfirm = false
+    @State private var showVehicleQuestion = false
+    /// The answer, acted on once the question has closed: it can show as a
+    /// popover, which `dismiss()` would close instead of the sheet.
+    @State private var vehicleAnswer: Bool?
     /// The sheet fits its content, which varies with the rules and meter shown.
     @State private var contentHeight: CGFloat = 380
 
@@ -97,10 +103,13 @@ struct ParkingDetailSheet: View {
             Button {
                 if isParked {
                     showUnparkConfirm = true
+                } else if segment.meter?.profile.commercial != nil {
+                    // Commercial hours mean pay for some cars, move for others.
+                    showVehicleQuestion = true
                 } else if hasAnyParkedCar {
                     showMoveConfirm = true
                 } else {
-                    onPark()
+                    onPark(nil)
                     dismiss()
                 }
             } label: {
@@ -126,16 +135,30 @@ struct ParkingDetailSheet: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         .presentationDetents([.height(contentHeight)])
         .alert("Unpark Car?", isPresented: $showUnparkConfirm) {
-            Button("Unpark", role: .destructive) { onPark(); dismiss() }
+            Button("Unpark", role: .destructive) { onPark(nil); dismiss() }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Are you sure you want to unpark your car?")
         }
         .alert("Move Car Here?", isPresented: $showMoveConfirm) {
-            Button("Move Car") { onPark(); dismiss() }
+            Button("Move Car") { onPark(nil); dismiss() }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will move your parked car to \(segment.street.localizedCapitalized).")
+        }
+        .confirmationDialog("Is this a commercial vehicle?", isPresented: $showVehicleQuestion,
+                            titleVisibility: .visible) {
+            Button("Commercial vehicle") { vehicleAnswer = true }
+            Button("Passenger car") { vehicleAnswer = false }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(commercialMessage)
+        }
+        .onChange(of: showVehicleQuestion) { _, showing in
+            guard !showing, let answer = vehicleAnswer else { return }
+            vehicleAnswer = nil
+            onPark(answer)
+            dismiss()
         }
     }
 
@@ -159,6 +182,19 @@ struct ParkingDetailSheet: View {
         if from.isEmpty { return to }
         if to.isEmpty   { return from }
         return "\(from) → \(to)"
+    }
+
+    /// "Only commercial vehicles can park here until 2 PM." / "…Mon–Fri 7 AM–2 PM."
+    private var commercialMessage: String {
+        guard let profile = segment.meter?.profile, let tier = profile.commercial else { return "" }
+        let when: String
+        if case .commercialOnly(let until) = profile.state(in: CountdownCalendar(holidays: holidays)) {
+            when = "until \(ParkingTime.format(minutes: until % (24 * 60)))"
+        } else {
+            when = tier.compactHours
+        }
+        let move = hasAnyParkedCar ? " Your parked car will move here." : ""
+        return "Only commercial vehicles can park here \(when).\(move)"
     }
 
     private enum Section: Hashable { case cleaning, restrictions, meter }
@@ -297,19 +333,22 @@ private struct MeterSection: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(text: "Meter", systemImage: "parkingsign")
 
+            // One timeline for status and details, so a skipped status leaves no gap.
             TimelineView(.everyMinute) { _ in
                 let cal = CountdownCalendar(holidays: holidays)
                 let verdict = MoveCountdown.next(for: moveWindows, in: cal)
-                if !(verdict?.isUnderway == true && verdict?.kind == .meter) {
-                    status(in: cal)
+                VStack(alignment: .leading, spacing: 12) {
+                    // Skip what the verdict above already says.
+                    if !(verdict?.isUnderway == true && (verdict?.kind == .meter || verdict?.kind == .commercial)) {
+                        status(in: cal)
+                    }
+                    if let paid = meter.profile.paid {
+                        tierDetails(paid, heading: meter.profile.vehicles == .dual ? "All vehicles" : nil)
+                    }
+                    if let commercial = meter.profile.commercial {
+                        tierDetails(commercial, heading: "Commercial vehicles only")
+                    }
                 }
-            }
-
-            if let paid = meter.profile.paid {
-                tierDetails(paid, heading: meter.profile.vehicles == .dual ? "All vehicles" : nil)
-            }
-            if let commercial = meter.profile.commercial {
-                tierDetails(commercial, heading: "Commercial vehicles only")
             }
 
             Button(action: pay) {

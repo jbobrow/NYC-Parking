@@ -105,6 +105,12 @@ struct ScreenshotScene {
             center: .init(latitude: 40.6800, longitude: -73.9555), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
             selectedSegmentID: "63757L"),
+        // A commercial-only curb in the Financial District during its hours:
+        // parking here asks whether it's a commercial vehicle.
+        "commercial": ScreenshotScene(
+            center: .init(latitude: 40.7075, longitude: -74.0084), spanMeters: (600, 280),
+            heading: 0, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "820R"),
         "holidays": ScreenshotScene(
             center: .init(latitude: 40.7352, longitude: -73.9838), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",

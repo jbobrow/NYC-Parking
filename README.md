@@ -21,7 +21,7 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
   - Close in: pills + restriction time (e.g. 8 AM–11 AM)
 - **Meters view** — every metered curb colored by whether it's free, paid or commercial-only right now, with rate and time limit ("$2.50 · 2 HR") on the pills; meters off on Sundays and the holidays DOT suspends them
 - **Pay with ParkNYC** — a metered block's sheet shows its limit, hours, rate and six-digit ParkNYC zone, and hands off to ParkNYC with the zone copied
-- **Countdown mode** — recolors every block by how soon a car parked there now would have to move, or pay the meter: red 0–1 days, yellow 2–6, green 7+. Counts street cleaning, rush-hour / school / overnight no-standing and no-stopping rules, and meter hours, each skipping the holidays it's suspended on. Metered curbs are drawn charcoal, with the countdown on their pills ("P · 1 DAY")
+- **Countdown mode** — recolors every block by how soon a car parked there now would have to move, or pay the meter: red 0–1 days, yellow 2–6, green 7+. Counts street cleaning, rush-hour / school / overnight no-standing and no-stopping rules, and meter hours, each skipping the holidays it's suspended on. Metered curbs are drawn in meter blue, with the countdown on their pills ("P · 1 DAY")
 - **Curb verdict** — a block's sheet leads with what its rules mean right now, strictest first ("No standing until 7 PM", "Free until tomorrow 8:30 AM · then street cleaning")
 - **"Park here" mode** — tap any marker to record where you left your car; drag it along the block to the exact spot
 - **Next move date** — banner shows the next day you need to move, skipping holidays
