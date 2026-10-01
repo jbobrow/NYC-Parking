@@ -124,15 +124,19 @@ extension MeterState.Kind {
         switch self {
         case .free:           return MoveUrgency(days: MoveUrgency.maxLevel).uiColor
         case .paid:           return UIColor(red: 0.20, green: 0.50, blue: 1.00, alpha: 1)
-        case .commercialOnly: return UIColor(hue: 38 / 360, saturation: 0.90, brightness: 0.98, alpha: 1)
+        case .commercialOnly: return UIColor(hue: 24 / 360, saturation: 0.88, brightness: 0.96, alpha: 1)
         case .noParking:      return MoveUrgency(days: 0).uiColor
         }
     }
 
     var color: Color { Color(uiColor: uiColor) }
 
-    /// Dark on the light yellow-orange, white elsewhere.
-    var textColor: Color { self == .commercialOnly ? .black.opacity(0.8) : .white }
+    /// White, or dark on a light enough color.
+    var textColor: Color {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+        uiColor.getRed(&r, green: &g, blue: &b, alpha: nil)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? .black.opacity(0.8) : .white
+    }
 
     var legendLabel: String {
         switch self {
