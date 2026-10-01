@@ -2,7 +2,7 @@ import SwiftUI
 
 /// What an app shows on its About page. Each app fills one in; `AboutView`
 /// itself is the same across all of Jon Bobrow's apps, so this file can be
-/// copied between them unchanged.
+/// copied between them unchanged, along with Signature.swift.
 struct AboutApp {
     var name: String
     var icon: Image
@@ -13,11 +13,19 @@ struct AboutApp {
     var privacy: URL?
     /// Small print at the bottom, such as where the data comes from.
     var credits: String?
+    /// The number in the app's App Store link. Adds "Share this app" and
+    /// "Rate this app".
+    var appStoreID: String?
+
+    var appStore: URL? {
+        appStoreID.flatMap { URL(string: "https://apps.apple.com/app/id\($0)") }
+    }
 }
 
 /// The About page: icon, name, version and description, the app's own rows
-/// (like "How it works"), links to its website, support and privacy policy,
-/// and a link to the rest of the apps.
+/// (like "How it works"), sharing and rating it, links to its website,
+/// support and privacy policy, and "Apps by Jon Bobrow" in his hand, linking
+/// to the rest of the apps.
 struct AboutView<AppRows: View>: View {
     let app: AboutApp
     @ViewBuilder var appRows: AppRows
@@ -35,6 +43,16 @@ struct AboutView<AppRows: View>: View {
 
             Section {
                 appRows
+                if let appStore = app.appStore {
+                    ShareLink(item: appStore, preview: SharePreview(app.name, image: app.icon)) {
+                        AboutRowLabel(title: "Share this app", systemImage: "square.and.arrow.up")
+                    }
+                    if let review = URL(string: appStore.absoluteString + "?action=write-review") {
+                        Link(destination: review) {
+                            AboutRowLabel(title: "Rate this app", systemImage: "star")
+                        }
+                    }
+                }
             }
 
             Section {
@@ -98,13 +116,10 @@ struct AboutView<AppRows: View>: View {
                     .multilineTextAlignment(.center)
             }
             Link(destination: Self.moreApps) {
-                HStack(spacing: 4) {
-                    Text("Apps by Jon Bobrow")
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption2.weight(.semibold))
-                }
-                .font(.footnote.weight(.semibold))
+                SignatureLabel(signature: .appsBy, mark: .linkOut)
             }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens app.jonbobrow.com")
         }
     }
 
@@ -125,15 +140,7 @@ struct AboutRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack {
-                Label(title, systemImage: systemImage)
-                    .foregroundStyle(Color.primary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color(uiColor: .tertiaryLabel))   // not the row's tint
-            }
-            .contentShape(Rectangle())
+            AboutRowLabel(title: title, systemImage: systemImage)
         }
     }
 }
@@ -146,14 +153,26 @@ private struct AboutLink: View {
 
     var body: some View {
         Link(destination: url) {
-            HStack {
-                Label(title, systemImage: systemImage)
-                    .foregroundStyle(Color.primary)
-                Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color(uiColor: .tertiaryLabel))   // not the row's tint
-            }
+            AboutRowLabel(title: title, systemImage: systemImage, accessory: "arrow.up.right")
         }
+    }
+}
+
+/// An icon, a title, and a chevron or arrow at the trailing edge.
+private struct AboutRowLabel: View {
+    let title: String
+    let systemImage: String
+    var accessory = "chevron.right"
+
+    var body: some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+                .foregroundStyle(Color.primary)
+            Spacer()
+            Image(systemName: accessory)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color(uiColor: .tertiaryLabel))   // not the row's tint
+        }
+        .contentShape(Rectangle())
     }
 }
