@@ -91,6 +91,11 @@ struct ScreenshotScene {
             center: .init(latitude: 40.6741, longitude: -73.9757), spanMeters: (600, 280),
             heading: 210, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
             startsDriving: true),
+        // The same drive after the meters stop for the night.
+        "drive-meters-night": ScreenshotScene(
+            center: .init(latitude: 40.6741, longitude: -73.9757), spanMeters: (600, 280),
+            heading: 210, mode: .countdown, clock: "2026-09-30T20:30:00-04:00",
+            startsDriving: true),
         // Franklin Ave in Crown Heights during the evening rush: no standing 4–7 PM
         // outranks the meter; side streets keep their cleaning countdowns.
         "rush-hour": ScreenshotScene(
