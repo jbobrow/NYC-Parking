@@ -27,7 +27,7 @@ struct ContentView: View {
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
     @State private var displayMode: MapDisplayMode = .countdown
-    /// How countdown colors read; chosen from the legend or the layers menu.
+    /// How countdown colors read; chosen by tapping the legend.
     @AppStorage(CountdownScale.storageKey) private var countdownScale: CountdownScale = .standard
     /// Always on in the app; screenshot scenes can turn it off for a cleaner map.
     @State private var showsHolidayBanner = true
@@ -218,11 +218,6 @@ struct ContentView: View {
                             .tag(MapDisplayMode.meters)
                     }
                     .pickerStyle(.inline)
-
-                    if displayMode == .countdown {
-                        countdownScalePicker
-                            .pickerStyle(.menu)
-                    }
 
                     if !isDrivingMode {
                         Button("Drive mode", systemImage: "steeringwheel") {
@@ -535,7 +530,7 @@ struct ContentView: View {
     }
 
     private var countdownScalePicker: some View {
-        Picker("Countdown colors", systemImage: "paintpalette", selection: $countdownScale) {
+        Picker("Countdown colors", selection: $countdownScale) {
             ForEach(CountdownScale.allCases, id: \.self) { scale in
                 // Menus show the second text as the row's subtitle.
                 VStack {
