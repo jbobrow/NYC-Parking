@@ -468,7 +468,14 @@ extension ParkingMapView {
         /// Keeps label annotations for the viewport (plus a margin) on the map.
         private func refreshLabels() {
             guard let mapView else { return }
-            guard labelStyle != nil, let index else {
+            // Countdown and meter pills wait for their status, so a pill never
+            // flashes "7+ DAYS" or "FREE" before the real answer is known.
+            let ready = switch displayMode {
+            case .days:      true
+            case .countdown: countdown != nil
+            case .meters:    meters != nil
+            }
+            guard labelStyle != nil, let index, ready else {
                 if !labelAnnotations.isEmpty {
                     mapView.removeAnnotations(Array(labelAnnotations.values))
                     labelAnnotations = [:]

@@ -601,10 +601,17 @@ private struct TopBanners: View {
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let now = AppClock.now
-            let move = record?.nextMove(after: now, holidays: holidays)
+            // A rule in effect right now (parked anyway, or it started while
+            // parked) comes before the next deadline.
+            let inEffect = record?.restrictionInEffect(at: now, holidays: holidays)
+            let move = inEffect == nil ? record?.nextMove(after: now, holidays: holidays) : nil
             let holiday = showsHolidayBanner ? upcomingHoliday(from: now) : nil
             VStack(spacing: 8) {
-                if let move {
+                if let inEffect {
+                    moveNowBanner(inEffect)
+                        .onTapGesture(perform: onMoveTap)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if let move {
                     moveCarBanner(for: move, now: now)
                         .onTapGesture(perform: onMoveTap)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -616,10 +623,22 @@ private struct TopBanners: View {
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: move)
+            .animation(.easeInOut(duration: 0.3), value: inEffect)
             .animation(.easeInOut(duration: 0.3), value: holiday?.holiday.id)
             .animation(.easeInOut(duration: 0.3),
                        value: move.map { MoveBannerStage(deadline: $0.date, now: now) })
         }
+    }
+
+    /// "Move now · No standing until 7 PM", in the countdown's red.
+    private func moveNowBanner(_ rule: MoveCountdown) -> some View {
+        Label("Move now · \(rule.inEffectText)", systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .modifier(BannerBackground(tint: MoveUrgency(days: 0)))
     }
 
     /// Yellow from the day before the move, red within the final hour.

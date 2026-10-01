@@ -132,3 +132,33 @@ extension ParkingSegment {
         return out
     }
 }
+
+extension Array where Element == CurbWindow {
+    /// The windows as they apply to one car: for a commercial vehicle,
+    /// commercial-only hours are meter time to pay, not a time to move.
+    func forVehicle(isCommercial: Bool?) -> [CurbWindow] {
+        guard isCommercial == true else { return self }
+        return map { $0.kind == .commercial ? CurbWindow(kind: .meter, window: $0.window) : $0 }
+    }
+
+    /// A rule in effect right now that means the car can't be here (anything
+    /// but a meter, which can be paid).
+    func restrictionInEffect(in cal: CountdownCalendar) -> MoveCountdown? {
+        MoveCountdown.next(for: self, in: cal).flatMap { $0.isUnderway && $0.kind != .meter ? $0 : nil }
+    }
+}
+
+extension MoveCountdown {
+    /// "No standing until 7 PM", "Street cleaning until 10 AM".
+    var inEffectText: String {
+        let what: String
+        switch kind {
+        case .cleaning:   what = "Street cleaning"
+        case .noStanding: what = "No standing"
+        case .noStopping: what = "No stopping"
+        case .commercial: what = "Commercial vehicles only"
+        case .meter:      what = "Paid parking"
+        }
+        return what + (endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "")
+    }
+}

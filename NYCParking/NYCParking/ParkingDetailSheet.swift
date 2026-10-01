@@ -17,6 +17,13 @@ struct ParkingDetailSheet: View {
     /// The answer, acted on once the question has closed: it can show as a
     /// popover, which `dismiss()` would close instead of the sheet.
     @State private var vehicleAnswer: Bool?
+    /// Something in effect right now that means the car can't be here.
+    @State private var parkWarning: ParkWarning?
+
+    private struct ParkWarning {
+        let title: String
+        let isCommercialVehicle: Bool?
+    }
     /// The sheet fits its content, which varies with the rules and meter shown.
     @State private var contentHeight: CGFloat = 380
 
@@ -106,11 +113,8 @@ struct ParkingDetailSheet: View {
                 } else if segment.meter?.profile.commercial != nil {
                     // Commercial hours mean pay for some cars, move for others.
                     showVehicleQuestion = true
-                } else if hasAnyParkedCar {
-                    showMoveConfirm = true
                 } else {
-                    onPark(nil)
-                    dismiss()
+                    attemptPark(isCommercialVehicle: nil, confirmingMove: true)
                 }
             } label: {
                 Label(buttonLabel, systemImage: buttonIcon)
@@ -157,8 +161,16 @@ struct ParkingDetailSheet: View {
         .onChange(of: showVehicleQuestion) { _, showing in
             guard !showing, let answer = vehicleAnswer else { return }
             vehicleAnswer = nil
-            onPark(answer)
-            dismiss()
+            attemptPark(isCommercialVehicle: answer, confirmingMove: false)
+        }
+        .alert(parkWarning?.title ?? "", isPresented: Binding(get: { parkWarning != nil },
+                                                              set: { if !$0 { parkWarning = nil } }),
+               presenting: parkWarning) { warning in
+            Button("Park Anyway", role: .destructive) { onPark(warning.isCommercialVehicle); dismiss() }
+            Button("Cancel", role: .cancel) { }
+        } message: { _ in
+            Text("Parking here now can get you a ticket or towed."
+                 + (hasAnyParkedCar ? " Your parked car will move here." : ""))
         }
     }
 
@@ -182,6 +194,21 @@ struct ParkingDetailSheet: View {
         if from.isEmpty { return to }
         if to.isEmpty   { return from }
         return "\(from) → \(to)"
+    }
+
+    /// Parks, unless a rule in effect right now means this car can't be here,
+    /// in which case it warns first. `confirmingMove` asks before moving an
+    /// already parked car (the commercial question already said so).
+    private func attemptPark(isCommercialVehicle: Bool?, confirmingMove: Bool) {
+        let windows = segment.moveWindows.forVehicle(isCommercial: isCommercialVehicle)
+        if let rule = windows.restrictionInEffect(in: CountdownCalendar(holidays: holidays)) {
+            parkWarning = ParkWarning(title: rule.inEffectText, isCommercialVehicle: isCommercialVehicle)
+        } else if confirmingMove && hasAnyParkedCar {
+            showMoveConfirm = true
+        } else {
+            onPark(isCommercialVehicle)
+            dismiss()
+        }
     }
 
     /// "Only commercial vehicles can park here until 2 PM." / "…Mon–Fri 7 AM–2 PM."

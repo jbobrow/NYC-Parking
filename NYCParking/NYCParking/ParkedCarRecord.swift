@@ -104,16 +104,6 @@ struct ParkedCarRecord: Codable, Equatable {
     /// count: the car is assumed fine until the next one starts.
     func nextMove(after now: Date, holidays: [NamedHoliday],
                   calendar cal: Calendar = .current) -> MoveDeadline? {
-        var windows = moveWindows ?? ParkingSegment.moveWindows(
-            rules: restrictionRules.map {
-                ParkingRule(days: $0.days.compactMap(ParkingDay.init(rawValue:)),
-                            startTime: $0.startTime, endTime: $0.endTime, rawDescription: "")
-            },
-            restrictions: [], meter: nil)
-        if isCommercialVehicle == true {
-            // Commercial hours are for this car: it pays then, like any meter.
-            windows = windows.map { $0.kind == .commercial ? CurbWindow(kind: .meter, window: $0.window) : $0 }
-        }
         let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
         guard let next = MoveCountdown.next(for: windows, in: calendar, upcomingOnly: true),
               let day = cal.date(byAdding: .day, value: next.days, to: cal.startOfDay(for: now)),
@@ -121,6 +111,23 @@ struct ParkedCarRecord: Codable, Equatable {
                                   second: 0, of: day)
         else { return nil }
         return MoveDeadline(date: date, kind: next.kind)
+    }
+
+    /// A rule in effect right now that means the car shouldn't be here, such
+    /// as no standing, or commercial-only hours for a passenger car.
+    func restrictionInEffect(at now: Date, holidays: [NamedHoliday]) -> MoveCountdown? {
+        windows.restrictionInEffect(in: CountdownCalendar(now: now, holidays: holidays))
+    }
+
+    /// The curb's rules as they apply to this car.
+    private var windows: [CurbWindow] {
+        let windows = moveWindows ?? ParkingSegment.moveWindows(
+            rules: restrictionRules.map {
+                ParkingRule(days: $0.days.compactMap(ParkingDay.init(rawValue:)),
+                            startTime: $0.startTime, endTime: $0.endTime, rawDescription: "")
+            },
+            restrictions: [], meter: nil)
+        return windows.forVehicle(isCommercial: isCommercialVehicle)
     }
 
     // MARK: - Persistence
