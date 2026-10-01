@@ -33,6 +33,7 @@
 		AA2C00000000000000000002 /* Meters.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2C00000000000000000001 /* Meters.swift */; };
 		AA2D00000000000000000002 /* CurbRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2D00000000000000000001 /* CurbRules.swift */; };
 		AA2E00000000000000000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2E00000000000000000001 /* AboutView.swift */; };
+		AA2F00000000000000000002 /* Signature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2F00000000000000000001 /* Signature.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -64,6 +65,7 @@
 		BB2C00000000000000000001 /* Meters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meters.swift; sourceTree = "<group>"; };
 		BB2D00000000000000000001 /* CurbRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurbRules.swift; sourceTree = "<group>"; };
 		BB2E00000000000000000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		BB2F00000000000000000001 /* Signature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signature.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,6 +114,7 @@
 				BB2C00000000000000000001 /* Meters.swift */,
 				BB2D00000000000000000001 /* CurbRules.swift */,
 				BB2E00000000000000000001 /* AboutView.swift */,
+				BB2F00000000000000000001 /* Signature.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -221,6 +224,7 @@
 				AA2C00000000000000000002 /* Meters.swift in Sources */,
 				AA2D00000000000000000002 /* CurbRules.swift in Sources */,
 				AA2E00000000000000000002 /* AboutView.swift in Sources */,
+				AA2F00000000000000000002 /* Signature.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
