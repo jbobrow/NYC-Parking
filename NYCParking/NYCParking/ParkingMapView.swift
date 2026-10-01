@@ -80,6 +80,8 @@ struct ParkingMapView: UIViewRepresentable {
     let displayMode: MapDisplayMode
     let countdown: CountdownSnapshot?
     let meters: MeterSnapshot?
+    /// How countdown colors read (default, or day parking).
+    var countdownScale: CountdownScale = .standard
     /// Latest location while driving; drives the 3D camera.
     var driveLocation: CLLocation? = nil
     var onDriveMatch: (DriveMatch?) -> Void = { _ in }
@@ -116,7 +118,8 @@ struct ParkingMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.update(index: index, parkedRecord: parkedRecord, isDriving: isDrivingMode,
-                                   displayMode: displayMode, countdown: countdown, meters: meters)
+                                   displayMode: displayMode, countdown: countdown, meters: meters,
+                                   countdownScale: countdownScale)
         if let driveLocation { context.coordinator.drive.ingest(driveLocation) }
     }
 }
@@ -133,6 +136,7 @@ extension ParkingMapView {
         private var displayMode: MapDisplayMode = .days
         private var countdown: CountdownSnapshot?
         private var meters: MeterSnapshot?
+        private var countdownScale: CountdownScale = .standard
 
         /// The overlay layer that should be on the map, and what actually is.
         private enum MarkLayer: Equatable {
@@ -194,7 +198,8 @@ extension ParkingMapView {
         // MARK: State from SwiftUI
 
         func update(index: SegmentIndex?, parkedRecord: ParkedCarRecord?, isDriving: Bool,
-                    displayMode: MapDisplayMode, countdown: CountdownSnapshot?, meters: MeterSnapshot?) {
+                    displayMode: MapDisplayMode, countdown: CountdownSnapshot?, meters: MeterSnapshot?,
+                    countdownScale: CountdownScale) {
             var marksChanged = false
             if index !== self.index {
                 self.index = index
@@ -208,6 +213,12 @@ extension ParkingMapView {
             }
             if countdown !== self.countdown {
                 self.countdown = countdown
+                countdownOverlays = nil
+                buildTasks["countdown"]?.cancel()
+                marksChanged = true
+            }
+            if countdownScale != self.countdownScale {
+                self.countdownScale = countdownScale
                 countdownOverlays = nil
                 buildTasks["countdown"]?.cancel()
                 marksChanged = true
@@ -369,8 +380,9 @@ extension ParkingMapView {
                 // Wait for real countdowns rather than drawing every block as
                 // "7+ days" and then redrawing the whole city moments later.
                 guard let entries = countdown?.entries else { return }
+                let scale = countdownScale
                 build("countdown", layer: layer) {
-                    StripeBuilder.countdownOverlays(for: segments, entries: entries)
+                    StripeBuilder.countdownOverlays(for: segments, entries: entries, scale: scale)
                 } store: { self.countdownOverlays = $0 }
 
             case .meters:
@@ -450,7 +462,7 @@ extension ParkingMapView {
             guard let segment else { return .days }
             switch displayMode {
             case .days:      return .days
-            case .countdown: return .countdown(countdown?.entries[segment.id])
+            case .countdown: return .countdown(countdown?.entries[segment.id], scale: countdownScale)
             case .meters:    return .meter(MeterPill(meter: segment.meter, state: meters?.entries[segment.id]))
             }
         }
@@ -719,12 +731,12 @@ enum StripeBuilder {
     /// One solid line per block, colored by days until the move. Greener lines are drawn last so
     /// long-term parking stands out where lines overlap at far zoom. Metered curbs are drawn in
     /// meter blue underneath, as everywhere in the app; their pills carry the countdown.
-    static func countdownOverlays(for segments: [ParkingSegment],
-                                  entries: [String: MoveCountdown]) -> [StripeOverlay] {
+    static func countdownOverlays(for segments: [ParkingSegment], entries: [String: MoveCountdown],
+                                  scale: CountdownScale) -> [StripeOverlay] {
         struct Key: Hashable { let row: Int; let col: Int; let urgency: MoveUrgency?; }
         var groups: [Key: [MKPolyline]] = [:]
         for seg in segments where !seg.moveWindows.isEmpty && seg.curve.count >= 2 {
-            let urgency = seg.meter == nil ? MoveUrgency(days: entries[seg.id]?.days) : nil
+            let urgency = seg.meter == nil ? MoveUrgency(days: entries[seg.id]?.days, scale: scale) : nil
             let row = Int((seg.coordinate.latitude / chunkDegrees).rounded(.down))
             let col = Int((seg.coordinate.longitude / chunkDegrees).rounded(.down))
             groups[Key(row: row, col: col, urgency: urgency), default: []]

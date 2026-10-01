@@ -321,6 +321,7 @@ struct ParkingDetailSheet: View {
 private struct VerdictRow: View {
     let segment: ParkingSegment
     let holidays: [NamedHoliday]
+    @AppStorage(CountdownScale.storageKey) private var scale: CountdownScale = .standard
 
     var body: some View {
         let countdown = MoveCountdown.next(for: segment.moveWindows,
@@ -330,7 +331,7 @@ private struct VerdictRow: View {
             Circle()
                 .fill(countdown.map { $0.isUnderway && $0.kind == .commercial }  == true
                       ? MeterState.Kind.commercialOnly.color   // as in the Meters view
-                      : MoveUrgency(days: countdown?.days).color)
+                      : MoveUrgency(days: countdown?.days, scale: scale).color)
                 .frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

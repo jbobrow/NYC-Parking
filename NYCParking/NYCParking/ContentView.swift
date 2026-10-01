@@ -27,6 +27,8 @@ struct ContentView: View {
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
     @State private var displayMode: MapDisplayMode = .countdown
+    /// How countdown colors read; chosen from the legend or the layers menu.
+    @AppStorage(CountdownScale.storageKey) private var countdownScale: CountdownScale = .standard
     /// Always on in the app; screenshot scenes can turn it off for a cleaner map.
     @State private var showsHolidayBanner = true
     @Environment(\.scenePhase) private var scenePhase
@@ -56,6 +58,7 @@ struct ContentView: View {
                 displayMode: displayMode,
                 countdown: dataService.countdown,
                 meters: dataService.meters,
+                countdownScale: countdownScale,
                 driveLocation: isDrivingMode ? locationManager.location : nil,
                 onDriveMatch: { driveMatch = $0 },
                 onDriveFollowChange: { isDriveFollowing = $0 },
@@ -215,6 +218,11 @@ struct ContentView: View {
                             .tag(MapDisplayMode.meters)
                     }
                     .pickerStyle(.inline)
+
+                    if displayMode == .countdown {
+                        countdownScalePicker
+                            .pickerStyle(.menu)
+                    }
 
                     if !isDrivingMode {
                         Button("Drive mode", systemImage: "steeringwheel") {
@@ -495,23 +503,48 @@ struct ContentView: View {
 
     private var glassIconColor: Color { colorScheme == .dark ? .white : .accentColor }
 
+    /// Tap to choose how the colors read: default, or day parking.
     private var countdownLegend: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Days until move")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 3) {
-                ForEach(MoveUrgency.allCases, id: \.self) { urgency in
-                    legendSwatch(urgency.color, label: urgency.legendLabel)
+        Menu {
+            countdownScalePicker
+                .pickerStyle(.inline)
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text(countdownScale == .standard ? "Days until move" : "Days until move · day parking")
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 8, weight: .bold))
                 }
-                // Metered curbs: meter blue, with the countdown on their pills.
-                legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
-                    .padding(.leading, 6)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.secondary)   // not the menu's tint
+                HStack(spacing: 3) {
+                    ForEach(0...MoveUrgency.maxLevel, id: \.self) { days in
+                        legendSwatch(MoveUrgency(days: days, scale: countdownScale).color,
+                                     label: days == MoveUrgency.maxLevel ? "7+" : "\(days)")
+                    }
+                    // Metered curbs: meter blue, with the countdown on their pills.
+                    legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
+                        .padding(.leading, 6)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .glassRoundedRect()
+        }
+        .accessibilityLabel("Days until move colors: \(countdownScale.title)")
+    }
+
+    private var countdownScalePicker: some View {
+        Picker("Countdown colors", systemImage: "paintpalette", selection: $countdownScale) {
+            ForEach(CountdownScale.allCases, id: \.self) { scale in
+                // Menus show the second text as the row's subtitle.
+                VStack {
+                    Text(scale.title)
+                    Text(scale.subtitle)
+                }
+                .tag(scale)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .glassRoundedRect()
     }
 
     private func legendSwatch(_ color: Color, label: String) -> some View {
@@ -521,7 +554,7 @@ struct ContentView: View {
                 .frame(width: 16, height: 8)
             Text(label)
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.primary)
                 .fixedSize()
         }
     }

@@ -482,6 +482,7 @@ private struct SideCard: View {
     let side: Side
     let segment: ParkingSegment?
     let calendar: CountdownCalendar
+    @AppStorage(CountdownScale.storageKey) private var scale: CountdownScale = .standard
 
     var body: some View {
         let c = content()
@@ -574,7 +575,7 @@ private struct SideCard: View {
                            fill: kind.color, textColor: kind.textColor)
         }
 
-        let urgency = MoveUrgency(days: countdown?.days)
+        let urgency = MoveUrgency(days: countdown?.days, scale: scale)
         let (title, detail) = texts(countdown, segment: segment)
         return Content(title: title, detail: detail, fill: urgency.color, textColor: urgency.textColor)
     }
