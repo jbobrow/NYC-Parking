@@ -31,8 +31,8 @@
 		AA2A00000000000000000002 /* DriveMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2A00000000000000000001 /* DriveMode.swift */; };
 		AA2B00000000000000000002 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2B00000000000000000001 /* OnboardingView.swift */; };
 		AA2C00000000000000000002 /* Meters.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2C00000000000000000001 /* Meters.swift */; };
-		AA2E00000000000000000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2E00000000000000000001 /* AboutView.swift */; };
 		AA2D00000000000000000002 /* CurbRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2D00000000000000000001 /* CurbRules.swift */; };
+		AA2E00000000000000000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2E00000000000000000001 /* AboutView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,8 +62,8 @@
 		BB2A00000000000000000001 /* DriveMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveMode.swift; sourceTree = "<group>"; };
 		BB2B00000000000000000001 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		BB2C00000000000000000001 /* Meters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meters.swift; sourceTree = "<group>"; };
-		BB2E00000000000000000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		BB2D00000000000000000001 /* CurbRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurbRules.swift; sourceTree = "<group>"; };
+		BB2E00000000000000000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -350,7 +350,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -379,7 +379,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 16;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
