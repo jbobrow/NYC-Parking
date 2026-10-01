@@ -51,6 +51,8 @@ struct MeterPill: Hashable {
             title = "COMMERCIAL"
         case .free:
             title = "FREE"
+        case .noParking:
+            title = "NO PARKING"
         }
     }
 }
@@ -65,7 +67,7 @@ struct MeterLabel: View {
         HStack(spacing: 4 * s) {
             Text(pill.title)
                 .font(.system(size: 11 * s, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .foregroundStyle(pill.kind?.textColor ?? .white)
                 .padding(.horizontal, 9 * s)
                 .padding(.vertical, 5 * s)
                 .background(pill.kind?.color ?? .gray, in: Capsule())

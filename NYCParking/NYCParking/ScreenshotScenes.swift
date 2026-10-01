@@ -111,6 +111,11 @@ struct ScreenshotScene {
             center: .init(latitude: 40.7075, longitude: -74.0084), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
             selectedSegmentID: "820R"),
+        // Meters around Mulberry St at midday: no parking under way on one side,
+        // commercial-only hours on Grand and Hester.
+        "meters-midday": ScreenshotScene(
+            center: .init(latitude: 40.7183, longitude: -73.9978), spanMeters: (420, 190),
+            heading: 0, mode: .meters, clock: "2026-10-01T12:30:00-04:00"),
         "holidays": ScreenshotScene(
             center: .init(latitude: 40.7352, longitude: -73.9838), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",

@@ -528,7 +528,7 @@ struct ContentView: View {
 
     private var meterLegend: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ForEach([MeterState.Kind.free, .paid, .commercialOnly], id: \.self) { kind in
+            ForEach([MeterState.Kind.free, .paid, .commercialOnly, .noParking], id: \.self) { kind in
                 HStack(spacing: 7) {
                     RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(kind.color)

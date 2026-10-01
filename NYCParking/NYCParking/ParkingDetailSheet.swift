@@ -328,7 +328,9 @@ private struct VerdictRow: View {
         let (title, detail) = texts(countdown)
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle()
-                .fill(MoveUrgency(days: countdown?.days).color)
+                .fill(countdown.map { $0.isUnderway && $0.kind == .commercial }  == true
+                      ? MeterState.Kind.commercialOnly.color   // as in the Meters view
+                      : MoveUrgency(days: countdown?.days).color)
                 .frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -476,6 +478,9 @@ private struct MeterSection: View {
             details.append(state.untilText ?? "")
         case .commercialOnly:
             title = "Commercial vehicles only"
+            details.append(state.untilText ?? "")
+        case .noParking:
+            title = "No parking"
             details.append(state.untilText ?? "")
         case .free:
             let holiday = holidays.first { $0.metersSuspended && Calendar.current.isDate($0.date, inSameDayAs: AppClock.now) }

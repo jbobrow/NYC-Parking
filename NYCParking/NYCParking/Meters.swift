@@ -77,14 +77,19 @@ enum MeterState: Hashable, Sendable {
     /// Meters are off. `resumes` is when paid or commercial hours next start
     /// (nil: not in the coming week).
     case free(resumes: MeterStart?)
+    /// No one can park, meters or not: cleaning, no standing or no stopping
+    /// is in effect (`reason`) until `until`.
+    case noParking(until: Int?, reason: CurbWindow.Kind)
 
-    enum Kind: Int, Sendable { case free, paid, commercialOnly }
+    /// Drawn in this order, so no-parking curbs end up on top.
+    enum Kind: Int, Sendable { case free, paid, commercialOnly, noParking }
 
     var kind: Kind {
         switch self {
         case .paid:           return .paid
         case .commercialOnly: return .commercialOnly
         case .free:           return .free
+        case .noParking:      return .noParking
         }
     }
 
@@ -93,6 +98,8 @@ enum MeterState: Hashable, Sendable {
         switch self {
         case .paid(let until), .commercialOnly(let until):
             return "until \(ParkingTime.format(minutes: until % (24 * 60)))"
+        case .noParking(let until, _):
+            return until.map { "until \(ParkingTime.format(minutes: $0 % (24 * 60)))" }
         case .free(let resumes):
             return resumes.map { "until \($0.text)" }
         }
@@ -117,17 +124,22 @@ extension MeterState.Kind {
         switch self {
         case .free:           return MoveUrgency(days: MoveUrgency.maxLevel).uiColor
         case .paid:           return UIColor(red: 0.20, green: 0.50, blue: 1.00, alpha: 1)
-        case .commercialOnly: return MoveUrgency(days: 0).uiColor
+        case .commercialOnly: return UIColor(hue: 38 / 360, saturation: 0.90, brightness: 0.98, alpha: 1)
+        case .noParking:      return MoveUrgency(days: 0).uiColor
         }
     }
 
     var color: Color { Color(uiColor: uiColor) }
+
+    /// Dark on the light yellow-orange, white elsewhere.
+    var textColor: Color { self == .commercialOnly ? .black.opacity(0.8) : .white }
 
     var legendLabel: String {
         switch self {
         case .free:           return "Free now"
         case .paid:           return "Paid now"
         case .commercialOnly: return "Commercial"
+        case .noParking:      return "No parking"
         }
     }
 }
@@ -193,6 +205,19 @@ extension MeterProfile.Tier {
     }
 }
 
+extension ParkingSegment {
+    /// What a metered curb's meters mean right now, unless cleaning, no
+    /// standing or no stopping is in effect, in which case no one can park
+    /// whatever the meter says. Nil for curbs without meters.
+    func meterState(in cal: CountdownCalendar) -> MeterState? {
+        guard let meter else { return nil }
+        if let rule = moveWindows.restrictionInEffect(in: cal), rule.kind != .commercial {
+            return .noParking(until: rule.endMinutes, reason: rule.kind)
+        }
+        return meter.profile.state(in: cal)
+    }
+}
+
 /// Meter states for every metered curb at one moment. Immutable, so the map can
 /// compare snapshots by identity and only redraw when one actually changes.
 final class MeterSnapshot: @unchecked Sendable {
@@ -203,7 +228,7 @@ final class MeterSnapshot: @unchecked Sendable {
     static func compute(for segments: [ParkingSegment], calendar: CountdownCalendar) -> MeterSnapshot {
         var entries: [String: MeterState] = [:]
         for seg in segments {
-            if let meter = seg.meter { entries[seg.id] = meter.profile.state(in: calendar) }
+            if let state = seg.meterState(in: calendar) { entries[seg.id] = state }
         }
         return MeterSnapshot(entries: entries)
     }
