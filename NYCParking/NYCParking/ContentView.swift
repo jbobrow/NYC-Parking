@@ -20,6 +20,9 @@ struct ContentView: View {
     @State private var showDrivePrompt = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
+    @State private var showAbout = false
+    /// "How it works" on the About page: shown once that sheet has closed.
+    @State private var showOnboardingAfterAbout = false
     /// "Not now" (or ignoring the prompt) stops it asking again until then.
     @State private var drivePromptSnoozedUntil = Date.distantPast
     @State private var parkedRecord: ParkedCarRecord?
@@ -229,8 +232,8 @@ struct ContentView: View {
                         showHolidaySheet = true
                     }
 
-                    Button("How it works", systemImage: "questionmark.circle") {
-                        showOnboarding = true
+                    Button("About this app", systemImage: "info.circle") {
+                        showAbout = true
                     }
                 } label: {
                     // Shows the steering wheel while driving so drive mode stays visible.
@@ -248,6 +251,23 @@ struct ContentView: View {
             .animation(.easeInOut(duration: 0.25), value: abs(mapHeading) > 1)
             .animation(.easeInOut(duration: 0.25), value: parkedRecord != nil)
             .animation(.easeInOut(duration: 0.25), value: isCenteredOnCar)
+        }
+        .sheet(isPresented: $showAbout, onDismiss: {
+            if showOnboardingAfterAbout {
+                showOnboardingAfterAbout = false
+                showOnboarding = true
+            }
+        }) {
+            AboutView(app: .nycParking) {
+                AboutRow(title: "How it works", systemImage: "questionmark.circle") {
+                    showOnboardingAfterAbout = true
+                    showAbout = false
+                }
+            }
+            .presentationDetents([.large])
+            .presentationCornerRadius(22)
+            .presentationBackground(.regularMaterial)
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showHolidaySheet) {
             HolidaySheet(holidays: holidayService.holidays)
