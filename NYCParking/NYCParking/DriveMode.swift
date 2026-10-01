@@ -484,15 +484,12 @@ private struct SideCard: View {
     let calendar: CountdownCalendar
 
     var body: some View {
-        let countdown = segment.flatMap { MoveCountdown.next(for: $0.rules, in: calendar) }
-        let meter = segment?.meter.map { MeterPill(meter: $0, state: $0.profile.state(in: calendar)) }
-        let hasCleaning = segment?.hasCleaning ?? false
-        // Cleaning leads when posted; a metered-only curb leads with its meter.
-        let fill = hasCleaning ? segment.map { _ in MoveUrgency(days: countdown?.days).color }
-                               : meter?.kind?.color
-        let textColor = hasCleaning ? MoveUrgency(days: countdown?.days).textColor : .white
-        let (title, detail) = hasCleaning || meter == nil ? texts(countdown) : meterTexts(meter!)
-        let meterLine = hasCleaning ? meter.map(meterLineText) : nil
+        let countdown = segment.flatMap { MoveCountdown.next(for: $0.moveWindows, in: calendar) }
+        let urgency = segment.map { _ in MoveUrgency(days: countdown?.days) }
+        let (title, detail) = texts(countdown)
+        // The meter, when the countdown is about something else.
+        let meterLine = countdown?.kind == .meter || countdown?.kind == .commercial ? nil
+            : segment?.meter.map { meterLineText(MeterPill(meter: $0, state: $0.profile.state(in: calendar))) }
 
         VStack(alignment: side == .left ? .leading : .trailing, spacing: 2) {
             HStack(spacing: 4) {
@@ -519,43 +516,54 @@ private struct SideCard: View {
                     .padding(.top, 2)
             }
         }
-        .foregroundStyle(fill == nil ? .primary : textColor)
+        .foregroundStyle(urgency?.textColor ?? .primary)
         .frame(maxWidth: .infinity, alignment: side == .left ? .leading : .trailing)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background {
-            if let fill {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(fill)
+            if let urgency {
+                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(urgency.color)
             }
         }
-        .modifier(GlassRoundedBackground(enabled: fill == nil))
+        .modifier(GlassRoundedBackground(enabled: urgency == nil))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(side == .left ? "Left" : "Right") side: \(title), \(detail)"
                             + (meterLine.map { ", meter: \($0)" } ?? ""))
     }
 
     private func texts(_ c: MoveCountdown?) -> (String, String) {
-        guard segment != nil else { return ("NO RULES", "No posted cleaning") }
-        guard let c else { return ("7+ DAYS", "No cleaning this week") }
+        guard let segment else { return ("NO RULES", "No posted rules") }
+        guard let c else { return ("7+ DAYS", segment.hasCleaning ? "No cleaning this week" : "Nothing this week") }
+        let reason: String
+        switch c.kind {
+        case .cleaning:   reason = ""
+        case .noStanding: reason = "No standing "
+        case .noStopping: reason = "No stopping "
+        case .commercial: reason = "Trucks only "
+        case .meter:      reason = "Pay "
+        }
         if c.isUnderway {
-            return ("NOW", c.endMinutes.map { "Until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "Cleaning now")
+            let end = c.endMinutes.map { ParkingTime.format(minutes: $0 % (24 * 60)) }
+            switch c.kind {
+            case .cleaning: return ("NOW", end.map { "Until \($0)" } ?? "Cleaning now")
+            case .meter:
+                // "$2.50 · 2 HR until 7 PM"
+                let tier = segment.meter?.profile.paid
+                let rate = [tier?.priceText, tier?.limitText].compactMap { $0 }.joined(separator: " · ")
+                return ("PAY", (rate.isEmpty ? "Paid" : rate) + (end.map { " until \($0)" } ?? ""))
+            default:        return ("NOW", reason + (end.map { "until \($0)" } ?? "now"))
+            }
         }
         let day = c.weekday.short.capitalized
-        return (MoveCountdown.shortText(c), "\(day) \(ParkingTime.formatRange(c.startMinutes, c.endMinutes))")
-    }
-
-    /// A metered curb with no cleaning: "$2 · 2 HR" / "Meter until 7 PM".
-    private func meterTexts(_ pill: MeterPill) -> (String, String) {
-        let until = pill.detail.map { " \($0)" } ?? ""
-        switch pill.kind {
-        case .paid:           return (pill.title, "Meter\(until)")
-        case .commercialOnly: return ("COMMERCIAL", "Trucks only\(until)")
-        case .free:           return ("FREE", "Meters off\(until)")
-        case nil:             return (pill.title, "")
+        if c.kind == .cleaning {
+            return (MoveCountdown.shortText(c), "\(day) \(ParkingTime.formatRange(c.startMinutes, c.endMinutes))")
         }
+        let when = c.days == 0 ? ParkingTime.format(minutes: c.startMinutes)
+                               : "\(day) \(ParkingTime.format(minutes: c.startMinutes))"
+        return (MoveCountdown.shortText(c), reason + when)
     }
 
-    /// Under a cleaning countdown: "$2 · 2 HR until 7 PM", "Free until 9 AM".
+    /// Under another countdown: "$2.50 · 2 HR until 7 PM", "Free until 9 AM".
     private func meterLineText(_ pill: MeterPill) -> String {
         let until = pill.detail.map { " \($0)" } ?? ""
         switch pill.kind {

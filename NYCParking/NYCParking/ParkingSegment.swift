@@ -20,6 +20,10 @@ struct ParkingSegment: Identifiable, Hashable {
     let rules: [ParkingRule]
     /// Set on metered curbs.
     let meter: MeterInfo?
+    /// Posted no-standing / no-stopping rules limited to set hours.
+    let restrictions: [CurbRestriction]
+    /// Every time the curb's rules say move or pay (see `moveWindows`).
+    let moveWindows: [CurbWindow]
     /// The curb line down the middle of the parking lane, trimmed back from each
     /// intersection (built offline from the NYC street centerline).
     let curve: [CLLocationCoordinate2D]

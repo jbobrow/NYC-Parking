@@ -244,7 +244,8 @@ private struct RealMapArt<Fallback: View>: View {
                                       maxLon: r.center.longitude + r.span.longitudeDelta)
             .filter(\.hasCleaning)
         let countdowns = Dictionary(uniqueKeysWithValues: segments.map {
-            ($0.id, MoveCountdown.next(for: $0.rules, in: calendar))
+            // Onboarding introduces street cleaning, so count only that.
+            ($0.id, MoveCountdown.next(for: $0.moveWindows.filter { $0.kind == .cleaning }, in: calendar))
         })
         let format = UIGraphicsImageRendererFormat()
         format.scale = snapshot.image.scale
@@ -322,7 +323,7 @@ private struct CountdownArt: View {
 
     private func pill(_ days: Int) -> some View {
         CountdownLabel(countdown: MoveCountdown(days: days, weekday: .monday, startMinutes: 570,
-                                                endMinutes: 660, isUnderway: false),
+                                                endMinutes: 660, isUnderway: false, kind: .cleaning),
                        style: .days)
             .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
     }

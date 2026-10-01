@@ -57,30 +57,40 @@ struct ParkingDetailSheet: View {
             }
             .padding(.horizontal, 20)
 
+            // What the rules mean right now, strictest first.
+            TimelineView(.everyMinute) { _ in
+                VerdictRow(segment: segment, holidays: holidays)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+
             Divider()
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
 
-            // Rules list
-            if segment.hasCleaning {
-                VStack(alignment: .leading, spacing: 14) {
-                    if segment.meter != nil { SectionTitle(text: "Street cleaning", systemImage: "nosign.app") }
-                    ForEach(segment.rules) { rule in
-                        RuleRow(rule: rule)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(sections.enumerated()), id: \.element) { i, section in
+                    if i > 0 {
+                        Divider().padding(.vertical, 16)
+                    }
+                    switch section {
+                    case .cleaning:
+                        VStack(alignment: .leading, spacing: 14) {
+                            SectionTitle(text: "Street cleaning", systemImage: "nosign.app")
+                            ForEach(segment.rules) { rule in
+                                RuleRow(rule: rule)
+                            }
+                        }
+                    case .restrictions:
+                        RestrictionsSection(restrictions: segment.restrictions)
+                    case .meter:
+                        if let meter = segment.meter {
+                            MeterSection(meter: meter, holidays: holidays, moveWindows: segment.moveWindows)
+                        }
                     }
                 }
-                .padding(.horizontal, 20)
             }
-
-            if let meter = segment.meter {
-                if segment.hasCleaning {
-                    Divider()
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 16)
-                }
-                MeterSection(meter: meter, holidays: holidays)
-                    .padding(.horizontal, 20)
-            }
+            .padding(.horizontal, 20)
 
             Spacer(minLength: 24)
 
@@ -151,10 +161,20 @@ struct ParkingDetailSheet: View {
         return "\(from) → \(to)"
     }
 
+    private enum Section: Hashable { case cleaning, restrictions, meter }
+
+    private var sections: [Section] {
+        var out: [Section] = []
+        if segment.hasCleaning { out.append(.cleaning) }
+        if !segment.restrictions.isEmpty { out.append(.restrictions) }
+        if segment.meter != nil { out.append(.meter) }
+        return out
+    }
+
     /// Posted signs win, and how fresh the data is.
     private var footnote: String {
         var sources: [String] = []
-        if let signs = sourceDates.signs, segment.hasCleaning {
+        if let signs = sourceDates.signs, segment.hasCleaning || !segment.restrictions.isEmpty {
             sources.append("Signs as of \(signs.formatted(date: .abbreviated, time: .omitted))")
         }
         if let meters = sourceDates.meters, segment.meter != nil {
@@ -167,6 +187,87 @@ struct ParkingDetailSheet: View {
     private var sideLabel: String {
         let map = ["N": "North side", "S": "South side", "E": "East side", "W": "West side"]
         return map[segment.side.uppercased()] ?? "\(segment.side) side"
+    }
+}
+
+/// "No standing until 7 PM", "Free until Thu 8:30 AM · then street cleaning".
+private struct VerdictRow: View {
+    let segment: ParkingSegment
+    let holidays: [NamedHoliday]
+
+    var body: some View {
+        let countdown = MoveCountdown.next(for: segment.moveWindows,
+                                           in: CountdownCalendar(holidays: holidays))
+        let (title, detail) = texts(countdown)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Circle()
+                .fill(MoveUrgency(days: countdown?.days).color)
+                .frame(width: 10, height: 10)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func texts(_ c: MoveCountdown?) -> (String, String?) {
+        guard !segment.moveWindows.isEmpty else { return ("No rules for the whole block", nil) }
+        guard let c else { return ("Free all week", nil) }
+        if c.isUnderway {
+            let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? ""
+            switch c.kind {
+            case .cleaning:   return ("Street cleaning" + until, nil)
+            case .noStanding: return ("No standing" + until, "You can stop to drop off or pick up passengers.")
+            case .noStopping: return ("No stopping" + until, nil)
+            case .commercial: return ("Commercial vehicles only" + until, nil)
+            case .meter:      return ("Paid parking" + until, nil)
+            }
+        }
+        let time = ParkingTime.format(minutes: c.startMinutes)
+        let when = switch c.days {
+        case 0:  time
+        case 1:  "tomorrow \(time)"
+        default: "\(c.weekday.short.capitalized) \(time)"
+        }
+        let then = switch c.kind {
+        case .cleaning:   "street cleaning"
+        case .noStanding: "no standing"
+        case .noStopping: "no stopping"
+        case .commercial: "commercial vehicles only"
+        case .meter:      "meters"
+        }
+        return ("Free until \(when)", "Then \(then)")
+    }
+}
+
+/// Rush-hour, school and overnight no-standing / no-stopping rules.
+private struct RestrictionsSection: View {
+    let restrictions: [CurbRestriction]
+
+    var body: some View {
+        let kinds = Set(restrictions.map(\.kind))
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(text: kinds.count > 1 ? "No standing or stopping"
+                                               : restrictions[0].title,
+                         systemImage: "exclamationmark.octagon")
+            ForEach(restrictions, id: \.self) { r in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text((kinds.count > 1 ? "\(r.title) · " : "") + r.hoursText)
+                        .font(.system(size: 15, weight: .medium))
+                    if r.partOfBlock {
+                        Text("Posted on part of the block")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -186,6 +287,8 @@ private struct SectionTitle: View {
 private struct MeterSection: View {
     let meter: MeterInfo
     let holidays: [NamedHoliday]
+    /// The curb's rules, to skip a status the verdict above already gives.
+    let moveWindows: [CurbWindow]
 
     @Environment(\.openURL) private var openURL
     @State private var copied = false
@@ -195,7 +298,11 @@ private struct MeterSection: View {
             SectionTitle(text: "Meter", systemImage: "parkingsign")
 
             TimelineView(.everyMinute) { _ in
-                status
+                let cal = CountdownCalendar(holidays: holidays)
+                let verdict = MoveCountdown.next(for: moveWindows, in: cal)
+                if !(verdict?.isUnderway == true && verdict?.kind == .meter) {
+                    status(in: cal)
+                }
             }
 
             if let paid = meter.profile.paid {
@@ -225,8 +332,7 @@ private struct MeterSection: View {
     }
 
     /// "Paid now · until 7 PM", "Meters off today · Christmas Day · free until Mon 9 AM"
-    private var status: some View {
-        let cal = CountdownCalendar(holidays: holidays)
+    private func status(in cal: CountdownCalendar) -> some View {
         let state = meter.profile.state(in: cal)
         let title: String
         var details: [String] = []
@@ -237,9 +343,14 @@ private struct MeterSection: View {
         case .commercialOnly:
             title = "Commercial vehicles only"
             details.append(state.untilText ?? "")
-        case .free(let resumes):
+        case .free:
             let holiday = holidays.first { $0.metersSuspended && Calendar.current.isDate($0.date, inSameDayAs: AppClock.now) }
-            title = holiday != nil || resumes?.days != 0 ? "Meters off today" : "Meters off now"
+            // "Today" when they don't run at all today (Sunday, a holiday).
+            let windows = (meter.profile.paid?.windows ?? []) + (meter.profile.commercial?.windows ?? [])
+            let runsToday = cal.days.first.map { day in
+                !day.metersOff && windows.contains { $0.covers(day.weekday) }
+            } ?? false
+            title = runsToday ? "Meters off now" : "Meters off today"
             if let holiday { details.append(holiday.name) }
             if let until = state.untilText { details.append("free \(until)") }
         }

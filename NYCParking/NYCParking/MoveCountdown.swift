@@ -20,7 +20,11 @@ enum MapDisplayMode: String {
 
     /// Whether this view draws the block face at all.
     func shows(_ segment: ParkingSegment) -> Bool {
-        self == .meters ? segment.meter != nil : segment.hasCleaning
+        switch self {
+        case .days:      return segment.hasCleaning
+        case .countdown: return !segment.moveWindows.isEmpty
+        case .meters:    return segment.meter != nil
+        }
     }
 }
 
@@ -115,12 +119,16 @@ struct CountdownCalendar: Sendable {
     let minuteOfDay: Int
     /// Index 0 is today.
     let days: [Day]
+    /// For overnight rules still running from last night.
+    let yesterday: Day?
 
-    init(now: Date = AppClock.now, calendar: Calendar = .current, holidays: [NamedHoliday]) {
+    /// - Parameter dayCount: how many days ahead to look, past today.
+    init(now: Date = AppClock.now, calendar: Calendar = .current, holidays: [NamedHoliday],
+         dayCount: Int = 7) {
         let comps = calendar.dateComponents([.hour, .minute], from: now)
         minuteOfDay = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
         let today = calendar.startOfDay(for: now)
-        days = (0...7).compactMap { offset in
+        func day(_ offset: Int) -> Day? {
             guard let date = calendar.date(byAdding: .day, value: offset, to: today),
                   let weekday = ParkingDay.from(weekday: calendar.component(.weekday, from: date))
             else { return nil }
@@ -128,53 +136,82 @@ struct CountdownCalendar: Sendable {
             return Day(weekday: weekday, isHoliday: !onDay.isEmpty,
                        metersOff: onDay.contains { $0.metersSuspended })
         }
+        days = (0...dayCount).compactMap(day)
+        yesterday = day(-1)
     }
 }
 
-/// When a car parked on a block right now next has to move.
+/// When a car parked on a block right now next has to move (or pay the meter).
 struct MoveCountdown: Hashable, Sendable {
     /// Calendar days from today: 0 = today (or restriction in effect now), 1 = tomorrow.
     let days: Int
     let weekday: ParkingDay
     let startMinutes: Int
     let endMinutes: Int?
-    /// The restriction has already started today.
+    /// The restriction is already in effect.
     let isUnderway: Bool
+    /// What it is: cleaning, a no-standing rule, the meter…
+    let kind: CurbWindow.Kind
 
     var urgency: MoveUrgency { MoveUrgency(days: days) }
 
-    /// Pill text: "TODAY", "1 DAY", "4 DAYS", "7+ DAYS".
+    /// Pill text: "TODAY", "1 DAY", "4 DAYS", "7+ DAYS"; "P · 1 DAY" when it's
+    /// the meter, which can be paid instead.
     static func shortText(_ countdown: MoveCountdown?) -> String {
         guard let c = countdown, c.days < 7 else { return "7+ DAYS" }
+        let text: String
         switch c.days {
-        case 0:  return "TODAY"
-        case 1:  return "1 DAY"
-        default: return "\(c.days) DAYS"
+        case 0:  text = "TODAY"
+        case 1:  text = "1 DAY"
+        default: text = "\(c.days) DAYS"
         }
+        return c.kind.isMeter ? "P · \(text)" : text
     }
 
     /// "TUE 8:30 AM"
     var timeText: String { "\(weekday.short) \(ParkingTime.format(minutes: startMinutes))" }
 
-    /// Next restriction for `rules`, skipping ASP holidays. Nil when there's none
-    /// in the coming week. A restriction already under way today counts as today.
-    static func next(for rules: [ParkingRule], in cal: CountdownCalendar) -> MoveCountdown? {
-        for (offset, day) in cal.days.enumerated() where !day.isHoliday {
-            var earliest: (start: Int, end: Int?)?
-            for rule in rules where rule.days.contains(day.weekday) {
-                guard let start = ParkingTime.minutes(rule.startTime) else { continue }
-                let end = ParkingTime.minutes(rule.endTime)
-                if offset == 0, var end {
-                    if end <= start { end += 24 * 60 }   // runs past midnight
-                    if cal.minuteOfDay >= end { continue }  // already over today
+    /// The next time `windows` say move or pay, skipping days each is
+    /// suspended. Nil when there's none in the calendar's range. A rule already
+    /// in effect counts as today; when several are, the strictest wins.
+    ///
+    /// - Parameter upcomingOnly: skip rules already in effect, for "move by"
+    ///   deadlines that have to be in the future.
+    static func next(for windows: [CurbWindow], in cal: CountdownCalendar,
+                     upcomingOnly: Bool = false) -> MoveCountdown? {
+        let now = cal.minuteOfDay
+        let dayMinutes = 24 * 60
+        var best: MoveCountdown?
+        func consider(_ c: MoveCountdown) {
+            guard let b = best else { best = c; return }
+            if c.isUnderway != b.isUnderway {
+                if c.isUnderway { best = c }
+            } else if c.isUnderway || c.startMinutes == b.startMinutes {
+                if c.kind.strictness > b.kind.strictness { best = c }
+            } else if c.startMinutes < b.startMinutes {
+                best = c
+            }
+        }
+
+        // Overnight rules still running from last night ("10 PM–5 AM").
+        if !upcomingOnly, let y = cal.yesterday {
+            for w in windows where w.window.end > dayMinutes && w.window.covers(y.weekday)
+                && !w.isSuspended(on: y) && now < w.window.end - dayMinutes {
+                consider(MoveCountdown(days: 0, weekday: y.weekday, startMinutes: w.window.start,
+                                       endMinutes: w.window.end, isUnderway: true, kind: w.kind))
+            }
+        }
+        for (offset, day) in cal.days.enumerated() {
+            for w in windows where w.window.covers(day.weekday) && !w.isSuspended(on: day) {
+                if offset == 0 {
+                    if now >= w.window.end { continue }                   // already over today
+                    if upcomingOnly && now >= w.window.start { continue }
                 }
-                if earliest == nil || start < earliest!.start { earliest = (start, end) }
+                consider(MoveCountdown(days: offset, weekday: day.weekday, startMinutes: w.window.start,
+                                       endMinutes: w.window.end,
+                                       isUnderway: offset == 0 && now >= w.window.start, kind: w.kind))
             }
-            if let (start, end) = earliest {
-                return MoveCountdown(days: offset, weekday: day.weekday, startMinutes: start,
-                                     endMinutes: end,
-                                     isUnderway: offset == 0 && cal.minuteOfDay >= start)
-            }
+            if best != nil { return best }
         }
         return nil
     }
@@ -191,7 +228,7 @@ final class CountdownSnapshot: @unchecked Sendable {
         var entries: [String: MoveCountdown] = [:]
         entries.reserveCapacity(segments.count)
         for seg in segments {
-            if let c = MoveCountdown.next(for: seg.rules, in: calendar) { entries[seg.id] = c }
+            if let c = MoveCountdown.next(for: seg.moveWindows, in: calendar) { entries[seg.id] = c }
         }
         return CountdownSnapshot(entries: entries)
     }

@@ -6,10 +6,25 @@ struct StoredRule: Codable, Equatable {
     let days: [String]      // ParkingDay.rawValue, e.g. "MON", "THURS"
     let startTime: String
     let endTime: String
+}
 
-    /// Hour/minute when the restriction begins, parsed from `startTime` (e.g. "9:30AM", "11AM").
-    var startTimeComponents: (hour: Int, minute: Int)? {
-        ParkingTime.minutes(startTime).map { ($0 / 60, $0 % 60) }
+/// When a parked car next has to move, and why.
+struct MoveDeadline: Hashable {
+    let date: Date
+    let kind: CurbWindow.Kind
+
+    /// "Move by", or "Pay or move by" when it's the meter starting.
+    var verb: String { kind.isMeter ? "Pay or move by" : "Move by" }
+
+    /// What starts: "Alternate-side parking", "No standing", "Meters".
+    var what: String {
+        switch kind {
+        case .cleaning:   return "Alternate-side parking"
+        case .noStanding: return "No standing"
+        case .noStopping: return "No stopping"
+        case .commercial: return "Commercial-only parking"
+        case .meter:      return "Meters"
+        }
     }
 }
 
@@ -25,6 +40,9 @@ struct ParkedCarRecord: Codable, Equatable {
     let halfBlockLengthMeters: Double
     var offsetMeters: Double
     let restrictionRules: [StoredRule]
+    /// Every time the curb's rules say move or pay. Missing in records saved
+    /// before standing rules and meters were tracked (cleaning only, then).
+    let moveWindows: [CurbWindow]?
     let street: String
     let fromStreet: String
     let toStreet: String
@@ -42,6 +60,7 @@ struct ParkedCarRecord: Codable, Equatable {
         self.restrictionRules      = segment.rules.map {
             StoredRule(days: $0.days.map(\.rawValue), startTime: $0.startTime, endTime: $0.endTime)
         }
+        self.moveWindows           = segment.moveWindows
         self.street                = segment.street
         self.fromStreet            = segment.fromStreet
         self.toStreet              = segment.toStreet
@@ -76,30 +95,24 @@ struct ParkedCarRecord: Codable, Equatable {
 
     // MARK: - Move deadline
 
-    /// Start of the next restriction after `now`, skipping holidays. Today counts
-    /// if its restriction hasn't started yet.
-    func nextMoveDate(after now: Date, calendar cal: Calendar = .current,
-                      isHoliday: (Date) -> Bool) -> Date? {
-        let restrictionDayValues = Set(restrictionRules.flatMap { $0.days })
-        guard !restrictionDayValues.isEmpty else { return nil }
-        let today = cal.startOfDay(for: now)
-        for offset in 0...14 {
-            guard let candidate = cal.date(byAdding: .day, value: offset, to: today) else { continue }
-            let weekday = cal.component(.weekday, from: candidate)
-            guard let day = ParkingDay.from(weekday: weekday),
-                  restrictionDayValues.contains(day.rawValue),
-                  !isHoliday(candidate) else { continue }
-            // Earliest restriction that day, when several rules apply.
-            let starts = restrictionRules
-                .filter { $0.days.contains(day.rawValue) }
-                .compactMap(\.startTimeComponents)
-                .sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
-            let (hour, minute) = starts.first ?? (8, 0)
-            guard let deadline = cal.date(bySettingHour: hour, minute: minute, second: 0, of: candidate)
-            else { continue }
-            if deadline > now { return deadline }
-        }
-        return nil
+    /// The next time after `now` the car has to move (or the meter be paid),
+    /// skipping days each rule is suspended. A rule already in effect doesn't
+    /// count: the car is assumed fine until the next one starts.
+    func nextMove(after now: Date, holidays: [NamedHoliday],
+                  calendar cal: Calendar = .current) -> MoveDeadline? {
+        let windows = moveWindows ?? ParkingSegment.moveWindows(
+            rules: restrictionRules.map {
+                ParkingRule(days: $0.days.compactMap(ParkingDay.init(rawValue:)),
+                            startTime: $0.startTime, endTime: $0.endTime, rawDescription: "")
+            },
+            restrictions: [], meter: nil)
+        let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
+        guard let next = MoveCountdown.next(for: windows, in: calendar, upcomingOnly: true),
+              let day = cal.date(byAdding: .day, value: next.days, to: cal.startOfDay(for: now)),
+              let date = cal.date(bySettingHour: next.startMinutes / 60, minute: next.startMinutes % 60,
+                                  second: 0, of: day)
+        else { return nil }
+        return MoveDeadline(date: date, kind: next.kind)
     }
 
     // MARK: - Persistence

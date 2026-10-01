@@ -6,62 +6,40 @@ final class NotificationService: ObservableObject {
 
     private static let notificationIDs = ["parking-day-before", "parking-1hr", "parking-10min"]
 
-    func scheduleNotifications(for record: ParkedCarRecord, moveDate: Date) async {
+    func scheduleNotifications(for deadline: MoveDeadline) async {
         let center = UNUserNotificationCenter.current()
         let granted = (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
         guard granted else { return }
 
         let cal = Calendar.current
-        let weekday = cal.component(.weekday, from: moveDate)
-        guard let parkingDay = ParkingDay.from(weekday: weekday) else { return }
-
-        let applicableRule = record.restrictionRules.first { $0.days.contains(parkingDay.rawValue) }
-        let (restrictionHour, restrictionMinute) = applicableRule?.startTimeComponents ?? (8, 0)
-
-        guard let restrictionTime = cal.date(
-            bySettingHour: restrictionHour, minute: restrictionMinute, second: 0, of: moveDate
-        ) else { return }
-
+        let moveTime = deadline.date
         let df = DateFormatter()
         df.dateFormat = "EEE, MMM d"
-        let dateString = df.string(from: moveDate)
-        let timeString = formatTime(restrictionHour, restrictionMinute)
+        let body = "\(deadline.what) starts at \(moveTime.formatted(date: .omitted, time: .shortened))"
+            + " on \(df.string(from: moveTime))."
+        // A meter can be paid instead of moving the car.
+        let action = deadline.kind.isMeter ? "Pay the meter or move your car" : "Move your car"
         let now = Date()
 
         cancelPendingNotifications()
 
         // Evening the day before
-        if let dayBefore = cal.date(byAdding: .day, value: -1, to: moveDate),
+        if let dayBefore = cal.date(byAdding: .day, value: -1, to: moveTime),
            let eveningBefore = cal.date(bySettingHour: 18, minute: 0, second: 0, of: dayBefore),
            eveningBefore > now {
-            schedule(
-                id: "parking-day-before",
-                title: "Move your car tomorrow",
-                body: "Alternate-side parking starts at \(timeString) on \(dateString).",
-                at: eveningBefore
-            )
+            schedule(id: "parking-day-before", title: "\(action) tomorrow", body: body, at: eveningBefore)
         }
 
         // 1 hour before
-        let oneHourBefore = restrictionTime.addingTimeInterval(-3600)
+        let oneHourBefore = moveTime.addingTimeInterval(-3600)
         if oneHourBefore > now {
-            schedule(
-                id: "parking-1hr",
-                title: "Move your car in 1 hour",
-                body: "Alternate-side parking starts at \(timeString) on \(dateString).",
-                at: oneHourBefore
-            )
+            schedule(id: "parking-1hr", title: "\(action) in 1 hour", body: body, at: oneHourBefore)
         }
 
         // 10 minutes before
-        let tenMinBefore = restrictionTime.addingTimeInterval(-600)
+        let tenMinBefore = moveTime.addingTimeInterval(-600)
         if tenMinBefore > now {
-            schedule(
-                id: "parking-10min",
-                title: "Move your car in 10 minutes",
-                body: "Alternate-side parking starts at \(timeString) on \(dateString).",
-                at: tenMinBefore
-            )
+            schedule(id: "parking-10min", title: "\(action) in 10 minutes", body: body, at: tenMinBefore)
         }
     }
 
@@ -82,17 +60,5 @@ final class NotificationService: ObservableObject {
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
-    }
-
-    private func formatTime(_ hour: Int, _ minute: Int) -> String {
-        var comps = DateComponents()
-        comps.hour = hour
-        comps.minute = minute
-        guard let date = Calendar.current.date(from: comps) else {
-            return "\(hour):\(String(format: "%02d", minute))"
-        }
-        let df = DateFormatter()
-        df.dateFormat = "h:mm a"
-        return df.string(from: date)
     }
 }

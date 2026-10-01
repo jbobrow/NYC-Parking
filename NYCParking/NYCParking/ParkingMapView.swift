@@ -710,25 +710,32 @@ enum StripeBuilder {
     }
 
     /// One solid line per block, colored by days until the move. Greener lines are drawn last so
-    /// long-term parking stands out where lines overlap at far zoom.
+    /// long-term parking stands out where lines overlap at far zoom. Metered curbs are drawn in
+    /// neutral gray underneath (they're never long-term parking); their pills carry the countdown.
     static func countdownOverlays(for segments: [ParkingSegment],
                                   entries: [String: MoveCountdown]) -> [StripeOverlay] {
-        struct Key: Hashable { let row: Int; let col: Int; let urgency: MoveUrgency }
+        struct Key: Hashable { let row: Int; let col: Int; let urgency: MoveUrgency?; }
         var groups: [Key: [MKPolyline]] = [:]
-        for seg in segments where seg.hasCleaning && seg.curve.count >= 2 {
-            let urgency = MoveUrgency(days: entries[seg.id]?.days)
+        for seg in segments where !seg.moveWindows.isEmpty && seg.curve.count >= 2 {
+            let urgency = seg.meter == nil ? MoveUrgency(days: entries[seg.id]?.days) : nil
             let row = Int((seg.coordinate.latitude / chunkDegrees).rounded(.down))
             let col = Int((seg.coordinate.longitude / chunkDegrees).rounded(.down))
             groups[Key(row: row, col: col, urgency: urgency), default: []]
                 .append(MKPolyline(coordinates: seg.curve, count: seg.curve.count))
         }
         return groups
-            .sorted { $0.key.urgency.level < $1.key.urgency.level }
+            .sorted { ($0.key.urgency?.level ?? -1) < ($1.key.urgency?.level ?? -1) }
             .map { key, lines in
                 let overlay = StripeOverlay(lines)
-                overlay.color = key.urgency.uiColor
+                overlay.color = key.urgency?.uiColor ?? meteredCurbColor
                 return overlay
             }
+    }
+
+    /// Metered curbs in the countdown view: charcoal, which reads against both
+    /// the gray road and the pale sidewalk (lighter on the dark map).
+    static let meteredCurbColor = UIColor { traits in
+        UIColor(white: traits.userInterfaceStyle == .dark ? 0.72 : 0.36, alpha: 1)
     }
 
     /// One solid line per metered curb, colored by whether it's free, paid or

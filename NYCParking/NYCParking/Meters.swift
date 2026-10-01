@@ -11,20 +11,10 @@ final class MeterProfile: Sendable {
         case commercial  // commercial vehicles only
     }
 
-    /// When meters run: a set of weekdays and minutes after midnight. Ends are
-    /// at most 24 × 60 (no NYC meter runs past midnight).
-    struct Window: Sendable {
-        /// Bit per weekday, Monday = bit 0 (`ParkingDay.sortOrder`).
-        let dayMask: Int
-        let start: Int
-        let end: Int
-
-        func covers(_ day: ParkingDay) -> Bool { dayMask & (1 << day.sortOrder) != 0 }
-    }
-
     /// One tier of pricing: for all vehicles, or commercial vehicles only.
     struct Tier: Sendable {
-        let windows: [Window]
+        /// When meters run. Ends are at most 24 × 60 (no NYC meter runs past midnight).
+        let windows: [DayWindow]
         /// As posted: "Monday-Saturday 9 AM-7 PM".
         let hours: String
         /// As posted: "2 Hours".
@@ -51,7 +41,7 @@ final class MeterProfile: Sendable {
         func tier(_ prefix: String) -> Tier? {
             guard let raw = obj[prefix + "windows"] as? [[Int]], let hours = obj[prefix + "hours"] as? String
             else { return nil }
-            let windows = raw.compactMap { w in w.count == 3 ? Window(dayMask: w[0], start: w[1], end: w[2]) : nil }
+            let windows = raw.compactMap { w in w.count == 3 ? DayWindow(dayMask: w[0], start: w[1], end: w[2]) : nil }
             guard !windows.isEmpty else { return nil }
             return Tier(windows: windows, hours: hours,
                         limit: obj[prefix + "limit"] as? String,

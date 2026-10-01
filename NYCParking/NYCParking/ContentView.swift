@@ -269,8 +269,8 @@ struct ContentView: View {
                         let record = ParkedCarRecord(segment: segment, offsetMeters: 20)
                         parkedRecord = record
                         record.save()
-                        if let date = nextMoveDate {
-                            Task { await notificationService.scheduleNotifications(for: record, moveDate: date) }
+                        if let deadline = record.nextMove(after: AppClock.now, holidays: holidayService.holidays) {
+                            Task { await notificationService.scheduleNotifications(for: deadline) }
                         }
                     }
                 }
@@ -299,7 +299,7 @@ struct ContentView: View {
             if let parked = parkedRecord {
                 ParkedCarSheet(
                     record: parked,
-                    nextMoveDate: nextMoveDate,
+                    nextMove: nextMove,
                     onDirections: { openDirectionsToCar(for: parked) },
                     onUnpark: {
                         notificationService.cancelPendingNotifications()
@@ -457,8 +457,8 @@ struct ContentView: View {
 
     // MARK: - Move car banner
 
-    private var nextMoveDate: Date? {
-        parkedRecord?.nextMoveDate(after: AppClock.now) { holidayService.isHoliday($0) }
+    private var nextMove: MoveDeadline? {
+        parkedRecord?.nextMove(after: AppClock.now, holidays: holidayService.holidays)
     }
 
     private func openDirectionsToCar(for record: ParkedCarRecord) {
@@ -501,21 +501,28 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 3) {
                 ForEach(MoveUrgency.allCases, id: \.self) { urgency in
-                    VStack(spacing: 3) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(urgency.color)
-                            .frame(width: 16, height: 8)
-                        Text(urgency.legendLabel)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.primary)
-                            .fixedSize()
-                    }
+                    legendSwatch(urgency.color, label: urgency.legendLabel)
                 }
+                // Metered curbs: gray, with the countdown on their pills.
+                legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
+                    .padding(.leading, 6)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .glassRoundedRect()
+    }
+
+    private func legendSwatch(_ color: Color, label: String) -> some View {
+        VStack(spacing: 3) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(color)
+                .frame(width: 16, height: 8)
+            Text(label)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+                .fixedSize()
+        }
     }
 
     private var meterLegend: some View {
@@ -593,11 +600,11 @@ private struct TopBanners: View {
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let now = AppClock.now
-            let moveDate = record?.nextMoveDate(after: now) { isHoliday($0) }
+            let move = record?.nextMove(after: now, holidays: holidays)
             let holiday = showsHolidayBanner ? upcomingHoliday(from: now) : nil
             VStack(spacing: 8) {
-                if let moveDate {
-                    moveCarBanner(for: moveDate, now: now)
+                if let move {
+                    moveCarBanner(for: move, now: now)
                         .onTapGesture(perform: onMoveTap)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -607,34 +614,32 @@ private struct TopBanners: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: moveDate)
+            .animation(.easeInOut(duration: 0.3), value: move)
             .animation(.easeInOut(duration: 0.3), value: holiday?.holiday.id)
             .animation(.easeInOut(duration: 0.3),
-                       value: moveDate.map { MoveBannerStage(deadline: $0, now: now) })
+                       value: move.map { MoveBannerStage(deadline: $0.date, now: now) })
         }
     }
 
-    private func isHoliday(_ date: Date) -> Bool {
-        holidays.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
-    }
-
     /// Yellow from the day before the move, red within the final hour.
-    private func moveCarBanner(for date: Date, now: Date) -> some View {
+    /// "Move by 8:30 AM tomorrow"; "Pay or move by …" when it's the meter.
+    private func moveCarBanner(for move: MoveDeadline, now: Date) -> some View {
+        let date = move.date
         let stage = MoveBannerStage(deadline: date, now: now)
         let time = date.formatted(date: .omitted, time: .shortened)
         let text: String
         switch stage {
         case .imminent:
             let minutes = max(1, Int((date.timeIntervalSince(now) / 60).rounded(.up)))
-            text = "Move in \(minutes) min · \(time)"
+            text = "\(move.kind.isMeter ? "Pay or move" : "Move") in \(minutes) min · \(time)"
         case .dayBefore where Calendar.current.isDate(date, inSameDayAs: now):
-            text = "Move by \(time) today"
+            text = "\(move.verb) \(time) today"
         case .dayBefore:
-            text = "Move by \(time) tomorrow"
+            text = "\(move.verb) \(time) tomorrow"
         case .normal:
             let df = DateFormatter()
             df.dateFormat = "h:mm a, EEE MMM d"
-            text = "Move by \(df.string(from: date))"
+            text = "\(move.verb) \(df.string(from: date))"
         }
         let icon = stage == .imminent ? "clock.badge.exclamationmark.fill" : "calendar.badge.clock"
         return Label(text, systemImage: icon)

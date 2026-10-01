@@ -46,7 +46,8 @@ final class ParkingDatabase {
         let profiles = meterProfiles()
         var stmt: OpaquePointer?
         let sql = """
-            SELECT id,street,from_st,to_st,side,lat,lon,bearing,half_len,rules,geom,meter_zone,meter_profile
+            SELECT id,street,from_st,to_st,side,lat,lon,bearing,half_len,rules,geom,meter_zone,meter_profile,
+                   restrictions
             FROM segments
             """
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
@@ -87,7 +88,8 @@ final class ParkingDatabase {
         let rules = Self.parseRules(str(9))
         let meter: MeterInfo? = sqlite3_column_type(s, 12) == SQLITE_NULL ? nil
             : profiles[sqlite3_column_int(s, 12)].map { MeterInfo(zone: str(11), profile: $0) }
-        guard !rules.isEmpty || meter != nil else { return nil }
+        let restrictions = Self.parseRestrictions(str(13))
+        guard !rules.isEmpty || meter != nil || !restrictions.isEmpty else { return nil }
         var curve = Self.parseGeometry(str(10))
         if curve.count < 2 { curve = [coord, coord] }
 
@@ -98,6 +100,8 @@ final class ParkingDatabase {
             halfBlockLengthMeters: sqlite3_column_double(s, 8),
             rules: rules,
             meter: meter,
+            restrictions: restrictions,
+            moveWindows: ParkingSegment.moveWindows(rules: rules, restrictions: restrictions, meter: meter),
             curve: curve
         )
     }
@@ -111,6 +115,21 @@ final class ParkingDatabase {
             let days = entry[0].split(separator: ",").compactMap { ParkingDay(rawValue: String($0)) }
             guard !days.isEmpty else { return nil }
             return ParkingRule(days: days, startTime: entry[1], endTime: entry[2], rawDescription: "")
+        }
+    }
+
+    /// [["standing", [[day mask, start, end], ...], school days, part of block], ...]
+    private static func parseRestrictions(_ json: String) -> [CurbRestriction] {
+        guard !json.isEmpty, let data = json.data(using: .utf8),
+              let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[Any]] else { return [] }
+        return arr.compactMap { entry in
+            guard entry.count == 4,
+                  let kind = (entry[0] as? String).flatMap(CurbRestriction.Kind.init(rawValue:)),
+                  let raw = entry[1] as? [[Int]] else { return nil }
+            let windows = raw.compactMap { w in w.count == 3 ? DayWindow(dayMask: w[0], start: w[1], end: w[2]) : nil }
+            guard !windows.isEmpty else { return nil }
+            return CurbRestriction(kind: kind, windows: windows,
+                                   schoolDays: (entry[2] as? Int) == 1, partOfBlock: (entry[3] as? Int) == 1)
         }
     }
 
