@@ -24,103 +24,126 @@ struct ParkingDetailSheet: View {
         let title: String
         let isCommercialVehicle: Bool?
     }
-    /// The sheet fits its content, which varies with the rules and meter shown.
-    @State private var contentHeight: CGFloat = 380
+    /// The sheet rests at two heights that fit its content: collapsed (header,
+    /// verdict, toggle) and expanded (every posted rule), with the park button
+    /// and footnote pinned below either way.
+    @State private var summaryHeight: CGFloat = 0
+    @State private var fullHeight: CGFloat = 0
+    @State private var bottomHeight: CGFloat = 0
     /// The posted rules, hidden to start: the verdict is what matters at a glance.
     @State private var showsDetails = false
 
+    private var collapsedDetent: PresentationDetent { .height(max(summaryHeight + bottomHeight, 200)) }
+    private var expandedDetent: PresentationDetent { .height(max(fullHeight + bottomHeight, 200)) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Drag handle
-            Capsule()
-                .fill(.quaternary)
-                .frame(width: 36, height: 5)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 10)
-                .padding(.bottom, 18)
+        VStack(spacing: 0) {
+            // Anchored to the top and clipped: moving between the two heights
+            // (Show / Hide, or a drag) reveals the rules above the park button,
+            // which stays put.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Drag handle
+                        Capsule()
+                            .fill(.quaternary)
+                            .frame(width: 36, height: 5)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 10)
+                            .padding(.bottom, 18)
 
-            // Street header
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(segment.street.localizedCapitalized)
-                        .font(.system(size: 22, weight: .bold))
+                        // Street header
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(segment.street.localizedCapitalized)
+                                    .font(.system(size: 22, weight: .bold))
 
-                    if isParked {
-                        Image(systemName: "car.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.green, in: Capsule())
-                            .transition(.scale(scale: 0.5).combined(with: .opacity))
+                                if isParked {
+                                    Image(systemName: "car.fill")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.green, in: Capsule())
+                                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                                }
+                            }
+                            .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isParked)
+
+                            if !segment.fromStreet.isEmpty || !segment.toStreet.isEmpty {
+                                Text(blockDescription)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if !segment.side.isEmpty {
+                                Text(sideLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.top, 1)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+
+                        // What the rules mean right now, strictest first.
+                        TimelineView(.everyMinute) { _ in
+                            VerdictRow(segment: segment, holidays: holidays)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+
+                        detailsToggle
+                            .padding(.horizontal, 20)
+                            .padding(.top, 14)
                     }
-                }
-                .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isParked)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { summaryHeight = $0 }
 
-                if !segment.fromStreet.isEmpty || !segment.toStreet.isEmpty {
-                    Text(blockDescription)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    // Always laid out, so the expanded height is known; clipped
+                    // away while collapsed.
+                    details
+                        .opacity(showsDetails ? 1 : 0)
                 }
-
-                if !segment.side.isEmpty {
-                    Text(sideLabel)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 1)
-                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
             }
-            .padding(.horizontal, 20)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.never)
+            .scrollDisabled(!showsDetails)   // a drag while collapsed moves the sheet
 
-            // What the rules mean right now, strictest first.
-            TimelineView(.everyMinute) { _ in
-                VerdictRow(segment: segment, holidays: holidays)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-
-            detailsToggle
+            VStack(spacing: 0) {
+                Button {
+                    if isParked {
+                        showUnparkConfirm = true
+                    } else if segment.meter?.profile.commercial != nil {
+                        // Commercial hours mean pay for some cars, move for others.
+                        showVehicleQuestion = true
+                    } else {
+                        attemptPark(isCommercialVehicle: nil, confirmingMove: true)
+                    }
+                } label: {
+                    Label(buttonLabel, systemImage: buttonIcon)
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(buttonColor, in: RoundedRectangle(cornerRadius: 14))
+                        .foregroundStyle(.white)
+                }
                 .padding(.horizontal, 20)
-                .padding(.top, 14)
+                .padding(.bottom, 10)
 
-            if showsDetails {
-                details
-                    .transition(.opacity)
-            }
-
-            Spacer(minLength: 24)
-
-            Button {
-                if isParked {
-                    showUnparkConfirm = true
-                } else if segment.meter?.profile.commercial != nil {
-                    // Commercial hours mean pay for some cars, move for others.
-                    showVehicleQuestion = true
-                } else {
-                    attemptPark(isCommercialVehicle: nil, confirmingMove: true)
-                }
-            } label: {
-                Label(buttonLabel, systemImage: buttonIcon)
-                    .font(.system(size: 17, weight: .semibold))
+                Text(footnote)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(buttonColor, in: RoundedRectangle(cornerRadius: 14))
-                    .foregroundStyle(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 10)
-
-            Text(footnote)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
+            .padding(.top, 24)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
         }
-        .fixedSize(horizontal: false, vertical: true)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-        .presentationDetents([.height(contentHeight)])
+        .presentationDetents([collapsedDetent, expandedDetent], selection: Binding(
+            get: { showsDetails ? expandedDetent : collapsedDetent },
+            set: { detent in withAnimation(.easeInOut(duration: 0.2)) { showsDetails = detent == expandedDetent } }))
         .alert("Unpark Car?", isPresented: $showUnparkConfirm) {
             Button("Unpark", role: .destructive) { onPark(nil); dismiss() }
             Button("Cancel", role: .cancel) { }
