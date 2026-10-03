@@ -244,6 +244,11 @@ h1 {
   color: var(--muted);
 }
 
+/* "App by Jon Bobrow", the same signature as in the app */
+.by-jon { display: inline-block; margin-top: 14px; color: var(--muted); transition: color 0.15s; }
+.by-jon:hover { color: var(--fg); }
+.by-jon svg { display: block; width: 150px; height: auto; }
+
 /* Map controls, restyled for the dark card */
 
 .maplibregl-ctrl-group {
