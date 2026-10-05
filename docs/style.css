@@ -224,7 +224,7 @@ h1 {
   width: 16.2em;
   padding-bottom: 7.6em;   /* how much post shows below the sign */
   transform: rotate(-18deg);
-  transform-origin: 50% calc(100% + 100em);
+  transform-origin: 3em calc(100% + 100em);   /* far below the post */
   filter: drop-shadow(0 0.5em 1em rgb(0 0 0 / 0.5));
 }
 .new-sign.in {
@@ -260,6 +260,8 @@ h1 {
   text-transform: uppercase;
 }
 .sign-new { font-size: 1.1em; font-weight: 700; letter-spacing: 0.08em; }
+/* The tracking above spreads "1.4" around its period; pull it back in */
+.sign-new .version { letter-spacing: -0.02em; }
 .sign-title { margin-top: 0.25em; font-size: 1.6em; font-weight: 800; white-space: nowrap; }
 .sign-body { margin-top: 0.35em; font-size: 1.2em; font-weight: 700; letter-spacing: 0.02em; }
 .sign-close {
@@ -276,19 +278,19 @@ h1 {
   cursor: pointer;
 }
 .sign-close:hover { color: #16171b; }
-/* Square steel post, light and flat with an outline, its holes punched
-   right through (a mask), so the map shows in them */
+/* Square steel post under the sign's left side, light and flat with an
+   outline, its holes punched right through (a mask), so the map shows in them */
 .post {
   position: absolute;
   top: 1em;
   bottom: 0;
-  left: 50%;
-  width: 1.8em;
-  margin-left: -0.9em;
+  left: 3em;
+  width: 2.2em;
+  margin-left: -1.1em;
   border: 1px solid rgb(0 0 0 / 0.35);
   border-bottom: 0;
   background: #d9dce0;
-  --holes: radial-gradient(circle, transparent 0.2em, #000 0.26em) center 0.6em / 1.8em 1.3em repeat-y;
+  --holes: radial-gradient(circle, transparent 0.25em, #000 0.31em) center 0.7em / 2.2em 1.5em repeat-y;
   -webkit-mask: var(--holes);
   mask: var(--holes);
 }
