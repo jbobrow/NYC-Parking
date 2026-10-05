@@ -249,7 +249,8 @@ h1 {
   padding: 1.6em 1.6em 1.8em;
   border-radius: 1.4em;
   background: #fbfaf6;
-  box-shadow: inset 0 0 0 0.35em #fbfaf6, inset 0 0 0 0.6em var(--sign-red);
+  /* The ring, then a shadow of its own that falls on the post too */
+  box-shadow: inset 0 0 0 0.35em #fbfaf6, inset 0 0 0 0.6em var(--sign-red), 0 0.5em 1em rgb(0 0 0 / 0.4);
   color: var(--sign-red);
   /* Narrow like street-sign lettering: Apple's condensed Helvetica, else Arial Narrow */
   font-family: "HelveticaNeue-CondensedBold", "Helvetica Neue Condensed Bold", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
@@ -275,7 +276,8 @@ h1 {
   cursor: pointer;
 }
 .sign-close:hover { color: #16171b; }
-/* Square steel post, light and flat with an outline, punched with holes */
+/* Square steel post, light and flat with an outline, its holes punched
+   right through (a mask), so the map shows in them */
 .post {
   position: absolute;
   top: 1em;
@@ -285,9 +287,10 @@ h1 {
   margin-left: -0.9em;
   border: 1px solid rgb(0 0 0 / 0.35);
   border-bottom: 0;
-  background:
-    radial-gradient(circle, #4a4d53 0.2em, transparent 0.26em) center 0.6em / 1.8em 1.3em repeat-y,
-    #d9dce0;
+  background: #d9dce0;
+  --holes: radial-gradient(circle, transparent 0.2em, #000 0.26em) center 0.6em / 1.8em 1.3em repeat-y;
+  -webkit-mask: var(--holes);
+  mask: var(--holes);
 }
 @media (min-width: 768px) {
   .new-sign { left: 40px; font-size: 13px; }
