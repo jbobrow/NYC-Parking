@@ -415,6 +415,9 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             phase == .active && !showOnboarding ? driveDetector.start() : driveDetector.stop()
+            if phase == .active, let street = (parkedRecord ?? ParkedCarRecord.load())?.street {
+                Task { await NotificationService.restoreReparkAlarmIfNeeded(street: street) }
+            }
         }
         .fullScreenCover(isPresented: $showOnboarding) {
             OnboardingView(locationManager: locationManager, driveDetector: driveDetector,

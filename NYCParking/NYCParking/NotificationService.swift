@@ -2,6 +2,7 @@ import UserNotifications
 import Foundation
 import SwiftUI
 import AlarmKit
+import ActivityKit
 
 @MainActor
 final class NotificationService: ObservableObject {
@@ -97,6 +98,21 @@ final class NotificationService: ObservableObject {
         }
         UserDefaults.standard.set(cleaningEnds.timeIntervalSince1970, forKey: DoubleParking.reminderKey)
         return true
+    }
+
+    /// An app update keeps the alarm but ends its Lock Screen countdown, so
+    /// it's no longer plain that it's set. Schedules it again (same time, a
+    /// fresh countdown) while it's still ahead, or if it's gone altogether.
+    static func restoreReparkAlarmIfNeeded(street: String) async {
+        guard #available(iOS 26, *), AlarmManager.shared.authorizationState == .authorized else { return }
+        let stored = UserDefaults.standard.double(forKey: DoubleParking.reminderKey)
+        let alarm = try? AlarmManager.shared.alarms.first { $0.id == reparkAlarmID }
+        let showsCountdown = !Activity<AlarmAttributes<ReparkAlarmMetadata>>.activities.isEmpty
+        guard stored > 0, alarm == nil || (alarm?.state == .countdown && !showsCountdown) else { return }
+        let cleaningEnds = Date(timeIntervalSince1970: stored)
+        guard DoubleParking.reminderDate(cleaningEnds: cleaningEnds, leadMinutes: DoubleParking.leadMinutes) > Date()
+        else { return }
+        _ = await scheduleRepark(cleaningEnds: cleaningEnds, leadMinutes: DoubleParking.leadMinutes, street: street)
     }
 
     static func cancelRepark() {
