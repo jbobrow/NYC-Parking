@@ -7,6 +7,7 @@ struct ContentView: View {
     @StateObject private var notificationService   = NotificationService()
     @StateObject private var holidayService        = ASPHolidayService()
     @StateObject private var driveDetector         = DriveDetector()
+    @ObservedObject private var notificationRouter = NotificationRouter.shared
 
     @State private var mapController = MapController()
     @State private var selectedSegment: ParkingSegment?
@@ -20,6 +21,10 @@ struct ContentView: View {
     @State private var showDrivePrompt = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
+    /// The last version whose What's New was shown, or skipped because
+    /// onboarding came first.
+    @AppStorage("lastWhatsNewVersion") private var lastWhatsNewVersion = ""
+    @State private var whatsNew: WhatsNew?
     @State private var showAbout = false
     /// "How it works" on the About page: shown once that sheet has closed.
     @State private var showOnboardingAfterAbout = false
@@ -29,7 +34,8 @@ struct ContentView: View {
     @State private var showParkedCarSheet = false
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
-    @State private var displayMode: MapDisplayMode = .countdown
+    /// Which view the map shows; remembered across launches.
+    @AppStorage(MapDisplayMode.storageKey) private var displayMode: MapDisplayMode = .countdown
     /// How countdown colors read; chosen by tapping the legend.
     @AppStorage(CountdownScale.storageKey) private var countdownScale: CountdownScale = .standard
     /// Always on in the app; screenshot scenes can turn it off for a cleaner map.
@@ -293,8 +299,16 @@ struct ContentView: View {
                                                      isCommercialVehicle: isCommercialVehicle)
                         parkedRecord = record
                         record.save()
-                        if let deadline = record.nextMove(after: AppClock.now, holidays: holidayService.holidays) {
-                            Task { await notificationService.scheduleNotifications(for: deadline) }
+                        let now = AppClock.now, holidays = holidayService.holidays
+                        let deadline = record.nextMove(after: now, holidays: holidays)
+                        let cleaning = record.cleaning(around: now, holidays: holidays)
+                        if deadline != nil || cleaning != nil {
+                            Task {
+                                await notificationService.scheduleNotifications(
+                                    for: deadline, cleaning: cleaning, street: record.street)
+                            }
+                        } else {
+                            notificationService.cancelPendingNotifications()
                         }
                     }
                 }
@@ -307,6 +321,7 @@ struct ContentView: View {
             if let top = Self.currentWindowSafeAreaTop() { windowSafeAreaTop = top }
             if hasCompletedOnboarding || isStagingScreenshot {
                 locationManager.requestPermission()
+                if !isStagingScreenshot { showWhatsNewIfNeeded() }
             } else {
                 // Onboarding asks for permissions in context.
                 showOnboarding = true
@@ -314,7 +329,9 @@ struct ContentView: View {
             if let record = ParkedCarRecord.load() {
                 parkedRecord = record
             }
+            showParkedCarFromNotification()
         }
+        .onChange(of: notificationRouter.showsParkedCar) { showParkedCarFromNotification() }
         .onChange(of: parkedRecord) { _, record in
             record == nil ? ParkedCarRecord.clear() : record?.save()
             if record == nil { isCenteredOnCar = false }
@@ -324,6 +341,7 @@ struct ContentView: View {
                 ParkedCarSheet(
                     record: parked,
                     nextMove: nextMove,
+                    holidays: holidayService.holidays,
                     onDirections: { openDirectionsToCar(for: parked) },
                     onUnpark: {
                         notificationService.cancelPendingNotifications()
@@ -333,7 +351,6 @@ struct ContentView: View {
                         }
                     }
                 )
-                .presentationDetents([.fraction(0.42)])
                 .presentationCornerRadius(22)
                 .presentationBackground(.regularMaterial)
                 .presentationDragIndicator(.hidden)
@@ -377,6 +394,8 @@ struct ContentView: View {
             OnboardingView(locationManager: locationManager, driveDetector: driveDetector,
                            index: dataService.index, holidays: holidayService.holidays) {
                 hasCompletedOnboarding = true
+                // A new install learns it all from onboarding.
+                lastWhatsNewVersion = WhatsNew.currentVersion ?? ""
                 showOnboarding = false
                 // The map needs location; ask now if it was skipped.
                 if locationManager.authorizationStatus == .notDetermined {
@@ -384,6 +403,9 @@ struct ContentView: View {
                 }
                 if scenePhase == .active { driveDetector.start() }
             }
+        }
+        .fullScreenCover(item: $whatsNew) { whatsNew in
+            WhatsNewView(whatsNew: whatsNew) { self.whatsNew = nil }
         }
         .onChange(of: driveDetector.isLikelyDriving) { _, driving in
             if driving, !isDrivingMode, Date() >= drivePromptSnoozedUntil {
@@ -461,6 +483,15 @@ struct ContentView: View {
         }
     }
 
+    /// Shows what's new, once, to someone who updated to a version that has
+    /// something to show. Marked as seen as soon as it's up, so it never
+    /// comes back, however it's closed.
+    private func showWhatsNewIfNeeded() {
+        guard let current = WhatsNew.current, current.version != lastWhatsNewVersion else { return }
+        lastWhatsNewVersion = current.version
+        whatsNew = current
+    }
+
     private var isStagingScreenshot: Bool {
         #if DEBUG
         return ScreenshotScene.isActive
@@ -480,6 +511,13 @@ struct ContentView: View {
     }
 
     // MARK: - Move car banner
+
+    /// Tapping a notification about the parked car opens its sheet.
+    private func showParkedCarFromNotification() {
+        guard notificationRouter.showsParkedCar else { return }
+        notificationRouter.showsParkedCar = false
+        if parkedRecord != nil { showParkedCarSheet = true }
+    }
 
     private var nextMove: MoveDeadline? {
         parkedRecord?.nextMove(after: AppClock.now, holidays: holidayService.holidays)
@@ -646,6 +684,9 @@ private struct TopBanners: View {
     let onMoveTap: () -> Void
     let onHolidayTap: () -> Void
 
+    @AppStorage(DoubleParking.leadMinutesKey) private var reparkLeadMinutes = DoubleParking.defaultLeadMinutes
+    @AppStorage(DoubleParking.reminderKey) private var reparkCleaningEnds: Double = 0
+
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let now = AppClock.now
@@ -653,9 +694,18 @@ private struct TopBanners: View {
             // parked) comes before the next deadline.
             let inEffect = record?.restrictionInEffect(at: now, holidays: holidays)
             let move = inEffect == nil ? record?.nextMove(after: now, holidays: holidays) : nil
+            // Double-parked through cleaning with a repark reminder set.
+            let repark = inEffect?.kind == .cleaning
+                ? record?.cleaning(around: now, holidays: holidays)
+                    .flatMap { DoubleParking.isReminderSet(reparkCleaningEnds, forCleaningEnding: $0.end) ? $0 : nil }
+                : nil
             let holiday = showsHolidayBanner ? upcomingHoliday(from: now) : nil
             VStack(spacing: 8) {
-                if let inEffect {
+                if let repark {
+                    reparkBanner(repark, now: now)
+                        .onTapGesture(perform: onMoveTap)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else if let inEffect {
                     moveNowBanner(inEffect)
                         .onTapGesture(perform: onMoveTap)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -672,6 +722,7 @@ private struct TopBanners: View {
             }
             .animation(.easeInOut(duration: 0.3), value: move)
             .animation(.easeInOut(duration: 0.3), value: inEffect)
+            .animation(.easeInOut(duration: 0.3), value: repark)
             .animation(.easeInOut(duration: 0.3), value: holiday?.holiday.id)
             .animation(.easeInOut(duration: 0.3),
                        value: move.map { MoveBannerStage(deadline: $0.date, now: now) })
@@ -687,6 +738,23 @@ private struct TopBanners: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .modifier(BannerBackground(tint: MoveUrgency(days: 0)))
+    }
+
+    /// "Double-parked · repark at 10:10 AM", then red once it's time:
+    /// "Repark now · cleaning ends 10:30 AM".
+    private func reparkBanner(_ cleaning: CleaningTime, now: Date) -> some View {
+        let at = DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes)
+        let isTime = at <= now
+        let text = isTime
+            ? "Repark now · cleaning ends \(cleaning.end.formatted(date: .omitted, time: .shortened))"
+            : "Double-parked · repark at \(at.formatted(date: .omitted, time: .shortened))"
+        return Label(text, systemImage: isTime ? "car.fill" : "car.2.fill")
+            .font(.system(size: 14, weight: .semibold, design: .rounded))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .modifier(BannerBackground(tint: isTime ? MoveUrgency(days: 0) : nil))
     }
 
     /// Yellow from the day before the move, red within the final hour.

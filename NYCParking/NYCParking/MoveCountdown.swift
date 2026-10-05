@@ -18,6 +18,8 @@ enum MapDisplayMode: String {
     case countdown  // how many days until you'd have to move a car parked there now
     case meters     // metered curbs: free, paid or commercial-only right now
 
+    static let storageKey = "mapDisplayMode"
+
     /// Whether this view draws the block face at all.
     func shows(_ segment: ParkingSegment) -> Bool {
         switch self {

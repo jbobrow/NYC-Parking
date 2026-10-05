@@ -43,6 +43,11 @@ struct ScreenshotScene {
             center: .init(latitude: 40.7512, longitude: -73.8855), spanMeters: (330, 150),
             heading: 352, mode: .countdown, clock: "2026-10-01T08:10:00-04:00",
             parkedSegmentID: "71027R", parkedOffsetMeters: 30),
+        // The same car double-parked through Thursday's cleaning, repark reminder set.
+        "double-park": ScreenshotScene(
+            center: .init(latitude: 40.7512, longitude: -73.8855), spanMeters: (330, 150),
+            heading: 352, mode: .countdown, clock: "2026-10-01T09:20:00-04:00",
+            parkedSegmentID: "71027R", parkedOffsetMeters: 30),
         // Cleaning-day pills and curb stripes in the East Village.
         "days-close": ScreenshotScene(
             center: .init(latitude: 40.7268, longitude: -73.9838), spanMeters: (420, 190),

@@ -34,6 +34,7 @@
 		AA2D00000000000000000002 /* CurbRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2D00000000000000000001 /* CurbRules.swift */; };
 		AA2E00000000000000000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2E00000000000000000001 /* AboutView.swift */; };
 		AA2F00000000000000000002 /* Signature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2F00000000000000000001 /* Signature.swift */; };
+		AA3000000000000000000002 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3000000000000000000001 /* WhatsNewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +67,7 @@
 		BB2D00000000000000000001 /* CurbRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurbRules.swift; sourceTree = "<group>"; };
 		BB2E00000000000000000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		BB2F00000000000000000001 /* Signature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signature.swift; sourceTree = "<group>"; };
+		BB3000000000000000000001 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -115,6 +117,7 @@
 				BB2D00000000000000000001 /* CurbRules.swift */,
 				BB2E00000000000000000001 /* AboutView.swift */,
 				BB2F00000000000000000001 /* Signature.swift */,
+				BB3000000000000000000001 /* WhatsNewView.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -225,6 +228,7 @@
 				AA2D00000000000000000002 /* CurbRules.swift in Sources */,
 				AA2E00000000000000000002 /* AboutView.swift in Sources */,
 				AA2F00000000000000000002 /* Signature.swift in Sources */,
+				AA3000000000000000000002 /* WhatsNewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -354,7 +358,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -368,7 +372,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -383,7 +387,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -397,7 +401,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

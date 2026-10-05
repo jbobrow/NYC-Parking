@@ -2,9 +2,12 @@ import SwiftUI
 
 @main
 struct NYCParkingApp: App {
-    #if DEBUG
-    init() { ScreenshotScene.configureClock() }
-    #endif
+    init() {
+        #if DEBUG
+        ScreenshotScene.configureClock()
+        #endif
+        NotificationRouter.shared.activate()
+    }
 
     var body: some Scene {
         WindowGroup {
