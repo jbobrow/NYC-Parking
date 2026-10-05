@@ -212,9 +212,9 @@ h1 {
 .readout .move .u { border-radius: 999px; padding: 4px 9px; }
 
 /* What's new: a parking sign on a perforated post, planted in the map's
-   corner. It swings up from lying flat, pivoting at the foot of its post,
-   and lands with a little wobble; closing it tips it back over. The map's
-   edge clips it while it's down. */
+   corner. It starts out of sight, slides in from the left pivoting at the
+   foot of its post, and when it stops its top swings on clockwise and
+   wobbles back upright. Closing it slides it back out. */
 /* Sized in em off one base size, so it scales up whole on wider screens */
 .new-sign {
   position: absolute;
@@ -223,36 +223,39 @@ h1 {
   font-size: 10px;
   width: 16.2em;
   padding-bottom: 7.6em;   /* how much post shows below the sign */
-  transform: rotate(-90deg);
+  transform: translateX(calc(-100% - 60px));
   transform-origin: 50% 100%;
+  filter: drop-shadow(0 0.5em 1em rgb(0 0 0 / 0.5));
 }
-.new-sign.in { animation: sign-up 0.9s ease-out both; }
-.new-sign.out { animation: sign-down 0.4s cubic-bezier(0.5, 0, 0.9, 0.5) both; }
-@keyframes sign-up {
-  0%   { transform: rotate(-90deg); }
-  55%  { transform: rotate(7deg); }
-  72%  { transform: rotate(-3.5deg); }
-  86%  { transform: rotate(1.5deg); }
-  100% { transform: rotate(0); }
+.new-sign.in { animation: sign-in 1.1s ease-out both; }
+.new-sign.out { animation: sign-out 0.45s ease-in both; }
+@keyframes sign-in {
+  0%   { transform: translateX(calc(-100% - 60px)) rotate(0); }
+  45%  { transform: translateX(0) rotate(0); }
+  62%  { transform: translateX(0) rotate(12deg); }
+  76%  { transform: translateX(0) rotate(-5deg); }
+  88%  { transform: translateX(0) rotate(2deg); }
+  100% { transform: translateX(0) rotate(0); }
 }
-@keyframes sign-down {
-  from { transform: rotate(0); }
-  to   { transform: rotate(-90deg); }
+@keyframes sign-out {
+  from { transform: translateX(0) rotate(0); }
+  to   { transform: translateX(calc(-100% - 60px)) rotate(-8deg); }
 }
-/* Like the app icon's sign: white, rounded, with a red rounded stroke inset */
+/* Like the app icon's sign: white, rounded, with a thin red stroke just
+   inside the edge */
 .sign {
   position: relative;
   z-index: 1;
-  padding: 1.8em 1.4em 2em;
-  border-radius: 1.6em;
+  padding: 1.6em 1.6em 1.8em;
+  border-radius: 1.4em;
   background: #fbfaf6;
-  box-shadow: inset 0 0 0 0.6em #fbfaf6, inset 0 0 0 1em var(--sign-red), 0 0.6em 1.6em rgb(0 0 0 / 0.45);
+  box-shadow: inset 0 0 0 0.35em #fbfaf6, inset 0 0 0 0.6em var(--sign-red);
   color: var(--sign-red);
   /* Narrow like street-sign lettering: Apple's condensed Helvetica, else Arial Narrow */
   font-family: "HelveticaNeue-CondensedBold", "Helvetica Neue Condensed Bold", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
   font-stretch: condensed;
   line-height: 1.1;
-  text-align: center;
+  text-align: left;
   text-transform: uppercase;
 }
 .sign-new { font-size: 1.1em; font-weight: 700; letter-spacing: 0.08em; }
@@ -261,8 +264,8 @@ h1 {
 .sign-close {
   position: absolute;
   /* Its own font size is 1.8× the sign's, so these ems are of that */
-  top: 0.6em;
-  right: 0.6em;
+  top: 0.5em;
+  right: 0.5em;
   width: 1.1em;
   height: 1.1em;
   border: 0;
@@ -272,17 +275,19 @@ h1 {
   cursor: pointer;
 }
 .sign-close:hover { color: #16171b; }
-/* Square steel post, punched with holes all the way down */
+/* Square steel post, light and flat with an outline, punched with holes */
 .post {
   position: absolute;
   top: 1em;
   bottom: 0;
   left: 50%;
-  width: 1.2em;
-  margin-left: -0.6em;
+  width: 1.8em;
+  margin-left: -0.9em;
+  border: 1px solid rgb(0 0 0 / 0.35);
+  border-bottom: 0;
   background:
-    radial-gradient(circle, #2a2c31 0.16em, transparent 0.22em) center 0.5em / 1.2em 1em repeat-y,
-    linear-gradient(90deg, #6f757c, #c9cdd2 40%, #a7adb3 62%, #61676e);
+    radial-gradient(circle, #4a4d53 0.2em, transparent 0.26em) center 0.6em / 1.8em 1.3em repeat-y,
+    #d9dce0;
 }
 @media (min-width: 768px) {
   .new-sign { left: 40px; font-size: 13px; }
