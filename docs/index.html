@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>NYC Parking</title>
-  <meta name="description" content="Alternate-side parking rules for every block in New York City, color-coded by day, with alerts before you need to move. Free for iPhone.">
+  <meta name="description" content="Alternate-side parking rules for every block in New York City, color-coded by day, with alerts before you need to move and a repark alarm when you double-park. Free for iPhone.">
   <meta property="og:title" content="NYC Parking">
   <meta property="og:description" content="Alternate-side parking rules for every block in New York City, color-coded by day.">
   <meta property="og:image" content="https://nycparking.jonbobrow.com/icon.png">
@@ -39,6 +39,22 @@
     </div>
 
     <p class="readout" id="readout" aria-live="polite">Loading every block in the city…</p>
+
+    <section class="whats-new" aria-labelledby="new-title">
+      <p class="eyebrow">New in 1.4</p>
+      <h2 id="new-title">Double-parked? Get back in time.</h2>
+      <p>When street cleaning is about to start on your car's block, set a repark alarm in one tap. It rings before cleaning ends, even on silent, and counts down on your Lock Screen until then.</p>
+      <div class="activity" aria-hidden="true">
+        <div class="activity-top">
+          <span class="activity-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M5.6 6.4A2.5 2.5 0 0 1 8 4.6h8a2.5 2.5 0 0 1 2.4 1.8l1.3 4.1A2.6 2.6 0 0 1 21.5 13v4.2a1 1 0 0 1-1 1h-.8v1.3a1.4 1.4 0 0 1-2.8 0v-1.3H7.1v1.3a1.4 1.4 0 0 1-2.8 0v-1.3h-.8a1 1 0 0 1-1-1V13a2.6 2.6 0 0 1 1.8-2.5zm1.5 4h9.8l-1-3.3a1 1 0 0 0-1-.7H9.1a1 1 0 0 0-1 .7zM6 15.6a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6m12 0a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6"/></svg></span>
+          <span class="activity-text"><strong>Repark on Cambridge Place</strong><span>Cleaning ends 1:00 PM</span></span>
+        </div>
+        <div class="activity-bottom">
+          <span class="activity-bar"><span></span></span>
+          <span class="activity-time">23:53</span>
+        </div>
+      </div>
+    </section>
 
     <a class="download" href="https://apps.apple.com/ca/app/nyc-parking-asp-map-alerts/id6762587893">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
