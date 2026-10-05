@@ -259,20 +259,21 @@ h1 {
   text-align: left;
   text-transform: uppercase;
 }
-/* Two rivets where it's fixed to the post, between the stroke and the text */
+/* Two rivets where it's fixed to the post, each touching the red stroke and
+   through one of the post's holes (main.js spaces the holes to fit) */
 .sign::before, .sign::after {
   content: "";
   position: absolute;
   left: 3em;
-  width: 0.55em;
-  height: 0.55em;
-  margin-left: -0.275em;
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: -0.35em;
   border-radius: 50%;
   background: #cfd2d6;
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35);
 }
-.sign::before { top: 0.8em; }
-.sign::after { bottom: 0.8em; }
+.sign::before { top: 0.6em; }
+.sign::after { bottom: 0.6em; }
 .sign-new { font-size: 1.1em; font-weight: 700; letter-spacing: 0.08em; }
 /* The tracking above spreads "1.4" around its period; pull it back in */
 .sign-new .version { letter-spacing: -0.02em; }
@@ -296,7 +297,7 @@ h1 {
    outline, its holes punched right through (a mask), so the map shows in them */
 .post {
   position: absolute;
-  top: 1em;
+  top: 0.95em;   /* level with the top rivet's center, where a hole falls */
   bottom: 0;
   left: 3em;
   width: 2.2em;
@@ -304,7 +305,7 @@ h1 {
   border: 1px solid rgb(0 0 0 / 0.35);
   border-bottom: 0;
   background: #d9dce0;
-  --holes: radial-gradient(circle, transparent 0.25em, #000 0.31em) center 0.7em / 2.2em 1.5em repeat-y;
+  --holes: radial-gradient(circle, transparent 0.25em, #000 0.31em) center calc(var(--hole-gap, 1.5em) / -2) / 2.2em var(--hole-gap, 1.5em) repeat-y;
   -webkit-mask: var(--holes);
   mask: var(--holes);
 }

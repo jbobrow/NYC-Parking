@@ -13,6 +13,17 @@
   const sign = document.querySelector(".new-sign");
   if (!sign) return;
   sign.hidden = false;
+  // Space the post's holes so one falls behind each rivet: the rivets'
+  // centers sit 0.95em inside the sign's top and bottom edges.
+  const fitHoles = () => {
+    const em = parseFloat(getComputedStyle(sign).fontSize);
+    const span = sign.querySelector(".sign").offsetHeight - 1.9 * em;
+    const gaps = Math.max(1, Math.round(span / (1.5 * em)));
+    sign.style.setProperty("--hole-gap", `${span / gaps}px`);
+  };
+  fitHoles();
+  addEventListener("resize", fitHoles);
+  document.fonts?.ready.then(fitHoles);
   setTimeout(() => sign.classList.add("in"), 1200);
   sign.querySelector(".sign-close").addEventListener("click", () => {
     sign.classList.replace("in", "out");
