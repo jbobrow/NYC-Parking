@@ -10,7 +10,7 @@
   --map-fg: #f3f3f5;
   --map-muted: #8b8e99;
   --card: rgb(30 31 37 / 0.82);
-  --alarm: #0a84ff;   /* the repark alarm's blue in the app */
+  --sign-red: #d0202e;   /* the app icon's sign */
   --mon: #3d85f5;
   --tue: #f5802e;
   --wed: #33c780;
@@ -212,25 +212,42 @@ h1 {
 .readout .move .u { border-radius: 999px; padding: 4px 9px; }
 
 /* What's new: a parking sign on a perforated post, planted in the map's
-   corner. It slides in from the side; the map's edge clips the post. */
+   corner. It swings up from lying flat, pivoting at the foot of its post,
+   and lands with a little wobble; closing it tips it back over. The map's
+   edge clips it while it's down. */
+/* Sized in em off one base size, so it scales up whole on wider screens */
 .new-sign {
   position: absolute;
   left: 28px;
   bottom: 0;
-  width: 150px;
-  padding-bottom: 76px;   /* how much post shows below the sign */
-  transform: translateX(calc(-100% - 40px));
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  font-size: 10px;
+  width: 16.2em;
+  padding-bottom: 7.6em;   /* how much post shows below the sign */
+  transform: rotate(-90deg);
+  transform-origin: 50% 100%;
 }
-.new-sign.in { transform: none; }
+.new-sign.in { animation: sign-up 0.9s ease-out both; }
+.new-sign.out { animation: sign-down 0.4s cubic-bezier(0.5, 0, 0.9, 0.5) both; }
+@keyframes sign-up {
+  0%   { transform: rotate(-90deg); }
+  55%  { transform: rotate(7deg); }
+  72%  { transform: rotate(-3.5deg); }
+  86%  { transform: rotate(1.5deg); }
+  100% { transform: rotate(0); }
+}
+@keyframes sign-down {
+  from { transform: rotate(0); }
+  to   { transform: rotate(-90deg); }
+}
+/* Like the app icon's sign: white, rounded, with a red rounded stroke inset */
 .sign {
   position: relative;
   z-index: 1;
-  padding: 14px 10px 16px;
-  border-radius: 5px;
+  padding: 1.8em 1.4em 2em;
+  border-radius: 1.6em;
   background: #fbfaf6;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 6px 16px rgb(0 0 0 / 0.45);
-  color: #c8102e;
+  box-shadow: inset 0 0 0 0.6em #fbfaf6, inset 0 0 0 1em var(--sign-red), 0 0.6em 1.6em rgb(0 0 0 / 0.45);
+  color: var(--sign-red);
   /* Narrow like street-sign lettering: Apple's condensed Helvetica, else Arial Narrow */
   font-family: "HelveticaNeue-CondensedBold", "Helvetica Neue Condensed Bold", "Arial Narrow", "Roboto Condensed", "Helvetica Neue", Arial, sans-serif;
   font-stretch: condensed;
@@ -238,49 +255,41 @@ h1 {
   text-align: center;
   text-transform: uppercase;
 }
-/* The bolts that hold it to the post */
-.sign::before, .sign::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #e3e5e8, #7c828a);
-}
-.sign::before { top: 4px; }
-.sign::after { bottom: 4px; }
-.sign-new { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
-.sign-title { margin-top: 4px; font-size: 16px; white-space: nowrap; font-weight: 800; color: #16171b; }
-.sign-body { margin-top: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; }
+.sign-new { font-size: 1.1em; font-weight: 700; letter-spacing: 0.08em; }
+.sign-title { margin-top: 0.25em; font-size: 1.6em; font-weight: 800; white-space: nowrap; }
+.sign-body { margin-top: 0.35em; font-size: 1.2em; font-weight: 700; letter-spacing: 0.02em; }
 .sign-close {
   position: absolute;
-  top: 2px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
+  /* Its own font size is 1.8× the sign's, so these ems are of that */
+  top: 0.6em;
+  right: 0.6em;
+  width: 1.1em;
+  height: 1.1em;
   border: 0;
   background: none;
   color: #9a9ca2;
-  font: 18px/1 system-ui, sans-serif;
+  font: 1.8em/1 system-ui, sans-serif;
   cursor: pointer;
 }
 .sign-close:hover { color: #16171b; }
 /* Square steel post, punched with holes all the way down */
 .post {
   position: absolute;
-  top: 10px;
+  top: 1em;
   bottom: 0;
   left: 50%;
-  width: 12px;
-  margin-left: -6px;
+  width: 1.2em;
+  margin-left: -0.6em;
   background:
-    radial-gradient(circle, #2a2c31 1.6px, transparent 2.2px) center 5px / 12px 10px repeat-y,
+    radial-gradient(circle, #2a2c31 0.16em, transparent 0.22em) center 0.5em / 1.2em 1em repeat-y,
     linear-gradient(90deg, #6f757c, #c9cdd2 40%, #a7adb3 62%, #61676e);
 }
+@media (min-width: 768px) {
+  .new-sign { left: 40px; font-size: 13px; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .new-sign { transition: none; }
+  .new-sign.in { animation: none; transform: none; }
+  .new-sign.out { animation: none; }
 }
 
 .download {
