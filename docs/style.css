@@ -272,11 +272,26 @@ h1 {
   background: #cfd2d6;
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.35);
 }
-.sign::before { top: 0.6em; }
+.sign::before { top: 0.6em; z-index: 1; }   /* through the badge */
 .sign::after { bottom: 0.6em; }
-.sign-new { font-size: 1.1em; font-weight: 700; letter-spacing: 0.08em; }
-/* The tracking above spreads "1.4" around its period; pull it back in */
-.sign-new .version { letter-spacing: -0.02em; }
+/* A red square in the top-left corner, merging with the stroke like the
+   icon's, with an App Store mark; the version sits beside it on two lines */
+.sign-badge {
+  position: absolute;
+  top: 0.35em;
+  left: 0.35em;
+  width: 4.4em;
+  height: 4.4em;
+  display: grid;
+  place-items: center;
+  border-radius: 1.05em 0 1em 0;
+  background: var(--sign-red);
+  color: #fff;
+}
+.sign-badge svg { width: 3.25em; height: 3.25em; }
+.sign-head { min-height: 3em; padding-left: 3.6em; }
+.sign-new { font-size: 1.1em; font-weight: 700; letter-spacing: 0.04em; line-height: 1.15; }
+.sign-new .version { font-size: 1.45em; letter-spacing: 0; }
 .sign-title { margin-top: 0.25em; font-size: 1.6em; font-weight: 800; white-space: nowrap; }
 .sign-body { margin-top: 0.35em; font-size: 1.2em; font-weight: 700; letter-spacing: 0.02em; }
 .sign-close {
