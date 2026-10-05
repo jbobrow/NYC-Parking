@@ -10,7 +10,7 @@
   --map-fg: #f3f3f5;
   --map-muted: #8b8e99;
   --card: rgb(30 31 37 / 0.82);
-  --alarm: #0a84ff;   /* the repark alarm's tint in the app */
+  --alarm: #0a84ff;   /* the repark alarm's blue in the app */
   --mon: #3d85f5;
   --tue: #f5802e;
   --wed: #33c780;
@@ -211,84 +211,68 @@ h1 {
 }
 .readout .move .u { border-radius: 999px; padding: 4px 9px; }
 
-/* What's new: the repark alarm, with a stand-in for its Lock Screen countdown */
-.whats-new {
-  margin-top: 28px;
-  width: 100%;
-  max-width: 420px;
+/* What's new: a small card that slides in from the side */
+.new-card {
+  position: fixed;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 320px;
+  padding: 12px 8px 12px 12px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgb(22 23 27 / 0.16);
+  text-align: left;
+  transform: translateX(calc(100% + 32px));
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.whats-new .eyebrow {
-  font-size: 13px;
-  font-weight: 700;
+.new-card.in { transform: none; }
+.new-card p { font-size: 15px; line-height: 1.3; }
+.new-card strong {
+  display: block;
+  font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--blue);
 }
-.whats-new h2 {
-  margin-top: 4px;
-  font-size: clamp(22px, 4vw, 26px);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
-  text-wrap: balance;
-}
-.whats-new h2 + p {
-  margin-top: 8px;
-  font-size: 17px;
-  color: var(--muted);
-  text-wrap: pretty;
-}
-.activity {
-  margin-top: 18px;
-  padding: 16px;
-  border-radius: 24px;
-  background: var(--map-bg);
-  color: var(--map-fg);
-  text-align: left;
-  box-shadow: 0 8px 24px rgb(22 23 27 / 0.18);
-}
-.activity-top { display: flex; align-items: center; gap: 12px; }
-.activity-icon {
+.new-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--alarm);
   color: #fff;
 }
-.activity-text { display: flex; flex-direction: column; min-width: 0; }
-.activity-text strong {
-  font-size: 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.new-close {
+  flex: none;
+  align-self: flex-start;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
 }
-.activity-text span { font-size: 13px; color: var(--map-muted); }
-.activity-bottom { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.activity-bar {
-  flex: 1;
-  height: 6px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.14);
-  overflow: hidden;
+.new-close:hover { color: var(--fg); }
+/* Phones: up top like a notification, clear of the Download button */
+@media (max-width: 480px) {
+  .new-card { top: max(12px, env(safe-area-inset-top)); bottom: auto; left: 16px; max-width: none; }
 }
-.activity-bar span {
-  display: block;
-  width: 40%;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--alarm);
-}
-.activity-time {
-  font-size: 28px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+@media (prefers-reduced-motion: reduce) {
+  .new-card { transition: none; }
 }
 
 .download {
-  margin-top: 24px;
+  margin-top: 18px;
   display: inline-flex;
   align-items: center;
   gap: 8px;

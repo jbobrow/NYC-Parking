@@ -535,18 +535,18 @@ function escape(s) {
   return s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 }
 
-// The repark alarm stand-in counts down like the Lock Screen one, its bar
-// filling as it goes. Starts over when it reaches zero.
-(function reparkCountdown() {
-  const time = document.querySelector(".activity-time");
-  const bar = document.querySelector(".activity-bar span");
-  if (!time || !bar || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const total = 40 * 60, start = 23 * 60 + 53;
-  let left = start;
-  const show = () => {
-    time.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
-    bar.style.width = `${(1 - left / total) * 100}%`;
-  };
-  show();
-  setInterval(() => { left = left > 0 ? left - 1 : start; show(); }, 1000);
+// "New in 1.4" slides in a moment after the page opens; once closed, it
+// stays closed on this browser.
+(function newCard() {
+  const card = document.querySelector(".new-card");
+  if (!card) return;
+  const key = "dismissedNew";
+  try { if (localStorage.getItem(key) === "1.4") return; } catch {}
+  card.hidden = false;
+  setTimeout(() => card.classList.add("in"), 1200);
+  card.querySelector(".new-close").addEventListener("click", () => {
+    card.classList.remove("in");
+    setTimeout(() => { card.hidden = true; }, 500);
+    try { localStorage.setItem(key, "1.4"); } catch {}
+  });
 })();
