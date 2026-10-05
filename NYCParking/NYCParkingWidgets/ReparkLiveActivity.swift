@@ -49,7 +49,7 @@ private struct LockScreenView: View {
 
     var body: some View {
         // The street gets its own row, so a long name never squeezes the
-        // countdown, which sits beside the progress bar at a fixed width.
+        // countdown, which sits right of the progress bar at a set width.
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 CarIcon(tint: attributes.tintColor, size: 40)
@@ -57,13 +57,6 @@ private struct LockScreenView: View {
                 Spacer(minLength: 0)
             }
             HStack(alignment: .center, spacing: 12) {
-                // A timer's text sizes for its longest reading, so it gets a
-                // set width: wider when it shows hours.
-                Countdown(state: state)
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .frame(width: showsHours ? 116 : 84, alignment: .leading)
                 if case .countdown(let c) = state.mode {
                     ProgressView(timerInterval: c.startDate...c.fireDate, countsDown: false) {
                         EmptyView()
@@ -72,7 +65,16 @@ private struct LockScreenView: View {
                     }
                     .progressViewStyle(.linear)
                     .tint(attributes.tintColor)
+                } else {
+                    Spacer(minLength: 0)
                 }
+                // A timer's text sizes for its longest reading, so it gets a
+                // set width: wider when it shows hours.
+                Countdown(state: state)
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .frame(width: showsHours ? 116 : 84, alignment: .trailing)
             }
         }
         .padding(16)
