@@ -27,8 +27,6 @@ struct WhatsNew: Identifiable {
                  detail: "Choose how many minutes before cleaning ends to be called back. Your choice is remembered."),
             Item(icon: "bell.badge", title: "Street cleaning has started",
                  detail: "A notice when cleaning begins on your car's block, with a one-tap reminder to repark."),
-            Item(icon: "square.3.layers.3d", title: "Your map, as you left it",
-                 detail: "The map opens to whichever view you used last."),
         ]),
     ]
 
