@@ -535,18 +535,18 @@ function escape(s) {
   return s.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
 }
 
-// "New in 1.4" slides in a moment after the page opens; once closed, it
-// stays closed on this browser.
-(function newCard() {
-  const card = document.querySelector(".new-card");
-  if (!card) return;
+// "New in 1.4", a parking sign that slides into the map's corner a moment
+// after the page opens; once closed, it stays closed on this browser.
+(function newSign() {
+  const sign = document.querySelector(".new-sign");
+  if (!sign) return;
   const key = "dismissedNew";
   try { if (localStorage.getItem(key) === "1.4") return; } catch {}
-  card.hidden = false;
-  setTimeout(() => card.classList.add("in"), 1200);
-  card.querySelector(".new-close").addEventListener("click", () => {
-    card.classList.remove("in");
-    setTimeout(() => { card.hidden = true; }, 500);
+  sign.hidden = false;
+  setTimeout(() => sign.classList.add("in"), 1200);
+  sign.querySelector(".sign-close").addEventListener("click", () => {
+    sign.classList.remove("in");
+    setTimeout(() => { sign.hidden = true; }, 600);
     try { localStorage.setItem(key, "1.4"); } catch {}
   });
 })();
