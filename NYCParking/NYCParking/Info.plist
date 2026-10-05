@@ -20,12 +20,16 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>An alarm rings when it's time to move your double-parked car back to the curb, even on silent.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is used to show alternate-side parking rules for nearby streets.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Motion data lets the app notice when you're driving and offer drive mode.</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>Reminders let the app notify you when it's time to move your car.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

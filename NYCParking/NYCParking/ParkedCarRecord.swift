@@ -28,6 +28,52 @@ struct MoveDeadline: Hashable {
     }
 }
 
+/// One street cleaning on the parked car's curb.
+struct CleaningTime: Hashable {
+    let start: Date
+    let end: Date
+}
+
+/// Double-parking through street cleaning, then moving back to the curb a few
+/// minutes before it ends, when the spots open up. The repark reminder is
+/// stored as the end of the cleaning it's for; how long before is the user's
+/// choice, remembered for next time.
+enum DoubleParking {
+    static let leadMinutesKey = "doubleParkLeadMinutes"
+    static let defaultLeadMinutes = 15
+    static let leadMinutesRange = 5...60
+    static let leadMinutesStep = 5
+
+    /// Seconds since 1970 of the cleaning end the reminder is set for; 0 for none.
+    static let reminderKey = "doubleParkReminderCleaningEnds"
+
+    static var leadMinutes: Int {
+        let stored = UserDefaults.standard.integer(forKey: leadMinutesKey)
+        return stored > 0 ? stored : defaultLeadMinutes
+    }
+
+    /// Whether the stored reminder (`reminderKey`) is for the cleaning ending at `end`.
+    static func isReminderSet(_ stored: Double, forCleaningEnding end: Date) -> Bool {
+        abs(stored - end.timeIntervalSince1970) < 60
+    }
+
+    static func reminderDate(cleaningEnds: Date, leadMinutes: Int) -> Date {
+        cleaningEnds.addingTimeInterval(-Double(leadMinutes) * 60)
+    }
+
+    /// The reminder is offered from half an hour before cleaning, when people
+    /// start moving to double-park, until it ends. So its countdown never runs
+    /// much longer than the cleaning itself.
+    static let offeredBefore: TimeInterval = 30 * 60
+
+    static func isOffered(for cleaning: CleaningTime, at now: Date) -> Bool {
+        now >= cleaning.start.addingTimeInterval(-offeredBefore) && now < cleaning.end
+    }
+
+    /// The cleaning whose end the app last asked about, so it asks once.
+    static let offeredKey = "doubleParkOfferedCleaningEnds"
+}
+
 /// Minimal persisted snapshot of a parked car location.
 /// Stored in UserDefaults so the pin survives app restarts.
 struct ParkedCarRecord: Codable, Equatable {
@@ -111,6 +157,26 @@ struct ParkedCarRecord: Codable, Equatable {
                                   second: 0, of: day)
         else { return nil }
         return MoveDeadline(date: date, kind: next.kind)
+    }
+
+    /// The street cleaning under way now, or else the next one: what a
+    /// double-parked car waits out.
+    func cleaning(around now: Date, holidays: [NamedHoliday],
+                  calendar cal: Calendar = .current) -> CleaningTime? {
+        let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
+        guard let next = MoveCountdown.next(for: windows.filter { $0.kind == .cleaning }, in: calendar),
+              let end = next.endMinutes else { return nil }
+        // Still running from last night: its hours count from yesterday.
+        let fromYesterday = next.days == 0 && next.weekday != calendar.days.first?.weekday
+        let dayMinutes = 24 * 60
+        func date(_ minutes: Int) -> Date? {
+            guard let day = cal.date(byAdding: .day,
+                                     value: next.days - (fromYesterday ? 1 : 0) + minutes / dayMinutes,
+                                     to: cal.startOfDay(for: now)) else { return nil }
+            return cal.date(bySettingHour: minutes % dayMinutes / 60, minute: minutes % 60, second: 0, of: day)
+        }
+        guard let startDate = date(next.startMinutes), let endDate = date(end) else { return nil }
+        return CleaningTime(start: startDate, end: endDate)
     }
 
     /// A rule in effect right now that means the car shouldn't be here, such
