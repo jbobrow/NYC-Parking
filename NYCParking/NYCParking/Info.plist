@@ -28,6 +28,8 @@
 	<string>Motion data lets the app notice when you're driving and offer drive mode.</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>Reminders let the app notify you when it's time to move your car.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

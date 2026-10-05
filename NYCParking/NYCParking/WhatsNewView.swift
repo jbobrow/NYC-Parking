@@ -22,7 +22,7 @@ struct WhatsNew: Identifiable {
     static let releases: [WhatsNew] = [
         WhatsNew(version: "1.4", items: [
             Item(icon: "alarm", title: "Repark alarm",
-                 detail: "Double-parked through street cleaning? An alarm rings before it ends, even on silent, so you're back in time for a spot."),
+                 detail: "Double-parked through street cleaning? An alarm rings before it ends, even on silent, and counts down on your Lock Screen until then."),
             Item(icon: "timer", title: "As early as you like",
                  detail: "Choose how many minutes before cleaning ends to be called back. Your choice is remembered."),
             Item(icon: "bell.badge", title: "Street cleaning has started",

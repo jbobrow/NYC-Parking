@@ -35,7 +35,36 @@
 		AA2E00000000000000000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2E00000000000000000001 /* AboutView.swift */; };
 		AA2F00000000000000000002 /* Signature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2F00000000000000000001 /* Signature.swift */; };
 		AA3000000000000000000002 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3000000000000000000001 /* WhatsNewView.swift */; };
+		AA3100000000000000000002 /* ReparkAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3100000000000000000001 /* ReparkAlarmMetadata.swift */; };
+		AA3100000000000000000003 /* ReparkAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3100000000000000000001 /* ReparkAlarmMetadata.swift */; };
+		AA3200000000000000000002 /* NYCParkingWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3200000000000000000001 /* NYCParkingWidgetsBundle.swift */; };
+		AA3300000000000000000002 /* ReparkLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3300000000000000000001 /* ReparkLiveActivity.swift */; };
+		AA3500000000000000000002 /* NYCParkingWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB3500000000000000000001 /* NYCParkingWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		FF1100000000000000000006 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD1100000000000000000004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD2000000000000000000004;
+			remoteInfo = NYCParkingWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DD1600000000000000000004 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA3500000000000000000002 /* NYCParkingWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		BB1000000000000000000001 /* NYCParking.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NYCParking.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -68,9 +97,21 @@
 		BB2E00000000000000000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		BB2F00000000000000000001 /* Signature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signature.swift; sourceTree = "<group>"; };
 		BB3000000000000000000001 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
+		BB3100000000000000000001 /* ReparkAlarmMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReparkAlarmMetadata.swift; sourceTree = "<group>"; };
+		BB3200000000000000000001 /* NYCParkingWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NYCParkingWidgetsBundle.swift; sourceTree = "<group>"; };
+		BB3300000000000000000001 /* ReparkLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReparkLiveActivity.swift; sourceTree = "<group>"; };
+		BB3400000000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB3500000000000000000001 /* NYCParkingWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NYCParkingWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		DD2200000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DD1300000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -85,6 +126,7 @@
 			isa = PBXGroup;
 			children = (
 				CC1200000000000000000003 /* NYCParking */,
+				CC1400000000000000000003 /* NYCParkingWidgets */,
 				CC1300000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -118,6 +160,7 @@
 				BB2E00000000000000000001 /* AboutView.swift */,
 				BB2F00000000000000000001 /* Signature.swift */,
 				BB3000000000000000000001 /* WhatsNewView.swift */,
+				BB3100000000000000000001 /* ReparkAlarmMetadata.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -125,10 +168,21 @@
 			path = NYCParking;
 			sourceTree = "<group>";
 		};
+		CC1400000000000000000003 /* NYCParkingWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				BB3200000000000000000001 /* NYCParkingWidgetsBundle.swift */,
+				BB3300000000000000000001 /* ReparkLiveActivity.swift */,
+				BB3400000000000000000001 /* Info.plist */,
+			);
+			path = NYCParkingWidgets;
+			sourceTree = "<group>";
+		};
 		CC1300000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				BB1000000000000000000001 /* NYCParking.app */,
+				BB3500000000000000000001 /* NYCParkingWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -143,15 +197,34 @@
 				DD1500000000000000000004 /* Sources */,
 				DD1400000000000000000004 /* Resources */,
 				DD1300000000000000000004 /* Frameworks */,
+				DD1600000000000000000004 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				FF1200000000000000000006 /* PBXTargetDependency */,
 			);
 			name = NYCParking;
 			productName = NYCParking;
 			productReference = BB1000000000000000000001 /* NYCParking.app */;
 			productType = "com.apple.product-type.application";
+		};
+		DD2000000000000000000004 /* NYCParkingWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EE2000000000000000000005 /* Build configuration list for PBXNativeTarget "NYCParkingWidgets" */;
+			buildPhases = (
+				DD2100000000000000000004 /* Sources */,
+				DD2200000000000000000004 /* Frameworks */,
+				DD2300000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NYCParkingWidgets;
+			productName = NYCParkingWidgets;
+			productReference = BB3500000000000000000001 /* NYCParkingWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -165,6 +238,9 @@
 				TargetAttributes = {
 					DD1200000000000000000004 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					DD2000000000000000000004 = {
+						CreatedOnToolsVersion = 27.0;
 					};
 				};
 			};
@@ -182,11 +258,19 @@
 			projectRoot = "";
 			targets = (
 				DD1200000000000000000004 /* NYCParking */,
+				DD2000000000000000000004 /* NYCParkingWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		DD2300000000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DD1400000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -229,10 +313,29 @@
 				AA2E00000000000000000002 /* AboutView.swift in Sources */,
 				AA2F00000000000000000002 /* Signature.swift in Sources */,
 				AA3000000000000000000002 /* WhatsNewView.swift in Sources */,
+				AA3100000000000000000002 /* ReparkAlarmMetadata.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD2100000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA3200000000000000000002 /* NYCParkingWidgetsBundle.swift in Sources */,
+				AA3300000000000000000002 /* ReparkLiveActivity.swift in Sources */,
+				AA3100000000000000000003 /* ReparkAlarmMetadata.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FF1200000000000000000006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD2000000000000000000004 /* NYCParkingWidgets */;
+			targetProxy = FF1100000000000000000006 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		EE1300000000000000000005 /* Debug */ = {
@@ -418,6 +521,58 @@
 			};
 			name = Release;
 		};
+		EE2100000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 63KWA2RPU8;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NYCParkingWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		EE2200000000000000000005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 17;
+				DEVELOPMENT_TEAM = 63KWA2RPU8;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NYCParkingWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.4;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -435,6 +590,15 @@
 			buildConfigurations = (
 				EE1500000000000000000005 /* Debug */,
 				EE1600000000000000000005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EE2000000000000000000005 /* Build configuration list for PBXNativeTarget "NYCParkingWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE2100000000000000000005 /* Debug */,
+				EE2200000000000000000005 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

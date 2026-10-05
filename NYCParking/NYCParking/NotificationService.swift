@@ -84,7 +84,7 @@ final class NotificationService: ObservableObject {
 
         var scheduled = false
         if #available(iOS 26, *), await alarmsAuthorized() {
-            scheduled = await scheduleReparkAlarm(at: date, street: street)
+            scheduled = await scheduleReparkAlarm(at: date, cleaningEnds: cleaningEnds, street: street)
         }
         if !scheduled {
             let center = UNUserNotificationCenter.current()
@@ -123,8 +123,11 @@ final class NotificationService: ObservableObject {
         }
     }
 
+    /// A timer that counts down to `date` from now, like a Clock timer: its
+    /// progress shows on the Lock Screen and in the Dynamic Island
+    /// (`ReparkLiveActivity`), so it's plain the alarm is set and when it rings.
     @available(iOS 26, *)
-    private static func scheduleReparkAlarm(at date: Date, street: String) async -> Bool {
+    private static func scheduleReparkAlarm(at date: Date, cleaningEnds: Date, street: String) async -> Bool {
         let title: LocalizedStringResource = "Repark on \(street.localizedCapitalized)"
         let alert: AlarmPresentation.Alert
         if #available(iOS 26.1, *) {
@@ -133,12 +136,14 @@ final class NotificationService: ObservableObject {
             alert = AlarmPresentation.Alert(title: title, stopButton: AlarmButton(
                 text: "Stop", textColor: .white, systemImageName: "stop.circle"))
         }
-        let attributes = AlarmAttributes<ReparkAlarmMetadata>(
-            presentation: AlarmPresentation(alert: alert), tintColor: .accentColor)
+        let attributes = AlarmAttributes(
+            presentation: AlarmPresentation(alert: alert, countdown: AlarmPresentation.Countdown(title: title)),
+            metadata: ReparkAlarmMetadata(street: street.localizedCapitalized, cleaningEnds: cleaningEnds),
+            tintColor: ReparkAlarmMetadata.tint)
         do {
             _ = try await AlarmManager.shared.schedule(
                 id: reparkAlarmID,
-                configuration: .alarm(schedule: .fixed(date), attributes: attributes))
+                configuration: .timer(duration: date.timeIntervalSinceNow, attributes: attributes))
             return true
         } catch {
             return false
@@ -162,9 +167,6 @@ final class NotificationService: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 }
-
-@available(iOS 26, *)
-struct ReparkAlarmMetadata: AlarmMetadata {}
 
 /// The notification center's delegate, set at launch so a notification's
 /// action works even when the app isn't running. Shows reminders while the
