@@ -193,6 +193,15 @@ final class NotificationRouter: NSObject, ObservableObject, UNUserNotificationCe
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler:
                                     @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Nothing to offer once the repark reminder is set for this cleaning.
+        let info = notification.request.content.userInfo
+        if notification.request.content.categoryIdentifier == Self.cleaningStartedCategory,
+           let ends = info["cleaningEnds"] as? Double,
+           DoubleParking.isReminderSet(UserDefaults.standard.double(forKey: DoubleParking.reminderKey),
+                                       forCleaningEnding: Date(timeIntervalSince1970: ends)) {
+            completionHandler([.list])
+            return
+        }
         completionHandler([.banner, .list, .sound])
     }
 

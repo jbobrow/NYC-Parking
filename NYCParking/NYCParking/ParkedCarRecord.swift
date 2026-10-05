@@ -60,6 +60,18 @@ enum DoubleParking {
     static func reminderDate(cleaningEnds: Date, leadMinutes: Int) -> Date {
         cleaningEnds.addingTimeInterval(-Double(leadMinutes) * 60)
     }
+
+    /// The reminder is offered from half an hour before cleaning, when people
+    /// start moving to double-park, until it ends. So its countdown never runs
+    /// much longer than the cleaning itself.
+    static let offeredBefore: TimeInterval = 30 * 60
+
+    static func isOffered(for cleaning: CleaningTime, at now: Date) -> Bool {
+        now >= cleaning.start.addingTimeInterval(-offeredBefore) && now < cleaning.end
+    }
+
+    /// The cleaning whose end the app last asked about, so it asks once.
+    static let offeredKey = "doubleParkOfferedCleaningEnds"
 }
 
 /// Minimal persisted snapshot of a parked car location.

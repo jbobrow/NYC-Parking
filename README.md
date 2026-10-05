@@ -26,7 +26,7 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
 - **"Park here" mode** — tap any marker to record where you left your car; drag it along the block to the exact spot
 - **Next move date** — banner shows the next day you need to move, skipping holidays
 - **Reminders** — notifications the evening before, an hour before and ten minutes before the next cleaning, no-standing rule or meter start
-- **Double-parking** — a notice when street cleaning starts on your car's block, with a one-tap repark alarm a set time before it ends (15 minutes to start; your choice is remembered). On iOS 26 it's an AlarmKit alarm that rings through silent mode and Focus, counting down on the Lock Screen and in the Dynamic Island (the `NYCParkingWidgets` extension); earlier, a notification
+- **Double-parking** — from half an hour before street cleaning on your car's block until it ends, the app offers an alarm to repark a set time before it ends (15 minutes to start; your choice is remembered): an alert when the app is open, a notice when cleaning starts, and a toggle on the car's sheet. On iOS 26 it's an AlarmKit alarm that rings through silent mode and Focus, counting down on the Lock Screen and in the Dynamic Island (the `NYCParkingWidgets` extension); earlier, a notification
 - **What's New** — a page shown once to people who update, listing that version's highlights (`WhatsNew.releases`)
 - **Driving mode** — a 3D view with the parking rules on each side of you, including meters
 - **Holiday calendar** — browse the full NYC ASP holiday list

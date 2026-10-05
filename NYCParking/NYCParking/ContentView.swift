@@ -34,6 +34,12 @@ struct ContentView: View {
     @State private var showParkedCarSheet = false
     @State private var isCenteredOnCar = false
     @State private var showHolidaySheet = false
+    /// Street cleaning on the parked car's block, soon or under way: asked
+    /// once whether to set the repark alarm.
+    @State private var doubleParkOffer: CleaningTime?
+    @AppStorage(DoubleParking.offeredKey) private var offeredCleaningEnds: Double = 0
+    @AppStorage(DoubleParking.reminderKey) private var reparkCleaningEnds: Double = 0
+    @AppStorage(DoubleParking.leadMinutesKey) private var reparkLeadMinutes = DoubleParking.defaultLeadMinutes
     /// Which view the map shows; remembered across launches.
     @AppStorage(MapDisplayMode.storageKey) private var displayMode: MapDisplayMode = .countdown
     /// How countdown colors read; chosen by tapping the legend.
@@ -387,6 +393,26 @@ struct ContentView: View {
         #if DEBUG
         .task { await applyScreenshotScene() }
         #endif
+        .task(id: doubleParkCheckID) {
+            while !Task.isCancelled {
+                offerDoubleParkReminderIfNeeded()
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+        .alert(doubleParkOffer.map(doubleParkOfferTitle) ?? "",
+               isPresented: Binding(get: { doubleParkOffer != nil }, set: { if !$0 { doubleParkOffer = nil } }),
+               presenting: doubleParkOffer) { cleaning in
+            Button(NotificationService.reparkUsesAlarm ? "Set Alarm" : "Remind Me") {
+                guard let street = parkedRecord?.street else { return }
+                Task {
+                    _ = await NotificationService.scheduleRepark(cleaningEnds: cleaning.end,
+                                                                 leadMinutes: reparkLeadMinutes, street: street)
+                }
+            }
+            Button("Not Now", role: .cancel) { }
+        } message: { cleaning in
+            Text(doubleParkOfferMessage(cleaning))
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
             phase == .active && !showOnboarding ? driveDetector.start() : driveDetector.stop()
         }
@@ -508,6 +534,46 @@ struct ContentView: View {
     /// Restarts the map refresh loop whenever its inputs change.
     private var mapRefreshID: String {
         "\(displayMode.rawValue)|\(dataService.index != nil)|\(holidayService.holidays.count)|\(scenePhase == .active)"
+    }
+
+    // MARK: - Double parking
+
+    /// Restarts the check when the app comes forward or the car moves.
+    private var doubleParkCheckID: String {
+        "\(scenePhase == .active)|\(parkedRecord?.segmentID ?? "")|\(holidayService.holidays.count)"
+    }
+
+    /// From half an hour before street cleaning on the parked car's block
+    /// until it ends, asks once whether to set the repark alarm, unless it's
+    /// set already. Waits for any sheet to close.
+    private func offerDoubleParkReminderIfNeeded() {
+        guard scenePhase == .active, !isStagingScreenshot, !showOnboarding, whatsNew == nil,
+              selectedSegment == nil, !showParkedCarSheet, !showHolidaySheet, !showAbout,
+              doubleParkOffer == nil, let record = parkedRecord else { return }
+        let now = AppClock.now
+        guard let cleaning = record.cleaning(around: now, holidays: holidayService.holidays),
+              DoubleParking.isOffered(for: cleaning, at: now),
+              DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes) > Date(),
+              !DoubleParking.isReminderSet(reparkCleaningEnds, forCleaningEnding: cleaning.end),
+              !DoubleParking.isReminderSet(offeredCleaningEnds, forCleaningEnding: cleaning.end)
+        else { return }
+        offeredCleaningEnds = cleaning.end.timeIntervalSince1970
+        doubleParkOffer = cleaning
+    }
+
+    /// "Street cleaning at 8:30 AM", or "…until 10:00 AM" once it's started.
+    private func doubleParkOfferTitle(_ cleaning: CleaningTime) -> String {
+        AppClock.now < cleaning.start
+            ? "Street cleaning at \(cleaning.start.formatted(date: .omitted, time: .shortened))"
+            : "Street cleaning until \(cleaning.end.formatted(date: .omitted, time: .shortened))"
+    }
+
+    private func doubleParkOfferMessage(_ cleaning: CleaningTime) -> String {
+        let at = DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes)
+        let street = parkedRecord?.street.localizedCapitalized ?? "your street"
+        let what = NotificationService.reparkUsesAlarm ? "An alarm can ring" : "You can be reminded"
+        return "Double-parked on \(street)? \(what) at \(at.formatted(date: .omitted, time: .shortened)), "
+            + "\(reparkLeadMinutes) minutes before cleaning ends, so you can move back to the curb."
     }
 
     // MARK: - Move car banner

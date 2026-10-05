@@ -66,11 +66,11 @@ struct ParkedCarSheet: View {
                     .padding(.bottom, 20)
             }
 
-            // From a day ahead of street cleaning until it ends.
+            // From half an hour before street cleaning until it ends.
             TimelineView(.everyMinute) { _ in
                 let now = AppClock.now
                 if let cleaning = record.cleaning(around: now, holidays: holidays),
-                   cleaning.start.timeIntervalSince(now) < 24 * 3600 {
+                   DoubleParking.isOffered(for: cleaning, at: now) {
                     DoubleParkRow(cleaning: cleaning, street: record.street, now: now)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 20)
