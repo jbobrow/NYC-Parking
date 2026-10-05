@@ -32,6 +32,15 @@
       <div class="legend countdown" aria-hidden="true">
         <span class="label">Days until move</span>
       </div>
+      <aside class="new-sign" hidden>
+        <div class="sign">
+          <button type="button" class="sign-close" aria-label="Dismiss">×</button>
+          <p class="sign-new">New in 1.4</p>
+          <p class="sign-title">Double-parked?</p>
+          <p class="sign-body">An alarm tells you when to repark</p>
+        </div>
+        <div class="post" aria-hidden="true"></div>
+      </aside>
       <div class="modes" role="group" aria-label="Map view">
         <button type="button" data-mode="days" aria-pressed="false">Cleaning days</button>
         <button type="button" data-mode="countdown" aria-pressed="true">Days until move</button>
@@ -39,22 +48,6 @@
     </div>
 
     <p class="readout" id="readout" aria-live="polite">Loading every block in the city…</p>
-
-    <section class="whats-new" aria-labelledby="new-title">
-      <p class="eyebrow">New in 1.4</p>
-      <h2 id="new-title">Double-parked? Get back in time.</h2>
-      <p>When street cleaning is about to start on your car's block, set a repark alarm in one tap. It rings before cleaning ends, even on silent, and counts down on your Lock Screen until then.</p>
-      <div class="activity" aria-hidden="true">
-        <div class="activity-top">
-          <span class="activity-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M5.6 6.4A2.5 2.5 0 0 1 8 4.6h8a2.5 2.5 0 0 1 2.4 1.8l1.3 4.1A2.6 2.6 0 0 1 21.5 13v4.2a1 1 0 0 1-1 1h-.8v1.3a1.4 1.4 0 0 1-2.8 0v-1.3H7.1v1.3a1.4 1.4 0 0 1-2.8 0v-1.3h-.8a1 1 0 0 1-1-1V13a2.6 2.6 0 0 1 1.8-2.5zm1.5 4h9.8l-1-3.3a1 1 0 0 0-1-.7H9.1a1 1 0 0 0-1 .7zM6 15.6a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6m12 0a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6"/></svg></span>
-          <span class="activity-text"><strong>Repark on Cambridge Place</strong><span>Cleaning ends 1:00 PM</span></span>
-        </div>
-        <div class="activity-bottom">
-          <span class="activity-bar"><span></span></span>
-          <span class="activity-time">23:53</span>
-        </div>
-      </div>
-    </section>
 
     <a class="download" href="https://apps.apple.com/ca/app/nyc-parking-asp-map-alerts/id6762587893">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
@@ -68,5 +61,6 @@
     <a class="by-jon" href="https://apps.jonbobrow.com" aria-label="App by Jon Bobrow"><svg viewBox="0 0 3087.29 681.93" fill="none" stroke="currentColor" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1610.11,335.11c0,17.82,19.8,77.22,3.96,110.89M15,537.47C23.66,136.35,107.34,18.04,136.2,15.15c28.86-2.89,86.57,31.74,86.57,484.8M80.58,356.55c65.34-37.62,178.21-25.74,178.21-25.74M320.17,330.81c81.18-15.84,176.23,73.26,47.52,142.57M466.7,328.83c81.18-15.84,160.39,71.28,67.32,134.65M353.83,396.15c-5.94,104.95,29.7,241.57,29.7,241.57M490.46,378.33c-5.94,104.95,13.86,211.87,13.86,211.87M788.37,148.98c-11.88,49.5-26.16,130.64-33.66,199.99-7.92,73.26,38.68,123.77,86.2,90.1s12.8-101.98-40.66-98.06M923.02,537.08c-35.64,27.72-53.4,109.67,2.96,126.69,69.81,21.08,80.2-67.28,76.24-138.57s-19.8-194.05-19.8-194.05M982.42,331.15c1.98,75.24-9.9,118.81-51.48,110.89s-31.68-85.14-23.76-128.71M1388.34,55.92c29.7,142.57,55.95,373.41-47.52,407.9-71.28,23.76-100.98-51.48-93.06-83.16M1507.15,321.25c-45.54-3.96-56.51,138.61,9.9,138.61,73.26,0,47.85-133.59-9.9-138.61ZM2225.92,343.03c-72.62,9.68-56.39,142.67,9.9,138.61,97.02-5.94,49.5-146.53-9.9-138.61ZM2686.12,343.13c-64.18-8.02-87.35,95.19-26.56,112.77,66.28,19.16,73.26-106.93,26.56-112.77ZM1614.07,445.99c19.8-85.14,41.58-116.83,55.44-116.83s37.62,108.91,73.26,128.71M1934.85,172.74c47.52-45.54,186.13-25.74,194.05,33.66,7.92,59.4-39.6,97.02-37.62,122.77s56.36,69.3,38.54,120.79-66.26,57.42-137.55,25.74M2002.17,198.48c-5.94,47.52-1.98,209.89,7.92,241.57M2352.65,182.64c-7.92,55.44-9.84,280.18,67.32,277.21,51.48-1.98,57.42-116.83-17.82-122.77M2590.26,305.41c-35.64,13.86-59.4,27.56-59.4,134.65,0,9.9-15.84-93.06-19.8-116.83M2881.33,392.53s-9.9,67.32,39.6,65.34c69.28-2.77,130.89-59.33,148.51-138.61,15.84-71.28-39.6-83.16-39.6-83.16M2778.37,360.85c-7.92,49.5-1.85,92.77,17.82,95.04,51.48,5.94,85.14-63.36,85.14-63.36"/></svg></a>
     <p class="made-by">Sign data from <a href="https://opendata.cityofnewyork.us">NYC Open Data</a></p>
   </main>
+
 </body>
 </html>
