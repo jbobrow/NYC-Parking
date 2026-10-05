@@ -48,28 +48,31 @@ private struct LockScreenView: View {
     let state: AlarmPresentationState
 
     var body: some View {
-        VStack(spacing: 12) {
+        // The street gets its own row, so a long name never squeezes the
+        // countdown, which sits beside the progress bar at a fixed width.
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 CarIcon(tint: attributes.tintColor, size: 40)
                 Caption(attributes: attributes)
-                    .layoutPriority(1)
-                Spacer(minLength: 8)
-                // A timer's text sizes for its longest reading, so cap it,
-                // smaller when it shows hours.
+                Spacer(minLength: 0)
+            }
+            HStack(alignment: .center, spacing: 12) {
+                // A timer's text sizes for its longest reading, so it gets a
+                // set width: wider when it shows hours.
                 Countdown(state: state)
-                    .font(.system(size: showsHours ? 26 : 32, weight: .semibold, design: .rounded))
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .frame(maxWidth: showsHours ? 120 : 104, alignment: .trailing)
-            }
-            if case .countdown(let c) = state.mode {
-                ProgressView(timerInterval: c.startDate...c.fireDate, countsDown: false) {
-                    EmptyView()
-                } currentValueLabel: {
-                    EmptyView()
+                    .frame(width: showsHours ? 116 : 84, alignment: .leading)
+                if case .countdown(let c) = state.mode {
+                    ProgressView(timerInterval: c.startDate...c.fireDate, countsDown: false) {
+                        EmptyView()
+                    } currentValueLabel: {
+                        EmptyView()
+                    }
+                    .progressViewStyle(.linear)
+                    .tint(attributes.tintColor)
                 }
-                .progressViewStyle(.linear)
-                .tint(attributes.tintColor)
             }
         }
         .padding(16)
@@ -91,6 +94,7 @@ private struct Caption: View {
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
             if let ends = attributes.metadata?.cleaningEnds {
                 Text("Cleaning ends \(ends.formatted(date: .omitted, time: .shortened))")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
