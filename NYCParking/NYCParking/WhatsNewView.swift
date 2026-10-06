@@ -20,6 +20,12 @@ struct WhatsNew: Identifiable {
     /// Every version with something to show. A version without an entry
     /// shows nothing.
     static let releases: [WhatsNew] = [
+        WhatsNew(version: "1.5", items: [
+            Item(icon: "car.2", title: "More than one car",
+                 detail: "Park all your cars from one phone. Tap Park Here on a new block and choose Park Another Car, then pick which car each time you park. Each gets its own reminders."),
+            Item(icon: "arrow.triangle.turn.up.right.diamond", title: "Find each car",
+                 detail: "Tap the car button to see where every car is and when it has to move, with directions to each."),
+        ]),
         WhatsNew(version: "1.4", items: [
             Item(icon: "alarm", title: "Repark alarm",
                  detail: "Double-parked through street cleaning? An alarm rings before it ends, even on silent, and counts down on your Lock Screen until then (iOS 26)."),

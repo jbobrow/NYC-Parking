@@ -86,13 +86,14 @@ private struct LockScreenView: View {
     }
 }
 
-/// "Repark on 81 Street" / "Street cleaning ends 10:00 AM"
+/// "Repark on 81 Street" (or "Repark Civic on…") / "Street cleaning ends 10:00 AM"
 private struct Caption: View {
     let attributes: AlarmAttributes<ReparkAlarmMetadata>
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(attributes.metadata.map { "Repark on \($0.street)" } ?? "Time to repark")
+            Text(attributes.metadata.map { m in m.carName.map { "Repark \($0) on \(m.street)" } ?? "Repark on \(m.street)" }
+                 ?? "Time to repark")
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)

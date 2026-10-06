@@ -9,6 +9,8 @@ struct ReparkAlarmMetadata: AlarmMetadata {
     /// "81 Street"
     var street: String
     var cleaningEnds: Date
+    /// "Civic", with more than one car; nil with just one.
+    var carName: String? = nil
 
     static let tint = Color.blue
 }

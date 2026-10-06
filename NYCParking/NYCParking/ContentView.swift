@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var holidayService        = ASPHolidayService()
     @StateObject private var driveDetector         = DriveDetector()
     @ObservedObject private var notificationRouter = NotificationRouter.shared
+    @ObservedObject private var garage = Garage.shared
 
     @State private var mapController = MapController()
     @State private var selectedSegment: ParkingSegment?
@@ -30,15 +31,18 @@ struct ContentView: View {
     @State private var showOnboardingAfterAbout = false
     /// "Not now" (or ignoring the prompt) stops it asking again until then.
     @State private var drivePromptSnoozedUntil = Date.distantPast
-    @State private var parkedRecord: ParkedCarRecord?
-    @State private var showParkedCarSheet = false
-    @State private var isCenteredOnCar = false
+    /// The parked car whose sheet is showing.
+    @State private var shownCar: CarSheetItem?
+    /// Every car, when more than one is parked.
+    @State private var showCarsSheet = false
+    /// A car picked from that list, whose sheet shows once the list has closed.
+    @State private var carPickedFromList: UUID?
+    /// The parked car the map is centered on, if any.
+    @State private var centeredCarID: UUID?
     @State private var showHolidaySheet = false
-    /// Street cleaning on the parked car's block, soon or under way: asked
+    /// Street cleaning on a parked car's block, soon or under way: asked
     /// once whether to set the repark alarm.
-    @State private var doubleParkOffer: CleaningTime?
-    @AppStorage(DoubleParking.offeredKey) private var offeredCleaningEnds: Double = 0
-    @AppStorage(DoubleParking.reminderKey) private var reparkCleaningEnds: Double = 0
+    @State private var doubleParkOffer: DoubleParkOffer?
     @AppStorage(DoubleParking.leadMinutesKey) private var reparkLeadMinutes = DoubleParking.defaultLeadMinutes
     /// Which view the map shows; remembered across launches.
     @AppStorage(MapDisplayMode.storageKey) private var displayMode: MapDisplayMode = .countdown
@@ -68,7 +72,8 @@ struct ContentView: View {
             ParkingMapView(
                 controller: mapController,
                 index: dataService.index,
-                parkedRecord: parkedRecord,
+                parkedCars: garage.parkedCars,
+                showsCarNames: garage.hasSeveralCars,
                 isDrivingMode: isDrivingMode,
                 displayMode: displayMode,
                 countdown: dataService.countdown,
@@ -87,16 +92,16 @@ struct ContentView: View {
                        mapCenter.distance(from: userLoc) > 80 {
                         isFollowingUser = false
                     }
-                    if let parked = parkedRecord {
-                        let coord = parked.carCoordinate
-                        let carLoc = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
-                        isCenteredOnCar = mapCenter.distance(from: carLoc) < 80
-                    }
+                    centeredCarID = garage.parkedCars.first { car in
+                        guard let coord = car.parked?.carCoordinate else { return false }
+                        return mapCenter.distance(from: CLLocation(latitude: coord.latitude,
+                                                                   longitude: coord.longitude)) < 80
+                    }?.id
                 },
                 onLabelsVisibleChange: { labelsVisible = $0 },
                 onSelectSegment: { selectedSegment = $0 },
-                onCarTap: { showParkedCarSheet = true },
-                onCarMoved: { offset in parkedRecord?.offsetMeters = offset }
+                onCarTap: { shownCar = CarSheetItem(id: $0) },
+                onCarMoved: { id, offset in garage.update(id) { $0.parked?.offsetMeters = offset } }
             )
             .ignoresSafeArea()
             .clipShape(RoundedRectangle(cornerRadius: screenCornerRadius, style: .continuous))
@@ -121,10 +126,12 @@ struct ContentView: View {
                                 if showDrivePrompt { snoozeDrivePrompt() }
                             }
                         }
-                        TopBanners(record: parkedRecord,
+                        TopBanners(cars: garage.parkedCars,
+                               showsNames: garage.hasSeveralCars,
                                holidays: holidayService.holidays,
                                showsHolidayBanner: showsHolidayBanner,
-                               onMoveTap: { showParkedCarSheet = true },
+                               reparkLeadMinutes: reparkLeadMinutes,
+                               onMoveTap: { shownCar = CarSheetItem(id: $0) },
                                onHolidayTap: { showHolidaySheet = true })
                     }
                     .padding(.horizontal, 16)
@@ -197,20 +204,26 @@ struct ContentView: View {
                 .buttonStyle(GlassCircleButtonStyle())
                 .accessibilityLabel("Center on my location")
 
-                if let parked = parkedRecord {
+                let parkedCars = garage.parkedCars
+                if let parked = parkedCars.first, let record = parked.parked {
                     Button {
-                        if isCenteredOnCar {
-                            showParkedCarSheet = true
+                        // More than one parked: which car?
+                        if parkedCars.count > 1 {
+                            showCarsSheet = true
+                        } else if centeredCarID == parked.id {
+                            shownCar = CarSheetItem(id: parked.id)
                         } else {
-                            isCenteredOnCar = true
-                            mapController.setRegion(center: parked.carCoordinate, meters: 600)
+                            centeredCarID = parked.id
+                            mapController.setRegion(center: record.carCoordinate, meters: 600)
                         }
                     } label: {
-                        Image(systemName: isCenteredOnCar ? "car.fill" : "car")
+                        Image(systemName: parkedCars.count > 1 ? "car.2.fill"
+                                          : centeredCarID != nil ? "car.fill" : "car")
                             .font(.system(size: 17))
                     }
                     .buttonStyle(GlassCircleButtonStyle())
                     .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    .accessibilityLabel(parkedCars.count > 1 ? "My cars" : "My car")
                 }
 
                 Menu {
@@ -244,6 +257,12 @@ struct ContentView: View {
                         showHolidaySheet = true
                     }
 
+                    if garage.hasSeveralCars {
+                        Button("My cars", systemImage: "car.2") {
+                            showCarsSheet = true
+                        }
+                    }
+
                     Button("About this app", systemImage: "info.circle") {
                         showAbout = true
                     }
@@ -261,8 +280,8 @@ struct ContentView: View {
             .padding(16)
             .padding(.bottom, 24)
             .animation(.easeInOut(duration: 0.25), value: abs(mapHeading) > 1)
-            .animation(.easeInOut(duration: 0.25), value: parkedRecord != nil)
-            .animation(.easeInOut(duration: 0.25), value: isCenteredOnCar)
+            .animation(.easeInOut(duration: 0.25), value: garage.parkedCars.count)
+            .animation(.easeInOut(duration: 0.25), value: centeredCarID)
         }
         .sheet(isPresented: $showAbout, onDismiss: {
             if showOnboardingAfterAbout {
@@ -293,30 +312,19 @@ struct ContentView: View {
                 segment: segment,
                 holidays: holidayService.holidays,
                 sourceDates: dataService.sourceDates,
-                isParked: parkedRecord?.segmentID == segment.id,
-                hasAnyParkedCar: parkedRecord != nil,
-                onPark: { isCommercialVehicle in
-                    if parkedRecord?.segmentID == segment.id {
-                        parkedRecord = nil
-                        ParkedCarRecord.clear()
-                        notificationService.cancelPendingNotifications()
-                    } else {
-                        let record = ParkedCarRecord(segment: segment, offsetMeters: 20,
-                                                     isCommercialVehicle: isCommercialVehicle)
-                        parkedRecord = record
-                        record.save()
-                        let now = AppClock.now, holidays = holidayService.holidays
-                        let deadline = record.nextMove(after: now, holidays: holidays)
-                        let cleaning = record.cleaning(around: now, holidays: holidays)
-                        if deadline != nil || cleaning != nil {
-                            Task {
-                                await notificationService.scheduleNotifications(
-                                    for: deadline, cleaning: cleaning, street: record.street)
-                            }
-                        } else {
-                            notificationService.cancelPendingNotifications()
-                        }
+                cars: garage.cars,
+                onPark: { carID, isCommercialVehicle in
+                    park(carID: carID, at: segment, isCommercialVehicle: isCommercialVehicle)
+                },
+                onUnpark: unpark,
+                onAddCar: { name, firstCarName in
+                    // The second car names the first too, and its reminders now say which.
+                    if garage.cars.count == 1, let first = garage.cars.first {
+                        garage.rename(first.id, to: firstCarName)
                     }
+                    let id = garage.add(named: name).id
+                    rescheduleAllNotifications()
+                    return id
                 }
             )
                 .presentationCornerRadius(22)
@@ -332,35 +340,53 @@ struct ContentView: View {
                 // Onboarding asks for permissions in context.
                 showOnboarding = true
             }
-            if let record = ParkedCarRecord.load() {
-                parkedRecord = record
-            }
             showParkedCarFromNotification()
         }
         .onChange(of: notificationRouter.showsParkedCar) { showParkedCarFromNotification() }
-        .onChange(of: parkedRecord) { _, record in
-            record == nil ? ParkedCarRecord.clear() : record?.save()
-            if record == nil { isCenteredOnCar = false }
+        .onChange(of: garage.parkedCars.map(\.id)) { _, ids in
+            if let id = centeredCarID, !ids.contains(id) { centeredCarID = nil }
         }
-        .sheet(isPresented: $showParkedCarSheet) {
-            if let parked = parkedRecord {
+        .sheet(item: $shownCar) { item in
+            if let car = garage[item.id], let record = car.parked {
                 ParkedCarSheet(
-                    record: parked,
-                    nextMove: nextMove,
+                    car: car,
+                    record: record,
+                    showsName: garage.hasSeveralCars,
+                    nextMove: record.nextMove(after: AppClock.now, holidays: holidayService.holidays),
                     holidays: holidayService.holidays,
-                    onDirections: { openDirectionsToCar(for: parked) },
-                    onUnpark: {
-                        notificationService.cancelPendingNotifications()
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            parkedRecord = nil
-                            ParkedCarRecord.clear()
-                        }
-                    }
+                    onDirections: { openDirectionsToCar(car.id) },
+                    onUnpark: { unpark(car.id) }
                 )
                 .presentationCornerRadius(22)
                 .presentationBackground(.regularMaterial)
                 .presentationDragIndicator(.hidden)
             }
+        }
+        .sheet(isPresented: $showCarsSheet, onDismiss: {
+            if let id = carPickedFromList {
+                carPickedFromList = nil
+                shownCar = CarSheetItem(id: id)
+            }
+        }) {
+            CarsSheet(garage: garage,
+                      holidays: holidayService.holidays,
+                      onSelect: { id in
+                          if let record = garage[id]?.parked {
+                              centeredCarID = id
+                              mapController.setRegion(center: record.carCoordinate, meters: 600)
+                              carPickedFromList = id
+                          }
+                      },
+                      onDirections: openDirectionsToCar,
+                      onRemove: { id in
+                          notificationService.cancelPendingNotifications(for: id)
+                          garage.remove(id)
+                          rescheduleAllNotifications()
+                      },
+                      onRenamed: rescheduleAllNotifications)
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(22)
+                .presentationBackground(.regularMaterial)
         }
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
@@ -401,22 +427,22 @@ struct ContentView: View {
         }
         .alert(doubleParkOffer.map(doubleParkOfferTitle) ?? "",
                isPresented: Binding(get: { doubleParkOffer != nil }, set: { if !$0 { doubleParkOffer = nil } }),
-               presenting: doubleParkOffer) { cleaning in
+               presenting: doubleParkOffer) { offer in
             Button(NotificationService.reparkUsesAlarm ? "Set Alarm" : "Remind Me") {
-                guard let street = parkedRecord?.street else { return }
+                guard let street = garage[offer.carID]?.parked?.street else { return }
                 Task {
-                    _ = await NotificationService.scheduleRepark(cleaningEnds: cleaning.end,
+                    _ = await NotificationService.scheduleRepark(for: offer.carID, cleaningEnds: offer.end,
                                                                  leadMinutes: reparkLeadMinutes, street: street)
                 }
             }
             Button("Not Now", role: .cancel) { }
-        } message: { cleaning in
-            Text(doubleParkOfferMessage(cleaning))
+        } message: { offer in
+            Text(doubleParkOfferMessage(offer))
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             phase == .active && !showOnboarding ? driveDetector.start() : driveDetector.stop()
-            if phase == .active, let street = (parkedRecord ?? ParkedCarRecord.load())?.street {
-                Task { await NotificationService.restoreReparkAlarmIfNeeded(street: street) }
+            if phase == .active {
+                Task { await NotificationService.restoreReparkAlarmsIfNeeded() }
             }
         }
         .fullScreenCover(isPresented: $showOnboarding) {
@@ -472,9 +498,9 @@ struct ContentView: View {
 
         while dataService.index == nil { try? await Task.sleep(for: .milliseconds(100)) }
         let segments = dataService.index?.segments ?? []
-        parkedRecord = scene.parkedSegmentID
+        garage.cars = [Car(name: Car.defaultName, parked: scene.parkedSegmentID
             .flatMap { id in segments.first { $0.id == id } }
-            .map { ParkedCarRecord(segment: $0, offsetMeters: scene.parkedOffsetMeters) }
+            .map { ParkedCarRecord(segment: $0, offsetMeters: scene.parkedOffsetMeters) })]
         try? await Task.sleep(for: .milliseconds(500))
         selectedSegment = scene.selectedSegmentID.flatMap { id in segments.first { $0.id == id } }
         showHolidaySheet = scene.showsHolidays
@@ -541,62 +567,118 @@ struct ContentView: View {
 
     // MARK: - Double parking
 
-    /// Restarts the check when the app comes forward or the car moves.
+    /// Restarts the check when the app comes forward or a car moves.
     private var doubleParkCheckID: String {
-        "\(scenePhase == .active)|\(parkedRecord?.segmentID ?? "")|\(holidayService.holidays.count)"
+        let spots = garage.parkedCars.map { "\($0.id)@\($0.parked?.segmentID ?? "")" }.joined(separator: ",")
+        return "\(scenePhase == .active)|\(spots)|\(holidayService.holidays.count)"
     }
 
-    /// From half an hour before street cleaning on the parked car's block
-    /// until it ends, asks once whether to set the repark alarm, unless it's
-    /// set already. Waits for any sheet to close.
+    /// From half an hour before street cleaning on a parked car's block until
+    /// it ends, asks once whether to set the repark alarm, unless it's set
+    /// already. Waits for any sheet to close.
     private func offerDoubleParkReminderIfNeeded() {
         guard scenePhase == .active, !isStagingScreenshot, !showOnboarding, whatsNew == nil,
-              selectedSegment == nil, !showParkedCarSheet, !showHolidaySheet, !showAbout,
-              doubleParkOffer == nil, let record = parkedRecord else { return }
+              selectedSegment == nil, shownCar == nil, !showCarsSheet, !showHolidaySheet, !showAbout,
+              doubleParkOffer == nil else { return }
         let now = AppClock.now
-        guard let cleaning = record.cleaning(around: now, holidays: holidayService.holidays),
-              DoubleParking.isOffered(for: cleaning, at: now),
-              DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes) > Date(),
-              !DoubleParking.isReminderSet(reparkCleaningEnds, forCleaningEnding: cleaning.end),
-              !DoubleParking.isReminderSet(offeredCleaningEnds, forCleaningEnding: cleaning.end)
-        else { return }
-        offeredCleaningEnds = cleaning.end.timeIntervalSince1970
-        doubleParkOffer = cleaning
+        for car in garage.parkedCars {
+            guard let cleaning = car.parked?.cleaning(around: now, holidays: holidayService.holidays),
+                  DoubleParking.isOffered(for: cleaning, at: now),
+                  DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes) > Date(),
+                  !DoubleParking.isReminderSet(car.reparkCleaningEnds, forCleaningEnding: cleaning.end),
+                  !DoubleParking.isReminderSet(car.reparkOfferedCleaningEnds, forCleaningEnding: cleaning.end)
+            else { continue }
+            garage.update(car.id) { $0.reparkOfferedCleaningEnds = cleaning.end.timeIntervalSince1970 }
+            doubleParkOffer = DoubleParkOffer(carID: car.id, start: cleaning.start, end: cleaning.end)
+            return
+        }
     }
 
     /// "Street cleaning at 8:30 AM", or "…until 10:00 AM" once it's started.
-    private func doubleParkOfferTitle(_ cleaning: CleaningTime) -> String {
-        AppClock.now < cleaning.start
-            ? "Street cleaning at \(cleaning.start.formatted(date: .omitted, time: .shortened))"
-            : "Street cleaning until \(cleaning.end.formatted(date: .omitted, time: .shortened))"
+    private func doubleParkOfferTitle(_ offer: DoubleParkOffer) -> String {
+        AppClock.now < offer.start
+            ? "Street cleaning at \(offer.start.formatted(date: .omitted, time: .shortened))"
+            : "Street cleaning until \(offer.end.formatted(date: .omitted, time: .shortened))"
     }
 
-    private func doubleParkOfferMessage(_ cleaning: CleaningTime) -> String {
-        let at = DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes)
-        let street = parkedRecord?.street.localizedCapitalized ?? "your street"
+    /// "Double-parked on 81 Street? …", or "Civic double-parked on…" with several cars.
+    private func doubleParkOfferMessage(_ offer: DoubleParkOffer) -> String {
+        let at = DoubleParking.reminderDate(cleaningEnds: offer.end, leadMinutes: reparkLeadMinutes)
+        let street = garage[offer.carID]?.parked?.street.localizedCapitalized ?? "your street"
         let what = NotificationService.reparkUsesAlarm ? "An alarm can ring" : "You can be reminded"
-        return "Double-parked on \(street)? \(what) at \(at.formatted(date: .omitted, time: .shortened)), "
+        let who = garage.label(for: offer.carID).map { "\($0) double-parked" } ?? "Double-parked"
+        return "\(who) on \(street)? \(what) at \(at.formatted(date: .omitted, time: .shortened)), "
             + "\(reparkLeadMinutes) minutes before cleaning ends, so you can move back to the curb."
     }
 
     // MARK: - Move car banner
 
-    /// Tapping a notification about the parked car opens its sheet.
+    /// Tapping a notification about a parked car opens its sheet: the one
+    /// it's about, or the only one parked.
     private func showParkedCarFromNotification() {
         guard notificationRouter.showsParkedCar else { return }
         notificationRouter.showsParkedCar = false
-        if parkedRecord != nil { showParkedCarSheet = true }
+        let tapped = notificationRouter.tappedCarID.flatMap { garage[$0] }
+        let parked = garage.parkedCars
+        if let car = tapped?.parked != nil ? tapped : parked.count == 1 ? parked.first : nil {
+            shownCar = CarSheetItem(id: car.id)
+        } else if !parked.isEmpty {
+            showCarsSheet = true
+        }
     }
 
-    private var nextMove: MoveDeadline? {
-        parkedRecord?.nextMove(after: AppClock.now, holidays: holidayService.holidays)
+    // MARK: - Parking
+
+    /// Parks a car at `segment`: nil for the only car, made on the first park.
+    private func park(carID: UUID?, at segment: ParkingSegment, isCommercialVehicle: Bool?) {
+        let id = carID ?? garage.cars.first?.id ?? garage.add(named: Car.defaultName).id
+        // A new spot: the old one's reminders, and any repark alarm, are done.
+        notificationService.cancelPendingNotifications(for: id)
+        // Beside any other car parked on this block, rather than on top of it.
+        let taken = garage.parkedCars.filter { $0.id != id && $0.parked?.segmentID == segment.id }
+            .compactMap { $0.parked?.offsetMeters }
+        let offset = [20.0, -20, 40, -40, 60, -60]
+            .first { o in abs(o) <= segment.halfBlockLengthMeters && !taken.contains { abs($0 - o) < 10 } } ?? 20
+        let record = ParkedCarRecord(segment: segment, offsetMeters: offset, isCommercialVehicle: isCommercialVehicle)
+        garage.update(id) {
+            $0.parked = record
+            $0.reparkOfferedCleaningEnds = nil
+        }
+        scheduleNotifications(for: id)
     }
 
-    private func openDirectionsToCar(for record: ParkedCarRecord) {
+    private func unpark(_ id: UUID) {
+        notificationService.cancelPendingNotifications(for: id)
+        withAnimation(.easeInOut(duration: 0.3)) {
+            garage.update(id) { $0.parked = nil }
+        }
+    }
+
+    /// The parked car's move-by reminders and cleaning notice.
+    private func scheduleNotifications(for id: UUID) {
+        guard let record = garage[id]?.parked else { return }
+        let now = AppClock.now, holidays = holidayService.holidays
+        let deadline = record.nextMove(after: now, holidays: holidays)
+        let cleaning = record.cleaning(around: now, holidays: holidays)
+        guard deadline != nil || cleaning != nil else { return }
+        Task {
+            await notificationService.scheduleNotifications(for: id, deadline: deadline, cleaning: cleaning,
+                                                            street: record.street)
+        }
+    }
+
+    /// Reminders name their car once there's more than one, so they're
+    /// scheduled again when cars are added, renamed or removed.
+    private func rescheduleAllNotifications() {
+        for car in garage.parkedCars { scheduleNotifications(for: car.id) }
+    }
+
+    private func openDirectionsToCar(_ id: UUID) {
+        guard let car = garage[id], let record = car.parked else { return }
         let coord = record.carCoordinate
         let placemark = MKPlacemark(coordinate: coord)
         let mapItem = MKMapItem(placemark: placemark)
-        mapItem.name = "My Car"
+        mapItem.name = garage.hasSeveralCars ? car.name : "My Car"
         mapItem.openInMaps(launchOptions: [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
         ])
@@ -747,40 +829,31 @@ private extension View {
 /// otherwise go stale until the next tick); the timeline re-evaluates each
 /// minute so urgency and wording stay current.
 private struct TopBanners: View {
-    let record: ParkedCarRecord?
+    let cars: [Car]
+    /// Several cars: each banner says which car.
+    let showsNames: Bool
     let holidays: [NamedHoliday]
     let showsHolidayBanner: Bool
-    let onMoveTap: () -> Void
+    let reparkLeadMinutes: Int
+    let onMoveTap: (UUID) -> Void
     let onHolidayTap: () -> Void
 
-    @AppStorage(DoubleParking.leadMinutesKey) private var reparkLeadMinutes = DoubleParking.defaultLeadMinutes
-    @AppStorage(DoubleParking.reminderKey) private var reparkCleaningEnds: Double = 0
+    /// What one parked car's banner says.
+    private enum CarBanner: Equatable {
+        case repark(CleaningTime)
+        case moveNow(MoveCountdown)
+        case move(MoveDeadline)
+    }
 
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let now = AppClock.now
-            // A rule in effect right now (parked anyway, or it started while
-            // parked) comes before the next deadline.
-            let inEffect = record?.restrictionInEffect(at: now, holidays: holidays)
-            let move = inEffect == nil ? record?.nextMove(after: now, holidays: holidays) : nil
-            // Double-parked through cleaning with a repark reminder set.
-            let repark = inEffect?.kind == .cleaning
-                ? record?.cleaning(around: now, holidays: holidays)
-                    .flatMap { DoubleParking.isReminderSet(reparkCleaningEnds, forCleaningEnding: $0.end) ? $0 : nil }
-                : nil
+            let banners = carBanners(at: now)
             let holiday = showsHolidayBanner ? upcomingHoliday(from: now) : nil
             VStack(spacing: 8) {
-                if let repark {
-                    reparkBanner(repark, now: now)
-                        .onTapGesture(perform: onMoveTap)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                } else if let inEffect {
-                    moveNowBanner(inEffect)
-                        .onTapGesture(perform: onMoveTap)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                } else if let move {
-                    moveCarBanner(for: move, now: now)
-                        .onTapGesture(perform: onMoveTap)
+                ForEach(banners, id: \.car.id) { item in
+                    carBanner(item.banner, name: showsNames ? item.car.name : nil, now: now)
+                        .onTapGesture { onMoveTap(item.car.id) }
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 if let holiday {
@@ -789,18 +862,72 @@ private struct TopBanners: View {
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .animation(.easeInOut(duration: 0.3), value: move)
-            .animation(.easeInOut(duration: 0.3), value: inEffect)
-            .animation(.easeInOut(duration: 0.3), value: repark)
+            .animation(.easeInOut(duration: 0.3), value: banners.map(\.banner))
             .animation(.easeInOut(duration: 0.3), value: holiday?.holiday.id)
-            .animation(.easeInOut(duration: 0.3),
-                       value: move.map { MoveBannerStage(deadline: $0.date, now: now) })
+            .animation(.easeInOut(duration: 0.3), value: banners.map { item -> MoveBannerStage? in
+                if case .move(let move) = item.banner { return MoveBannerStage(deadline: move.date, now: now) }
+                return nil
+            })
         }
     }
 
+    /// The most urgent car's banner, and any other car's that's urgent too
+    /// (tinted), so a second car's deadline isn't hidden behind the first's.
+    private func carBanners(at now: Date) -> [(car: Car, banner: CarBanner)] {
+        let all = cars.compactMap { car in banner(for: car, at: now).map { (car: car, banner: $0) } }
+            .sorted { urgency($0.banner, now) < urgency($1.banner, now) }
+        guard let first = all.first else { return [] }
+        return [first] + all.dropFirst().filter { isUrgent($0.banner, now) }
+    }
+
+    private func banner(for car: Car, at now: Date) -> CarBanner? {
+        guard let record = car.parked else { return nil }
+        // A rule in effect right now (parked anyway, or it started while
+        // parked) comes before the next deadline.
+        if let inEffect = record.restrictionInEffect(at: now, holidays: holidays) {
+            // Double-parked through cleaning with a repark reminder set.
+            if inEffect.kind == .cleaning, let cleaning = record.cleaning(around: now, holidays: holidays),
+               DoubleParking.isReminderSet(car.reparkCleaningEnds, forCleaningEnding: cleaning.end) {
+                return .repark(cleaning)
+            }
+            return .moveNow(inEffect)
+        }
+        return record.nextMove(after: now, holidays: holidays).map { .move($0) }
+    }
+
+    /// Sooner first: a rule in effect now, then reparking, then deadlines by date.
+    private func urgency(_ banner: CarBanner, _ now: Date) -> Date {
+        switch banner {
+        case .moveNow:           return .distantPast
+        case .repark(let c):     return DoubleParking.reminderDate(cleaningEnds: c.end, leadMinutes: reparkLeadMinutes)
+        case .move(let move):    return move.date
+        }
+    }
+
+    private func isUrgent(_ banner: CarBanner, _ now: Date) -> Bool {
+        switch banner {
+        case .moveNow, .repark:  return true
+        case .move(let move):    return MoveBannerStage(deadline: move.date, now: now).tint != nil
+        }
+    }
+
+    @ViewBuilder
+    private func carBanner(_ banner: CarBanner, name: String?, now: Date) -> some View {
+        switch banner {
+        case .repark(let cleaning): reparkBanner(cleaning, name: name, now: now)
+        case .moveNow(let rule):    moveNowBanner(rule, name: name)
+        case .move(let move):       moveCarBanner(for: move, name: name, now: now)
+        }
+    }
+
+    /// "Civic · Move by 8:30 AM tomorrow" with several cars.
+    private func named(_ text: String, _ name: String?) -> String {
+        name.map { "\($0) · \(text)" } ?? text
+    }
+
     /// "Move now · No standing until 7 PM", in the countdown's red.
-    private func moveNowBanner(_ rule: MoveCountdown) -> some View {
-        Label("Move now · \(rule.inEffectText)", systemImage: "exclamationmark.triangle.fill")
+    private func moveNowBanner(_ rule: MoveCountdown, name: String?) -> some View {
+        Label(named("Move now · \(rule.inEffectText)", name), systemImage: "exclamationmark.triangle.fill")
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -811,13 +938,13 @@ private struct TopBanners: View {
 
     /// "Double-parked · repark at 10:10 AM", then red once it's time:
     /// "Repark now · cleaning ends 10:30 AM".
-    private func reparkBanner(_ cleaning: CleaningTime, now: Date) -> some View {
+    private func reparkBanner(_ cleaning: CleaningTime, name: String?, now: Date) -> some View {
         let at = DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes)
         let isTime = at <= now
         let text = isTime
             ? "Repark now · cleaning ends \(cleaning.end.formatted(date: .omitted, time: .shortened))"
             : "Double-parked · repark at \(at.formatted(date: .omitted, time: .shortened))"
-        return Label(text, systemImage: isTime ? "car.fill" : "car.2.fill")
+        return Label(named(text, name), systemImage: isTime ? "car.fill" : "car.2.fill")
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -828,7 +955,7 @@ private struct TopBanners: View {
 
     /// Yellow from the day before the move, red within the final hour.
     /// "Move by 8:30 AM tomorrow"; "Pay or move by …" when it's the meter.
-    private func moveCarBanner(for move: MoveDeadline, now: Date) -> some View {
+    private func moveCarBanner(for move: MoveDeadline, name: String?, now: Date) -> some View {
         let date = move.date
         let stage = MoveBannerStage(deadline: date, now: now)
         let time = date.formatted(date: .omitted, time: .shortened)
@@ -847,9 +974,10 @@ private struct TopBanners: View {
             text = "\(move.verb) \(df.string(from: date))"
         }
         let icon = stage == .imminent ? "clock.badge.exclamationmark.fill" : "calendar.badge.clock"
-        return Label(text, systemImage: icon)
+        return Label(named(text, name), systemImage: icon)
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .modifier(BannerBackground(tint: stage.tint))
@@ -888,6 +1016,18 @@ private struct TopBanners: View {
         .padding(.vertical, 9)
         .modifier(BannerBackground(tint: nil))
     }
+}
+
+/// Which parked car's sheet is showing.
+private struct CarSheetItem: Identifiable {
+    let id: UUID
+}
+
+/// Street cleaning on a parked car's block, offered a repark alarm.
+private struct DoubleParkOffer {
+    let carID: UUID
+    let start: Date
+    let end: Date
 }
 
 /// How close the move-by deadline is.
