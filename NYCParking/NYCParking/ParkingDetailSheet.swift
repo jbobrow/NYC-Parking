@@ -268,12 +268,12 @@ struct ParkingDetailSheet: View {
         return parkingCarName.map { " \($0) will move here." } ?? " Your parked car will move here."
     }
 
-    /// With several cars, every action starts by asking which car.
+    /// With several cars, every action starts by asking which car. With one
+    /// parked elsewhere, still "Park Here": it then asks whether to move that
+    /// car or park another.
     private var buttonLabel: String {
         if hasSeveralCars { return carsElsewhere.isEmpty ? "Unpark Car" : "Park Here" }
-        if isParked { return "Unpark Car" }
-        if onlyCarIsParkedElsewhere { return "Move Car Here" }
-        return "Park Here"
+        return isParked ? "Unpark Car" : "Park Here"
     }
 
     private var buttonIcon: String {
