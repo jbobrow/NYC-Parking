@@ -75,7 +75,10 @@ final class MapController {
 struct ParkingMapView: UIViewRepresentable {
     let controller: MapController
     let index: SegmentIndex?
-    let parkedRecord: ParkedCarRecord?
+    /// The parked cars, each drawn where it's parked.
+    let parkedCars: [Car]
+    /// Several cars: each pin is labeled with its car's name.
+    var showsCarNames = false
     let isDrivingMode: Bool
     let displayMode: MapDisplayMode
     let countdown: CountdownSnapshot?
@@ -91,9 +94,9 @@ struct ParkingMapView: UIViewRepresentable {
     var onCameraSettled: (MapCameraState) -> Void = { _ in }
     var onLabelsVisibleChange: (Bool) -> Void = { _ in }
     var onSelectSegment: (ParkingSegment) -> Void = { _ in }
-    var onCarTap: () -> Void = {}
-    /// The car was dragged along the block; the new offset from the block midpoint.
-    var onCarMoved: (Double) -> Void = { _ in }
+    var onCarTap: (UUID) -> Void = { _ in }
+    /// A car was dragged along its block; the new offset from the block midpoint.
+    var onCarMoved: (UUID, Double) -> Void = { _, _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -117,7 +120,8 @@ struct ParkingMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.update(index: index, parkedRecord: parkedRecord, isDriving: isDrivingMode,
+        context.coordinator.update(index: index, parkedCars: parkedCars, showsCarNames: showsCarNames,
+                                   isDriving: isDrivingMode,
                                    displayMode: displayMode, countdown: countdown, meters: meters,
                                    countdownScale: countdownScale)
         if let driveLocation { context.coordinator.drive.ingest(driveLocation) }
@@ -160,10 +164,11 @@ extension ParkingMapView {
         private var lastDeclutter: (mpp: Double, heading: Double) = (0, 0)
         private var declutterScheduled = false
 
-        private var parkedRecord: ParkedCarRecord?
-        private var carAnnotation: CarAnnotation?
-        private var carPan: UIPanGestureRecognizer?
-        private var carDrag: (grabOffset: CGSize, offset: Double)?
+        private var parkedCars: [Car] = []
+        private var showsCarNames = false
+        private var carAnnotations: [UUID: CarAnnotation] = [:]
+        private var carPans: [UIPanGestureRecognizer] = []
+        private var carDrag: (carID: UUID, grabOffset: CGSize, offset: Double)?
 
         private var isDriving = false
         let drive = DriveController()
@@ -197,7 +202,7 @@ extension ParkingMapView {
 
         // MARK: State from SwiftUI
 
-        func update(index: SegmentIndex?, parkedRecord: ParkedCarRecord?, isDriving: Bool,
+        func update(index: SegmentIndex?, parkedCars: [Car], showsCarNames: Bool, isDriving: Bool,
                     displayMode: MapDisplayMode, countdown: CountdownSnapshot?, meters: MeterSnapshot?,
                     countdownScale: CountdownScale) {
             var marksChanged = false
@@ -239,9 +244,10 @@ extension ParkingMapView {
                 refreshLabelContent(mapView)
                 refreshLabels()
             }
-            if parkedRecord != self.parkedRecord {
-                self.parkedRecord = parkedRecord
-                syncCar()
+            if parkedCars != self.parkedCars || showsCarNames != self.showsCarNames {
+                self.parkedCars = parkedCars
+                self.showsCarNames = showsCarNames
+                syncCars()
             }
             if isDriving != self.isDriving, let mapView {
                 self.isDriving = isDriving
@@ -577,11 +583,12 @@ extension ParkingMapView {
 
             case let a as CarAnnotation:
                 let view = CarAnnotationView(annotation: a, reuseIdentifier: nil)
-                view.onTap = { [weak self] in self?.parent.onCarTap() }
+                view.onTap = { [weak self] in self?.parent.onCarTap(a.carID) }
                 let pan = UIPanGestureRecognizer(target: self, action: #selector(handleCarPan(_:)))
                 pan.delegate = self
                 view.addGestureRecognizer(pan)
-                carPan = pan
+                carPans.removeAll { $0.view == nil }
+                carPans.append(pan)
                 return view
 
             default:
@@ -591,34 +598,44 @@ extension ParkingMapView {
 
         // MARK: Parked car
 
-        private func syncCar() {
+        private func syncCars() {
             guard let mapView else { return }
-            guard let record = parkedRecord else {
-                if let car = carAnnotation { mapView.removeAnnotation(car) }
-                carAnnotation = nil
-                return
+            let parked = Dictionary(uniqueKeysWithValues: parkedCars.compactMap { car in
+                car.parked.map { (car.id, (record: $0, name: car.name)) }
+            })
+            for (id, car) in carAnnotations where parked[id] == nil {
+                mapView.removeAnnotation(car)
+                carAnnotations[id] = nil
             }
-            if let car = carAnnotation {
-                if carDrag == nil { car.coordinate = record.carCoordinate }
-            } else {
-                let car = CarAnnotation(coordinate: record.carCoordinate)
-                carAnnotation = car
-                mapView.addAnnotation(car)
+            for (id, car) in parked {
+                let name = showsCarNames ? car.name : nil
+                if let annotation = carAnnotations[id] {
+                    if carDrag?.carID != id { annotation.coordinate = car.record.carCoordinate }
+                    if annotation.name != name {
+                        annotation.name = name
+                        (mapView.view(for: annotation) as? CarAnnotationView)?.setName(name)
+                    }
+                } else {
+                    let annotation = CarAnnotation(carID: id, coordinate: car.record.carCoordinate, name: name)
+                    carAnnotations[id] = annotation
+                    mapView.addAnnotation(annotation)
+                }
             }
         }
 
-        /// Drags the car along its block: the finger's position is projected onto
+        /// Drags a car along its block: the finger's position is projected onto
         /// the street axis and clamped to the block's length.
         @objc private func handleCarPan(_ gr: UIPanGestureRecognizer) {
-            guard let mapView, let record = parkedRecord, let car = carAnnotation else { return }
+            guard let mapView, let car = (gr.view as? CarAnnotationView)?.annotation as? CarAnnotation,
+                  let record = parkedCars.first(where: { $0.id == car.carID })?.parked else { return }
             let finger = gr.location(in: mapView)
             switch gr.state {
             case .began:
                 let carPoint = mapView.convert(car.coordinate, toPointTo: mapView)
-                carDrag = (CGSize(width: finger.x - carPoint.x, height: finger.y - carPoint.y),
+                carDrag = (car.carID, CGSize(width: finger.x - carPoint.x, height: finger.y - carPoint.y),
                            record.offsetMeters)
             case .changed:
-                guard let drag = carDrag else { return }
+                guard let drag = carDrag, drag.carID == car.carID else { return }
                 let target = CGPoint(x: finger.x - drag.grabOffset.width, y: finger.y - drag.grabOffset.height)
                 let coord = mapView.convert(target, toCoordinateFrom: mapView)
                 let limit = record.halfBlockLengthMeters
@@ -626,7 +643,7 @@ extension ParkingMapView {
                 carDrag?.offset = offset
                 car.coordinate = record.coordinate(atOffset: offset)
             case .ended, .cancelled, .failed:
-                guard let drag = carDrag else { return }
+                guard let drag = carDrag, drag.carID == car.carID else { return }
                 carDrag = nil
                 var offset = drag.offset
                 // Keep the car clear of the block's center label.
@@ -635,7 +652,7 @@ extension ParkingMapView {
                 let limit = record.halfBlockLengthMeters
                 offset = max(-limit, min(limit, offset))
                 car.coordinate = record.coordinate(atOffset: offset)
-                parent.onCarMoved(offset)
+                parent.onCarMoved(car.carID, offset)
             default:
                 break
             }
@@ -694,14 +711,18 @@ extension ParkingMapView {
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            gestureRecognizer !== carPan
+            !isCarPan(gestureRecognizer)
         }
 
         /// While a finger drags the car, the map's own pan/pinch wait for the car
         /// drag to fail, so the map doesn't scroll underneath it.
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-            gestureRecognizer === carPan && other.view !== gestureRecognizer.view
+            isCarPan(gestureRecognizer) && other.view !== gestureRecognizer.view
+        }
+
+        private func isCarPan(_ gr: UIGestureRecognizer) -> Bool {
+            carPans.contains { $0 === gr }
         }
     }
 }
@@ -974,13 +995,22 @@ final class SegmentLabelView: MKAnnotationView {
 // MARK: - Parked car
 
 final class CarAnnotation: NSObject, MKAnnotation {
+    let carID: UUID
     @objc dynamic var coordinate: CLLocationCoordinate2D
+    /// Shown under the pin when there's more than one car.
+    var name: String?
 
-    init(coordinate: CLLocationCoordinate2D) { self.coordinate = coordinate }
+    init(carID: UUID, coordinate: CLLocationCoordinate2D, name: String?) {
+        self.carID = carID
+        self.coordinate = coordinate
+        self.name = name
+    }
 }
 
 final class CarAnnotationView: MKAnnotationView {
     var onTap: (() -> Void)?
+    /// The car's name in a small capsule under the pin, with several cars.
+    private let nameLabel = PaddedLabel()
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -1006,12 +1036,55 @@ final class CarAnnotationView: MKAnnotationView {
         icon.center = CGPoint(x: bounds.midX, y: bounds.midY)
         circle.addSubview(icon)
 
+        nameLabel.font = UIFont.systemFont(ofSize: 11, weight: .bold).rounded
+        nameLabel.textColor = .label
+        nameLabel.backgroundColor = .systemBackground
+        nameLabel.layer.cornerRadius = 8
+        nameLabel.layer.masksToBounds = true
+        nameLabel.isUserInteractionEnabled = false
+        addSubview(nameLabel)
+        setName((annotation as? CarAnnotation)?.name)
+
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    func setName(_ name: String?) {
+        nameLabel.text = name
+        nameLabel.isHidden = name == nil
+        nameLabel.sizeToFit()
+        let width = min(nameLabel.bounds.width, 120)
+        nameLabel.frame = CGRect(x: bounds.midX - width / 2, y: bounds.maxY + 3,
+                                 width: width, height: nameLabel.bounds.height)
+    }
+
+    /// The name hangs below the pin, outside its bounds: still a place to grab it.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || (!nameLabel.isHidden && nameLabel.frame.contains(point))
+    }
+
     @objc private func tapped() { onTap?() }
+}
+
+/// A label with room around its text, for a capsule background.
+private final class PaddedLabel: UILabel {
+    private let insets = UIEdgeInsets(top: 2, left: 6, bottom: 2, right: 6)
+
+    override func drawText(in rect: CGRect) { super.drawText(in: rect.inset(by: insets)) }
+
+    override var intrinsicContentSize: CGSize {
+        let size = super.intrinsicContentSize
+        return CGSize(width: size.width + insets.left + insets.right, height: size.height + insets.top + insets.bottom)
+    }
+
+    override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
+}
+
+private extension UIFont {
+    var rounded: UIFont {
+        fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: pointSize) } ?? self
+    }
 }
 
 // MARK: - Geometry helpers

@@ -44,17 +44,19 @@ enum DoubleParking {
     static let leadMinutesRange = 5...60
     static let leadMinutesStep = 5
 
-    /// Seconds since 1970 of the cleaning end the reminder is set for; 0 for none.
-    static let reminderKey = "doubleParkReminderCleaningEnds"
+    /// Where earlier versions saved the reminder, now kept with each car
+    /// (`Car.reparkCleaningEnds`).
+    static let legacyReminderKey = "doubleParkReminderCleaningEnds"
 
     static var leadMinutes: Int {
         let stored = UserDefaults.standard.integer(forKey: leadMinutesKey)
         return stored > 0 ? stored : defaultLeadMinutes
     }
 
-    /// Whether the stored reminder (`reminderKey`) is for the cleaning ending at `end`.
-    static func isReminderSet(_ stored: Double, forCleaningEnding end: Date) -> Bool {
-        abs(stored - end.timeIntervalSince1970) < 60
+    /// Whether a stored reminder (`Car.reparkCleaningEnds`) is for the cleaning ending at `end`.
+    static func isReminderSet(_ stored: Double?, forCleaningEnding end: Date) -> Bool {
+        guard let stored else { return false }
+        return abs(stored - end.timeIntervalSince1970) < 60
     }
 
     static func reminderDate(cleaningEnds: Date, leadMinutes: Int) -> Date {
@@ -70,12 +72,13 @@ enum DoubleParking {
         now >= cleaning.start.addingTimeInterval(-offeredBefore) && now < cleaning.end
     }
 
-    /// The cleaning whose end the app last asked about, so it asks once.
-    static let offeredKey = "doubleParkOfferedCleaningEnds"
+    /// Where earlier versions saved the cleaning last asked about, now kept
+    /// with each car (`Car.reparkOfferedCleaningEnds`).
+    static let legacyOfferedKey = "doubleParkOfferedCleaningEnds"
 }
 
-/// Minimal persisted snapshot of a parked car location.
-/// Stored in UserDefaults so the pin survives app restarts.
+/// Minimal persisted snapshot of a parked car location, kept with its `Car`
+/// so the pin survives app restarts.
 struct ParkedCarRecord: Codable, Equatable {
     let segmentID: String
     let coordinateLatitude: Double   // street centroid — used for cos(lat) scale
@@ -198,19 +201,127 @@ struct ParkedCarRecord: Codable, Equatable {
 
     // MARK: - Persistence
 
-    private static let key = "parkedCarRecord"
+    /// Where earlier versions saved their one parked car (see `Garage`).
+    static let legacyKey = "parkedCarRecord"
+}
 
-    static func load() -> ParkedCarRecord? {
+// MARK: - Cars
+
+/// One of the user's cars, and where it's parked. Most people have one and
+/// never see it named: names, and choosing between cars, appear only once a
+/// second car is added.
+struct Car: Codable, Identifiable, Equatable {
+    let id: UUID
+    var name: String
+    var parked: ParkedCarRecord?
+    /// Seconds since 1970 of the cleaning end the repark reminder is set for;
+    /// nil for none.
+    var reparkCleaningEnds: Double?
+    /// The cleaning end the repark reminder was last offered for, so it's
+    /// offered once.
+    var reparkOfferedCleaningEnds: Double?
+
+    init(id: UUID = UUID(), name: String, parked: ParkedCarRecord? = nil) {
+        self.id = id
+        self.name = name
+        self.parked = parked
+    }
+
+    static let defaultName = "My Car"
+
+    /// The car saved before there could be more than one. Its reminders and
+    /// repark alarm keep the IDs they were scheduled with.
+    static let legacyID = UUID(uuidString: "0E6A3C51-8B2F-4D7E-A1C9-5F3B7D2E8A64")!
+}
+
+/// The user's cars, saved as they change.
+@MainActor
+final class Garage: ObservableObject {
+    static let shared = Garage()
+
+    @Published var cars: [Car] {
+        didSet { if cars != oldValue { Self.save(cars) } }
+    }
+
+    /// More than one car: they're named, and parking asks which.
+    var hasSeveralCars: Bool { cars.count > 1 }
+
+    var parkedCars: [Car] { cars.filter { $0.parked != nil } }
+
+    subscript(id: UUID) -> Car? { cars.first { $0.id == id } }
+
+    /// A car's name where it's needed to tell cars apart; nil with just one.
+    func label(for id: UUID) -> String? { hasSeveralCars ? self[id]?.name : nil }
+
+    func update(_ id: UUID, _ change: (inout Car) -> Void) {
+        guard let i = cars.firstIndex(where: { $0.id == id }) else { return }
+        change(&cars[i])
+    }
+
+    /// Adds a car. A blank name is "My Car" for the first, "Car 2" and so on after.
+    @discardableResult
+    func add(named name: String) -> Car {
+        let car = Car(name: Self.trimmed(name) ?? (cars.isEmpty ? Car.defaultName : "Car \(cars.count + 1)"))
+        cars.append(car)
+        return car
+    }
+
+    /// Renames a car, unless the new name is blank.
+    func rename(_ id: UUID, to name: String) {
+        guard let name = Self.trimmed(name) else { return }
+        update(id) { $0.name = name }
+    }
+
+    func remove(_ id: UUID) {
+        cars.removeAll { $0.id == id }
+    }
+
+    private static func trimmed(_ name: String) -> String? {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }
+
+    private init() {
+        if let cars = Self.stored() {
+            self.cars = cars
+        } else {
+            cars = Self.migrated()
+            Self.save(cars)
+        }
+    }
+
+    // MARK: Persistence
+
+    nonisolated private static let key = "cars"
+
+    /// The saved cars, for reading outside the main actor (a notification
+    /// arriving with the app in the background).
+    nonisolated static func stored() -> [Car]? {
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(ParkedCarRecord.self, from: data)
+        return try? JSONDecoder().decode([Car].self, from: data)
     }
 
-    func save() {
-        guard let data = try? JSONEncoder().encode(self) else { return }
-        UserDefaults.standard.set(data, forKey: Self.key)
+    private static func save(_ cars: [Car]) {
+        guard let data = try? JSONEncoder().encode(cars) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: key)
+    /// The one parked car saved by earlier versions, as "My Car", with its
+    /// repark reminder.
+    private static func migrated() -> [Car] {
+        let defaults = UserDefaults.standard
+        defer {
+            for key in [ParkedCarRecord.legacyKey, DoubleParking.legacyReminderKey, DoubleParking.legacyOfferedKey] {
+                defaults.removeObject(forKey: key)
+            }
+        }
+        guard let data = defaults.data(forKey: ParkedCarRecord.legacyKey),
+              let record = try? JSONDecoder().decode(ParkedCarRecord.self, from: data) else { return [] }
+        var car = Car(id: Car.legacyID, name: Car.defaultName, parked: record)
+        let reminder = defaults.double(forKey: DoubleParking.legacyReminderKey)
+        let offered = defaults.double(forKey: DoubleParking.legacyOfferedKey)
+        car.reparkCleaningEnds = reminder > 0 ? reminder : nil
+        car.reparkOfferedCleaningEnds = offered > 0 ? offered : nil
+        return [car]
     }
 }

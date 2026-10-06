@@ -4,15 +4,34 @@ struct ParkingDetailSheet: View {
     let segment: ParkingSegment
     let holidays: [NamedHoliday]
     let sourceDates: DataSourceDates
-    let isParked: Bool
-    let hasAnyParkedCar: Bool
-    /// Parks (or unparks) here. On curbs with commercial-only hours, whether
-    /// the car is a commercial vehicle; nil elsewhere.
-    let onPark: (_ isCommercialVehicle: Bool?) -> Void
+    let cars: [Car]
+    /// Parks a car here: nil for the only one (made on the first park). On
+    /// curbs with commercial-only hours, whether the car is a commercial
+    /// vehicle; nil elsewhere.
+    let onPark: (_ carID: UUID?, _ isCommercialVehicle: Bool?) -> Void
+    let onUnpark: (_ carID: UUID) -> Void
+    /// Adds a car, naming the first too when this is the second; its ID.
+    let onAddCar: (_ name: String, _ firstCarName: String) -> UUID
 
     @Environment(\.dismiss) private var dismiss
     @State private var showUnparkConfirm = false
     @State private var showMoveConfirm = false
+    /// With several cars, which to park (or unpark) here.
+    @State private var showCarPicker = false
+    /// Naming a car being added, then parking it.
+    @State private var showAddCar = false
+    @State private var newCarName = ""
+    @State private var firstCarName = ""
+    /// What to do once a dialog has closed: show the next one, or park
+    /// (see `vehicleAnswer`).
+    @State private var afterDialog: (() -> Void)?
+    /// The car being parked: nil for the only one.
+    @State private var parkingCarID: UUID?
+    /// Whether it's parked somewhere else now, and its name with several
+    /// cars. Kept from when it was chosen: a car just added isn't in `cars`
+    /// until the sheet next updates.
+    @State private var parkingCarMoves = false
+    @State private var parkingCarName: String?
     @State private var showVehicleQuestion = false
     /// The answer, acted on once the question has closed: it can show as a
     /// popover, which `dismiss()` would close instead of the sheet.
@@ -59,13 +78,20 @@ struct ParkingDetailSheet: View {
                                     .font(.system(size: 22, weight: .bold))
 
                                 if isParked {
-                                    Image(systemName: "car.fill")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.green, in: Capsule())
-                                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                                    // With several cars, which are here.
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "car.fill")
+                                        if hasSeveralCars {
+                                            Text(carsHere.map(\.name).joined(separator: ", "))
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.green, in: Capsule())
+                                    .transition(.scale(scale: 0.5).combined(with: .opacity))
                                 }
                             }
                             .animation(.spring(response: 0.4, dampingFraction: 0.6), value: isParked)
@@ -111,13 +137,12 @@ struct ParkingDetailSheet: View {
 
             VStack(spacing: 0) {
                 Button {
-                    if isParked {
+                    if hasSeveralCars {
+                        showCarPicker = true
+                    } else if isParked {
                         showUnparkConfirm = true
-                    } else if segment.meter?.profile.commercial != nil {
-                        // Commercial hours mean pay for some cars, move for others.
-                        showVehicleQuestion = true
                     } else {
-                        attemptPark(isCommercialVehicle: nil, confirmingMove: true)
+                        beginPark(carID: nil, moves: onlyCarIsParkedElsewhere, name: nil, confirmingMove: true)
                     }
                 } label: {
                     Label(buttonLabel, systemImage: buttonIcon)
@@ -145,17 +170,61 @@ struct ParkingDetailSheet: View {
             get: { showsDetails ? expandedDetent : collapsedDetent },
             set: { detent in withAnimation(.easeInOut(duration: 0.2)) { showsDetails = detent == expandedDetent } }))
         .alert("Unpark Car?", isPresented: $showUnparkConfirm) {
-            Button("Unpark", role: .destructive) { onPark(nil); dismiss() }
+            Button("Unpark", role: .destructive) {
+                if let car = carsHere.first { onUnpark(car.id) }
+                dismiss()
+            }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Are you sure you want to unpark your car?")
         }
+        // The one car is parked elsewhere: move it, or this is another car.
         .alert("Move Car Here?", isPresented: $showMoveConfirm) {
-            Button("Move Car") { onPark(nil); dismiss() }
+            Button("Move Car") { afterDialog = continuePark }
+            Button("Park Another Car") { afterDialog = startAddingCar }
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will move your parked car to \(segment.street.localizedCapitalized).")
         }
+        .confirmationDialog("Which car?", isPresented: $showCarPicker, titleVisibility: .visible) {
+            ForEach(carsElsewhere) { car in
+                Button(car.parked.map { "\(car.name) · move from \($0.street.localizedCapitalized)" } ?? car.name) {
+                    afterDialog = {
+                        beginPark(carID: car.id, moves: car.parked != nil, name: car.name, confirmingMove: false)
+                    }
+                }
+            }
+            Button("Add a Car") { afterDialog = startAddingCar }
+            ForEach(carsHere) { car in
+                Button("Unpark \(car.name)", role: .destructive) {
+                    onUnpark(car.id)
+                    dismiss()
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        }
+        .onChange(of: showCarPicker) { _, showing in runAfterDialog(showing) }
+        .onChange(of: showMoveConfirm) { _, showing in runAfterDialog(showing) }
+        // A second car names both, so they can be told apart from now on.
+        .alert(hasSeveralCars ? "Add a Car" : "Name Your Cars", isPresented: $showAddCar) {
+            if !hasSeveralCars, let first = cars.first {
+                TextField(first.parked.map { "Car on \($0.street.localizedCapitalized)" } ?? first.name,
+                          text: $firstCarName)
+            }
+            TextField(hasSeveralCars ? "Name" : "This car", text: $newCarName)
+            Button("Park Here") {
+                let id = onAddCar(newCarName, firstCarName)
+                let name = newCarName.trimmingCharacters(in: .whitespaces)
+                afterDialog = {
+                    beginPark(carID: id, moves: false, name: name.isEmpty ? nil : name, confirmingMove: false)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(hasSeveralCars ? "Name the car you're parking here."
+                 : "So you can tell them apart. Pick which car each time you park.")
+        }
+        .onChange(of: showAddCar) { _, showing in runAfterDialog(showing) }
         .confirmationDialog("Is this a commercial vehicle?", isPresented: $showVehicleQuestion,
                             titleVisibility: .visible) {
             Button("Commercial vehicle") { vehicleAnswer = true }
@@ -167,31 +236,93 @@ struct ParkingDetailSheet: View {
         .onChange(of: showVehicleQuestion) { _, showing in
             guard !showing, let answer = vehicleAnswer else { return }
             vehicleAnswer = nil
-            attemptPark(isCommercialVehicle: answer, confirmingMove: false)
+            attemptPark(isCommercialVehicle: answer)
         }
         .alert(parkWarning?.title ?? "", isPresented: Binding(get: { parkWarning != nil },
                                                               set: { if !$0 { parkWarning = nil } }),
                presenting: parkWarning) { warning in
-            Button("Park Anyway", role: .destructive) { onPark(warning.isCommercialVehicle); dismiss() }
+            Button("Park Anyway", role: .destructive) { park(isCommercialVehicle: warning.isCommercialVehicle) }
             Button("Cancel", role: .cancel) { }
         } message: { _ in
-            Text("Parking here now can get you a ticket or towed."
-                 + (hasAnyParkedCar ? " Your parked car will move here." : ""))
+            Text("Parking here now can get you a ticket or towed." + movesHereNote)
         }
     }
 
+    private var hasSeveralCars: Bool { cars.count > 1 }
+
+    private var carsHere: [Car] { cars.filter { $0.parked?.segmentID == segment.id } }
+
+    private var carsElsewhere: [Car] { cars.filter { $0.parked?.segmentID != segment.id } }
+
+    private var isParked: Bool { !carsHere.isEmpty }
+
+    /// With one car, whether it's parked on another block.
+    private var onlyCarIsParkedElsewhere: Bool {
+        guard !hasSeveralCars, let parked = cars.first?.parked else { return false }
+        return parked.segmentID != segment.id
+    }
+
+    /// " Your parked car will move here." / " Civic will move here."
+    private var movesHereNote: String {
+        guard parkingCarMoves else { return "" }
+        return parkingCarName.map { " \($0) will move here." } ?? " Your parked car will move here."
+    }
+
+    /// With several cars, every action starts by asking which car.
     private var buttonLabel: String {
+        if hasSeveralCars { return carsElsewhere.isEmpty ? "Unpark Car" : "Park Here" }
         if isParked { return "Unpark Car" }
-        if hasAnyParkedCar { return "Move Car Here" }
+        if onlyCarIsParkedElsewhere { return "Move Car Here" }
         return "Park Here"
     }
 
     private var buttonIcon: String {
-        isParked ? "car" : "car.fill"
+        buttonLabel == "Unpark Car" ? "car" : "car.fill"
     }
 
     private var buttonColor: Color {
-        isParked ? .green : .accentColor
+        buttonLabel == "Unpark Car" ? .green : .accentColor
+    }
+
+    private func startAddingCar() {
+        newCarName = ""
+        firstCarName = ""
+        showAddCar = true
+    }
+
+    private func runAfterDialog(_ showing: Bool) {
+        guard !showing, let next = afterDialog else { return }
+        afterDialog = nil
+        next()
+    }
+
+    /// Parks a car: nil for the only one. `confirmingMove` asks before moving
+    /// the one car from where it's parked, offering to park another instead
+    /// (a picked car already said where it's parked).
+    private func beginPark(carID: UUID?, moves: Bool, name: String?, confirmingMove: Bool) {
+        parkingCarID = carID
+        parkingCarMoves = moves
+        parkingCarName = name
+        if confirmingMove && moves {
+            showMoveConfirm = true
+        } else {
+            continuePark()
+        }
+    }
+
+    /// Asks whether it's a commercial vehicle where that matters, then parks.
+    private func continuePark() {
+        if segment.meter?.profile.commercial != nil {
+            // Commercial hours mean pay for some cars, move for others.
+            showVehicleQuestion = true
+        } else {
+            attemptPark(isCommercialVehicle: nil)
+        }
+    }
+
+    private func park(isCommercialVehicle: Bool? = nil) {
+        onPark(parkingCarID, isCommercialVehicle)
+        dismiss()
     }
 
     private var blockDescription: String {
@@ -203,17 +334,13 @@ struct ParkingDetailSheet: View {
     }
 
     /// Parks, unless a rule in effect right now means this car can't be here,
-    /// in which case it warns first. `confirmingMove` asks before moving an
-    /// already parked car (the commercial question already said so).
-    private func attemptPark(isCommercialVehicle: Bool?, confirmingMove: Bool) {
+    /// in which case it warns first.
+    private func attemptPark(isCommercialVehicle: Bool?) {
         let windows = segment.moveWindows.forVehicle(isCommercial: isCommercialVehicle)
         if let rule = windows.restrictionInEffect(in: CountdownCalendar(holidays: holidays)) {
             parkWarning = ParkWarning(title: rule.inEffectText, isCommercialVehicle: isCommercialVehicle)
-        } else if confirmingMove && hasAnyParkedCar {
-            showMoveConfirm = true
         } else {
-            onPark(isCommercialVehicle)
-            dismiss()
+            park(isCommercialVehicle: isCommercialVehicle)
         }
     }
 
@@ -226,8 +353,7 @@ struct ParkingDetailSheet: View {
         } else {
             when = tier.compactHours
         }
-        let move = hasAnyParkedCar ? " Your parked car will move here." : ""
-        return "Only commercial vehicles can park here \(when).\(move)"
+        return "Only commercial vehicles can park here \(when).\(movesHereNote)"
     }
 
     /// "Street cleaning · No standing · Meter" · Show / Hide
@@ -583,3 +709,4 @@ private struct RuleRow: View {
         .fixedSize()
     }
 }
+
