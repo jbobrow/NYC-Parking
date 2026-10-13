@@ -7,7 +7,7 @@
 // Block data comes from data/blocks.json and ASP holidays from
 // data/holidays.json (both built by scripts/build_web_data.py).
 
-// "New in 1.4", a parking sign that swings into the map's corner a moment
+// "New in 1.5", a parking sign that swings into the map's corner a moment
 // after the page opens, every visit. The × swings it back out.
 (function newSign() {
   const sign = document.querySelector(".new-sign");
