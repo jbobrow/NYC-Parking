@@ -105,14 +105,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		DD2200000000000000000004 /* Frameworks */ = {
+		DD1300000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		DD1300000000000000000004 /* Frameworks */ = {
+		DD2200000000000000000004 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -168,6 +168,15 @@
 			path = NYCParking;
 			sourceTree = "<group>";
 		};
+		CC1300000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB1000000000000000000001 /* NYCParking.app */,
+				BB3500000000000000000001 /* NYCParkingWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		CC1400000000000000000003 /* NYCParkingWidgets */ = {
 			isa = PBXGroup;
 			children = (
@@ -176,15 +185,6 @@
 				BB3400000000000000000001 /* Info.plist */,
 			);
 			path = NYCParkingWidgets;
-			sourceTree = "<group>";
-		};
-		CC1300000000000000000003 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				BB1000000000000000000001 /* NYCParking.app */,
-				BB3500000000000000000001 /* NYCParkingWidgets.appex */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -264,19 +264,19 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		DD2300000000000000000004 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		DD1400000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				AA1B00000000000000000002 /* Assets.xcassets in Resources */,
 				AA2400000000000000000002 /* segments.db in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD2300000000000000000004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

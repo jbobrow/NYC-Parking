@@ -105,7 +105,10 @@ final class NotificationService: ObservableObject {
     /// silent mode where AlarmKit is allowed, a notification otherwise. False
     /// when that time has already passed or neither is allowed.
     static func scheduleRepark(for carID: UUID, cleaningEnds: Date, leadMinutes: Int, street: String) async -> Bool {
+        // Cleaning times follow the app's clock, which staged screenshot
+        // scenes shift; the alarm rings by the real one.
         let date = DoubleParking.reminderDate(cleaningEnds: cleaningEnds, leadMinutes: leadMinutes)
+            .addingTimeInterval(Date().timeIntervalSince(AppClock.now))
         guard date > Date() else { return false }
         cancelRepark(for: carID)
         let carName = Garage.shared.label(for: carID)

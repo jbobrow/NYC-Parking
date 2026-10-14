@@ -498,9 +498,12 @@ struct ContentView: View {
 
         while dataService.index == nil { try? await Task.sleep(for: .milliseconds(100)) }
         let segments = dataService.index?.segments ?? []
-        garage.cars = [Car(name: Car.defaultName, parked: scene.parkedSegmentID
-            .flatMap { id in segments.first { $0.id == id } }
-            .map { ParkedCarRecord(segment: $0, offsetMeters: scene.parkedOffsetMeters) })]
+        let parked = { (id: String?) in
+            id.flatMap { id in segments.first { $0.id == id } }
+                .map { ParkedCarRecord(segment: $0, offsetMeters: scene.parkedOffsetMeters) }
+        }
+        garage.cars = scene.cars?.map { Car(name: $0.name, parked: parked($0.segmentID)) }
+            ?? [Car(name: Car.defaultName, parked: parked(scene.parkedSegmentID))]
         try? await Task.sleep(for: .milliseconds(500))
         selectedSegment = scene.selectedSegmentID.flatMap { id in segments.first { $0.id == id } }
         showHolidaySheet = scene.showsHolidays
