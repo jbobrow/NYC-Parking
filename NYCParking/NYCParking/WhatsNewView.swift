@@ -20,6 +20,14 @@ struct WhatsNew: Identifiable {
     /// Every version with something to show. A version without an entry
     /// shows nothing.
     static let releases: [WhatsNew] = [
+        WhatsNew(version: "1.6", items: [
+            Item(icon: "clock", title: "Day parking",
+                 detail: "Parking for a few hours? Every block shows whether you can stay the whole time: free, paid or no parking. Set how long with − and +."),
+            Item(icon: "calendar", title: "Plan a trip into the city",
+                 detail: "Tap Now to pick a day and time, and see where you'll be able to park when you get there."),
+            Item(icon: "steeringwheel", title: "Drive mode follows the map",
+                 detail: "Each side of the street shows what your view is about: days until you'd move, free or paid for your stay, or its cleaning days in their colors."),
+        ]),
         WhatsNew(version: "1.5", items: [
             Item(icon: "car.2", title: "More than one car",
                  detail: "Park all your cars from one phone. Tap Park Here on a new block and choose Park Another Car, then pick which car each time you park. Each gets its own reminders."),

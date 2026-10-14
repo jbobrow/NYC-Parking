@@ -66,8 +66,10 @@ final class MapController {
 ///
 ///  - **Days mode** — zoomed in, a stripe down each parking lane split into one
 ///    colored piece per restricted day; zoomed out, a run of day-colored dots.
-///  - **Countdown mode** — one solid line per block at every zoom, colored by how
-///    soon a car parked there must move.
+///  - **Countdown mode** (long-term parking) — one solid line per block at every
+///    zoom, colored by how soon a car parked there must move.
+///  - **Day parking** — one solid line per block, colored by whether a car can
+///    stay the planned stay free, paid, or not at all.
 ///
 /// When zoomed in, a pill sits on each block. Pills are native annotation views
 /// whose rotation we update as the map rotates, with overlapping pills hidden
@@ -82,9 +84,7 @@ struct ParkingMapView: UIViewRepresentable {
     let isDrivingMode: Bool
     let displayMode: MapDisplayMode
     let countdown: CountdownSnapshot?
-    let meters: MeterSnapshot?
-    /// How countdown colors read (default, or day parking).
-    var countdownScale: CountdownScale = .standard
+    let dayParking: DayParkingSnapshot?
     /// Latest location while driving; drives the 3D camera.
     var driveLocation: CLLocation? = nil
     var onDriveMatch: (DriveMatch?) -> Void = { _ in }
@@ -122,8 +122,8 @@ struct ParkingMapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.update(index: index, parkedCars: parkedCars, showsCarNames: showsCarNames,
                                    isDriving: isDrivingMode,
-                                   displayMode: displayMode, countdown: countdown, meters: meters,
-                                   countdownScale: countdownScale)
+                                   displayMode: displayMode, countdown: countdown,
+                                   dayParking: dayParking)
         if let driveLocation { context.coordinator.drive.ingest(driveLocation) }
     }
 }
@@ -139,21 +139,20 @@ extension ParkingMapView {
         private var index: SegmentIndex?
         private var displayMode: MapDisplayMode = .days
         private var countdown: CountdownSnapshot?
-        private var meters: MeterSnapshot?
-        private var countdownScale: CountdownScale = .standard
+        private var dayParking: DayParkingSnapshot?
 
         /// The overlay layer that should be on the map, and what actually is.
         private enum MarkLayer: Equatable {
             case dayStripes
             case dots(bucket: Int)   // dot spacing is in screen points, so rebuilt per half zoom level
             case countdown
-            case meters
+            case dayParking
         }
         private var layer: MarkLayer?
         private var shownOverlays: [StripeOverlay] = []
         private var dayStripeOverlays: [StripeOverlay]?
         private var countdownOverlays: [StripeOverlay]?
-        private var meterOverlays: [StripeOverlay]?
+        private var dayParkingOverlays: [StripeOverlay]?
         private var dotCache: (bucket: Int, overlays: [StripeOverlay])?
         private var buildTasks: [String: Task<Void, Never>] = [:]
         private let stripeRenderers = NSHashTable<MKMultiPolylineRenderer>.weakObjects()
@@ -203,8 +202,8 @@ extension ParkingMapView {
         // MARK: State from SwiftUI
 
         func update(index: SegmentIndex?, parkedCars: [Car], showsCarNames: Bool, isDriving: Bool,
-                    displayMode: MapDisplayMode, countdown: CountdownSnapshot?, meters: MeterSnapshot?,
-                    countdownScale: CountdownScale) {
+                    displayMode: MapDisplayMode, countdown: CountdownSnapshot?,
+                    dayParking: DayParkingSnapshot?) {
             var marksChanged = false
             if index !== self.index {
                 self.index = index
@@ -212,7 +211,7 @@ extension ParkingMapView {
                 buildTasks = [:]
                 dayStripeOverlays = nil
                 countdownOverlays = nil
-                meterOverlays = nil
+                dayParkingOverlays = nil
                 dotCache = nil
                 marksChanged = true
             }
@@ -222,16 +221,10 @@ extension ParkingMapView {
                 buildTasks["countdown"]?.cancel()
                 marksChanged = true
             }
-            if countdownScale != self.countdownScale {
-                self.countdownScale = countdownScale
-                countdownOverlays = nil
-                buildTasks["countdown"]?.cancel()
-                marksChanged = true
-            }
-            if meters !== self.meters {
-                self.meters = meters
-                meterOverlays = nil
-                buildTasks["meters"]?.cancel()
+            if dayParking !== self.dayParking {
+                self.dayParking = dayParking
+                dayParkingOverlays = nil
+                buildTasks["dayParking"]?.cancel()
                 marksChanged = true
             }
             if displayMode != self.displayMode {
@@ -347,8 +340,8 @@ extension ParkingMapView {
             let target: MarkLayer
             if displayMode == .countdown {
                 target = .countdown
-            } else if displayMode == .meters {
-                target = .meters
+            } else if displayMode == .dayParking {
+                target = .dayParking
             } else if isDriving || LabelStyle.forMetersPerPoint(mpp) != nil {
                 // Stripes where pills show: they mark each block's extent under its pill.
                 target = .dayStripes
@@ -386,17 +379,16 @@ extension ParkingMapView {
                 // Wait for real countdowns rather than drawing every block as
                 // "7+ days" and then redrawing the whole city moments later.
                 guard let entries = countdown?.entries else { return }
-                let scale = countdownScale
                 build("countdown", layer: layer) {
-                    StripeBuilder.countdownOverlays(for: segments, entries: entries, scale: scale)
+                    StripeBuilder.countdownOverlays(for: segments, entries: entries)
                 } store: { self.countdownOverlays = $0 }
 
-            case .meters:
-                if let overlays = meterOverlays { show(overlays); return }
-                guard let entries = meters?.entries else { return }
-                build("meters", layer: layer) {
-                    StripeBuilder.meterOverlays(for: segments, entries: entries)
-                } store: { self.meterOverlays = $0 }
+            case .dayParking:
+                if let overlays = dayParkingOverlays { show(overlays); return }
+                guard let entries = dayParking?.entries else { return }
+                build("dayParking", layer: layer) {
+                    StripeBuilder.dayParkingOverlays(for: segments, entries: entries)
+                } store: { self.dayParkingOverlays = $0 }
 
             case .dots(let bucket):
                 if let cache = dotCache, cache.bucket == bucket { show(cache.overlays); return }
@@ -468,8 +460,9 @@ extension ParkingMapView {
             guard let segment else { return .days }
             switch displayMode {
             case .days:      return .days
-            case .countdown: return .countdown(countdown?.entries[segment.id], scale: countdownScale)
-            case .meters:    return .meter(MeterPill(meter: segment.meter, state: meters?.entries[segment.id]))
+            case .countdown: return .countdown(countdown?.entries[segment.id])
+            case .dayParking:
+                return .dayParking(DayParkingPill(meter: segment.meter, verdict: dayParking?.entries[segment.id]))
             }
         }
 
@@ -486,12 +479,12 @@ extension ParkingMapView {
         /// Keeps label annotations for the viewport (plus a margin) on the map.
         private func refreshLabels() {
             guard let mapView else { return }
-            // Countdown and meter pills wait for their status, so a pill never
-            // flashes "7+ DAYS" or "FREE" before the real answer is known.
+            // Countdown, day parking and meter pills wait for their status, so a
+            // pill never flashes "7+ DAYS" or "FREE" before the real answer is known.
             let ready = switch displayMode {
-            case .days:      true
-            case .countdown: countdown != nil
-            case .meters:    meters != nil
+            case .days:       true
+            case .countdown:  countdown != nil
+            case .dayParking: dayParking != nil
             }
             guard labelStyle != nil, let index, ready else {
                 if !labelAnnotations.isEmpty {
@@ -752,12 +745,12 @@ enum StripeBuilder {
     /// One solid line per block, colored by days until the move. Greener lines are drawn last so
     /// long-term parking stands out where lines overlap at far zoom. Metered curbs are drawn in
     /// meter blue underneath, as everywhere in the app; their pills carry the countdown.
-    static func countdownOverlays(for segments: [ParkingSegment], entries: [String: MoveCountdown],
-                                  scale: CountdownScale) -> [StripeOverlay] {
+    static func countdownOverlays(for segments: [ParkingSegment],
+                                  entries: [String: MoveCountdown]) -> [StripeOverlay] {
         struct Key: Hashable { let row: Int; let col: Int; let urgency: MoveUrgency?; }
         var groups: [Key: [MKPolyline]] = [:]
         for seg in segments where !seg.moveWindows.isEmpty && seg.curve.count >= 2 {
-            let urgency = seg.meter == nil ? MoveUrgency(days: entries[seg.id]?.days, scale: scale) : nil
+            let urgency = seg.meter == nil ? MoveUrgency(days: entries[seg.id]?.days) : nil
             let row = Int((seg.coordinate.latitude / chunkDegrees).rounded(.down))
             let col = Int((seg.coordinate.longitude / chunkDegrees).rounded(.down))
             groups[Key(row: row, col: col, urgency: urgency), default: []]
@@ -775,10 +768,11 @@ enum StripeBuilder {
     /// Metered curbs in the countdown view: the same blue as paid meters.
     static let meteredCurbColor = MeterState.Kind.paid.uiColor
 
-    /// One solid line per metered curb, colored by whether it's free, paid or
-    /// commercial-only right now.
-    static func meterOverlays(for segments: [ParkingSegment],
-                              entries: [String: MeterState]) -> [StripeOverlay] {
+    /// One solid line per block, colored by whether a car can stay the whole
+    /// planned stay free, has to pay, or can't stay. No-parking curbs are drawn
+    /// last, on top.
+    static func dayParkingOverlays(for segments: [ParkingSegment],
+                                   entries: [String: DayParkingVerdict]) -> [StripeOverlay] {
         struct Key: Hashable { let row: Int; let col: Int; let kind: MeterState.Kind }
         var groups: [Key: [MKPolyline]] = [:]
         for seg in segments where seg.curve.count >= 2 {
@@ -789,7 +783,7 @@ enum StripeBuilder {
                 .append(MKPolyline(coordinates: seg.curve, count: seg.curve.count))
         }
         return groups
-            .sorted { $0.key.kind.rawValue < $1.key.kind.rawValue }   // no-parking curbs on top
+            .sorted { $0.key.kind.rawValue < $1.key.kind.rawValue }
             .map { key, lines in
                 let overlay = StripeOverlay(lines)
                 overlay.color = key.kind.uiColor

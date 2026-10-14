@@ -24,6 +24,9 @@ struct ScreenshotScene {
     var showsHolidayBanner = false
     /// Starts drive mode (pair with `xcrun simctl location … start` to replay a drive).
     var startsDriving = false
+    /// Several named cars, each parked on a block or not, in place of the one
+    /// parked car.
+    var cars: [(name: String, segmentID: String?)]? = nil
 
     static let manhattanGrid = 29.0
 
@@ -67,28 +70,50 @@ struct ScreenshotScene {
             center: .init(latitude: 40.6897, longitude: -73.9740), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
             startsDriving: true),
+        // Parking on DeKalb after that drive: the block's rules, then the car
+        // parked there with Thursday's cleaning to move for.
+        "park": ScreenshotScene(
+            center: .init(latitude: 40.6893, longitude: -73.9736), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
+            selectedSegmentID: "38180L"),
+        "parked": ScreenshotScene(
+            center: .init(latitude: 40.6893, longitude: -73.9736), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
+            parkedSegmentID: "38180L", parkedOffsetMeters: 20),
+        // A second car to park beside the first on DeKalb: "Which car?"
+        "two-cars": ScreenshotScene(
+            center: .init(latitude: 40.6893, longitude: -73.9741), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",
+            parkedOffsetMeters: 20, selectedSegmentID: "38181L",
+            cars: [("Civic", "38180L"), ("Subaru", nil)]),
+        // Parked on Greene Ave, Monday cleaning, the Friday before Columbus
+        // Day: the move-by date skips the holiday.
+        "holiday": ScreenshotScene(
+            center: .init(latitude: 40.6866, longitude: -73.9700), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-10-09T17:30:00-04:00",
+            parkedSegmentID: "44071L", parkedOffsetMeters: 20, showsHolidayBanner: true),
         // Drive mode on a Thursday morning while cleaning is under way on one side.
         "drive-now": ScreenshotScene(
             center: .init(latitude: 40.6897, longitude: -73.9740), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-10-01T09:45:00-04:00",
             startsDriving: true),
-        // Meters view along Park Slope's 7th Ave on a weekday evening, paid until 7 PM.
+        // Day parking along Park Slope's 7th Ave on a weekday evening, paid until 7 PM.
         "meters": ScreenshotScene(
             center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (420, 190),
-            heading: 30, mode: .meters, clock: "2026-09-30T17:30:00-04:00"),
+            heading: 30, mode: .dayParking, clock: "2026-09-30T17:30:00-04:00"),
         // A metered block with cleaning rules, in the detail sheet.
         "meter-detail": ScreenshotScene(
             center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (700, 320),
-            heading: 30, mode: .meters, clock: "2026-09-30T17:30:00-04:00",
+            heading: 30, mode: .dayParking, clock: "2026-09-30T17:30:00-04:00",
             selectedSegmentID: "56342L"),
         // The same block on a Sunday, and on Thanksgiving: meters off.
         "meter-sunday": ScreenshotScene(
             center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (700, 320),
-            heading: 30, mode: .meters, clock: "2026-10-04T12:00:00-04:00",
+            heading: 30, mode: .dayParking, clock: "2026-10-04T12:00:00-04:00",
             selectedSegmentID: "56342L"),
         "meter-holiday": ScreenshotScene(
             center: .init(latitude: 40.6742, longitude: -73.9768), spanMeters: (700, 320),
-            heading: 30, mode: .meters, clock: "2026-11-26T12:00:00-05:00",
+            heading: 30, mode: .dayParking, clock: "2026-11-26T12:00:00-05:00",
             selectedSegmentID: "56342L"),
         // Drive mode down 7th Ave while the meters run; replay with
         // xcrun simctl location booted start --speed=8 40.674155,-73.975679 40.670219,-73.978813
@@ -120,7 +145,7 @@ struct ScreenshotScene {
         // commercial-only hours on Grand and Hester.
         "meters-midday": ScreenshotScene(
             center: .init(latitude: 40.7183, longitude: -73.9978), spanMeters: (420, 190),
-            heading: 0, mode: .meters, clock: "2026-10-01T12:30:00-04:00"),
+            heading: 0, mode: .dayParking, clock: "2026-10-01T12:30:00-04:00"),
         "holidays": ScreenshotScene(
             center: .init(latitude: 40.7352, longitude: -73.9838), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T17:30:00-04:00",

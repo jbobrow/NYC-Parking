@@ -38,20 +38,21 @@ final class ParkingDataService: ObservableObject {
         }
     }
 
-    /// Meter status for every metered curb; nil until first computed.
-    @Published private(set) var meters: MeterSnapshot?
-    private var metersTask: Task<Void, Never>?
+    /// Day parking verdicts for every block face, for the planned stay; nil
+    /// until first computed.
+    @Published private(set) var dayParking: DayParkingSnapshot?
+    private var dayParkingTask: Task<Void, Never>?
 
-    /// Recomputes meter status off the main thread, publishing only on change.
-    func refreshMeters(calendar: CountdownCalendar) {
+    /// Recomputes day parking verdicts off the main thread, publishing only on change.
+    func refreshDayParking(minutes: Int, calendar: CountdownCalendar) {
         guard let segments = index?.segments else { return }
-        metersTask?.cancel()
-        metersTask = Task {
+        dayParkingTask?.cancel()
+        dayParkingTask = Task {
             let snapshot = await Task.detached(priority: .userInitiated) {
-                MeterSnapshot.compute(for: segments, calendar: calendar)
+                DayParkingSnapshot.compute(for: segments, minutes: minutes, calendar: calendar)
             }.value
-            guard !Task.isCancelled, snapshot.entries != meters?.entries else { return }
-            meters = snapshot
+            guard !Task.isCancelled, snapshot.entries != dayParking?.entries else { return }
+            dayParking = snapshot
         }
     }
 

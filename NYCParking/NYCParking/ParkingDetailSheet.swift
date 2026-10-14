@@ -5,6 +5,9 @@ struct ParkingDetailSheet: View {
     let holidays: [NamedHoliday]
     let sourceDates: DataSourceDates
     let cars: [Car]
+    /// In the day parking view, the stay the map is colored for: the verdict
+    /// is for it, rather than for right now.
+    var dayParkingTrip: DayParkingTrip? = nil
     /// Parks a car here: nil for the only one (made on the first park). On
     /// curbs with commercial-only hours, whether the car is a commercial
     /// vehicle; nil elsewhere.
@@ -113,7 +116,7 @@ struct ParkingDetailSheet: View {
 
                         // What the rules mean right now, strictest first.
                         TimelineView(.everyMinute) { _ in
-                            VerdictRow(segment: segment, holidays: holidays)
+                            VerdictRow(segment: segment, holidays: holidays, trip: dayParkingTrip)
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
@@ -443,19 +446,36 @@ struct ParkingDetailSheet: View {
     }
 }
 
-/// "No standing until 7 PM", "Free until Thu 8:30 AM · then street cleaning".
+/// "No standing until 7 PM", "Free until Thu 8:30 AM · then street cleaning";
+/// for a planned stay, "Free for 2 hr", "No parking for 2 hr".
 private struct VerdictRow: View {
     let segment: ParkingSegment
     let holidays: [NamedHoliday]
-    @AppStorage(CountdownScale.storageKey) private var scale: CountdownScale = .standard
+    let trip: DayParkingTrip?
 
     var body: some View {
-        let countdown = MoveCountdown.next(for: segment.moveWindows,
-                                           in: CountdownCalendar(holidays: holidays))
-        let (title, detail) = texts(countdown)
+        if let trip, let verdict = segment.dayParkingVerdict(minutes: trip.minutes,
+                                                             in: trip.calendar(holidays: holidays)) {
+            row(color: verdict.kind.color, title: Self.title(verdict, trip),
+                detail: (trip.start == nil ? "" : "From \(trip.startText) · ") + verdict.sentence)
+        } else {
+            nowRow
+        }
+    }
+
+    private static func title(_ v: DayParkingVerdict, _ trip: DayParkingTrip) -> String {
+        switch v.kind {
+        case .free:           return "Free for \(trip.durationText)"
+        case .paid:           return "Paid parking for \(trip.durationText)"
+        case .commercialOnly: return "Commercial vehicles only"
+        case .noParking:      return "No parking for \(trip.durationText)"
+        }
+    }
+
+    private func row(color: Color, title: String, detail: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle()
-                .fill(dotColor(countdown))
+                .fill(color)
                 .frame(width: 10, height: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -470,13 +490,20 @@ private struct VerdictRow: View {
         .accessibilityElement(children: .combine)
     }
 
+    private var nowRow: some View {
+        let countdown = MoveCountdown.next(for: segment.moveWindows,
+                                           in: CountdownCalendar(holidays: holidays))
+        let (title, detail) = texts(countdown)
+        return row(color: dotColor(countdown), title: title, detail: detail)
+    }
+
     /// Meter colors while the meter or commercial hours apply, as in the Meters
     /// view, so red only ever means no one can park; the countdown's otherwise.
     private func dotColor(_ c: MoveCountdown?) -> Color {
         switch c {
         case let c? where c.isUnderway && c.kind == .meter:      return MeterState.Kind.paid.color
         case let c? where c.isUnderway && c.kind == .commercial: return MeterState.Kind.commercialOnly.color
-        default: return MoveUrgency(days: c?.days, scale: scale).color
+        default: return MoveUrgency(days: c?.days).color
         }
     }
 

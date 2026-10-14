@@ -419,20 +419,27 @@ final class DrivePuckView: UIView {
 // MARK: - Heads-up display
 
 /// Drive mode's on-screen guidance: the street you're on, and a large card for
-/// the parking rules on each side of you. Built to be read at a glance.
+/// the parking rules on each side of you, led by what the map's view is
+/// about. Built to be read at a glance.
 struct DriveHUD: View {
     let match: DriveMatch?
     let holidays: [NamedHoliday]
+    let mode: MapDisplayMode
+    /// The stay day parking judges each side for.
+    let trip: DayParkingTrip
 
     var body: some View {
         TimelineView(.everyMinute) { _ in
             let calendar = CountdownCalendar(holidays: holidays)
+            let tripCalendar = trip.calendar(holidays: holidays)
             VStack(spacing: 8) {
                 header
                 if let match {
                     HStack(alignment: .top, spacing: 8) {
-                        SideCard(side: .left, segment: match.left, calendar: calendar)
-                        SideCard(side: .right, segment: match.right, calendar: calendar)
+                        SideCard(side: .left, segment: match.left, mode: mode, calendar: calendar,
+                                 trip: trip, tripCalendar: tripCalendar)
+                        SideCard(side: .right, segment: match.right, mode: mode, calendar: calendar,
+                                 trip: trip, tripCalendar: tripCalendar)
                     }
                     .id(match.blockID)
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
@@ -462,6 +469,12 @@ struct DriveHUD: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
+                if mode == .dayParking {
+                    Text(trip.start == nil ? "Parking \(trip.durationText) from now"
+                                           : "Parking \(trip.durationText) from \(trip.startText)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("Finding your street…")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -481,8 +494,10 @@ private struct SideCard: View {
 
     let side: Side
     let segment: ParkingSegment?
+    let mode: MapDisplayMode
     let calendar: CountdownCalendar
-    @AppStorage(CountdownScale.storageKey) private var scale: CountdownScale = .standard
+    let trip: DayParkingTrip
+    let tripCalendar: CountdownCalendar
 
     var body: some View {
         let c = content()
@@ -496,10 +511,14 @@ private struct SideCard: View {
             .font(.system(size: 11, weight: .heavy, design: .rounded))
             .opacity(0.75)
 
-            Text(c.title)
-                .font(.system(size: 26, weight: .heavy, design: .rounded))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+            if let days = c.days {
+                DayPills(days: days)
+            } else {
+                Text(c.title)
+                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
             Text(c.detail)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .lineLimit(1)
@@ -534,10 +553,62 @@ private struct SideCard: View {
         var more: String? = nil
         let fill: Color?
         var textColor: Color = .white
+        /// Cleaning days, drawn as day-colored pills in place of the title.
+        var days: [ParkingDay]? = nil
     }
 
     private func content() -> Content {
         guard let segment else { return Content(title: "NO RULES", detail: "No posted rules", fill: nil) }
+        switch mode {
+        case .countdown:  return countdownContent(segment)
+        case .dayParking: return dayParkingContent(segment)
+        case .days:       return daysContent(segment)
+        }
+    }
+
+    /// Free, paid, commercial or no parking for the planned stay, and why.
+    private func dayParkingContent(_ segment: ParkingSegment) -> Content {
+        guard let verdict = segment.dayParkingVerdict(minutes: trip.minutes, in: tripCalendar) else {
+            return Content(title: "NO RULES", detail: "No posted rules", fill: nil)
+        }
+        let kind = verdict.kind
+        let pill = DayParkingPill(meter: segment.meter, verdict: verdict)
+        switch verdict {
+        case .free(let until):
+            return Content(title: "FREE", detail: "For \(trip.durationText)",
+                           more: until.map { "Until \($0.text)" }, fill: kind.color, textColor: kind.textColor)
+        case .paid:
+            return Content(title: "PAID", detail: pill.title == "PAID" ? "Pay the meter" : pill.title,
+                           more: pill.detail.map(Self.capitalized), fill: kind.color, textColor: kind.textColor)
+        case .noParking:
+            return Content(title: pill.title, detail: verdict.sentence, fill: kind.color, textColor: kind.textColor)
+        }
+    }
+
+    /// The cleaning days in their colors, then the hours and when it's next.
+    private func daysContent(_ segment: ParkingSegment) -> Content {
+        let days = segment.allDays
+        guard !days.isEmpty else {
+            return Content(title: "NO CLEANING", detail: "No street cleaning", fill: nil)
+        }
+        let cleaning = segment.moveWindows.filter { $0.kind == .cleaning }
+        var hours: [String] = []
+        for w in cleaning {
+            let range = ParkingTime.formatRange(w.window.start, w.window.end)
+            if !hours.contains(range) { hours.append(range) }
+        }
+        let next = MoveCountdown.next(for: cleaning, in: calendar)
+        let more = next.map { c in
+            c.isUnderway ? "Cleaning now" + (c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "")
+                         : "Next " + (c.days == 0 ? "today" : c.days == 1 ? "tomorrow" : c.weekday.short.capitalized)
+        }
+        return Content(title: days.map(\.short).joined(separator: " "), detail: hours.joined(separator: ", "),
+                       more: more, fill: nil, days: days)
+    }
+
+    /// Long-term parking: days until the move, with meters and commercial
+    /// hours in their own colors.
+    private func countdownContent(_ segment: ParkingSegment) -> Content {
         let countdown = MoveCountdown.next(for: segment.moveWindows, in: calendar)
         let cantPark = countdown.map { $0.isUnderway && $0.kind != .meter } ?? false
 
@@ -567,7 +638,7 @@ private struct SideCard: View {
             }
         }
 
-        // Commercial-only hours: the commercial color, as in the Meters view.
+        // Commercial-only hours: the commercial color, as in the Day parking view.
         if let c = countdown, c.isUnderway, c.kind == .commercial {
             let kind = MeterState.Kind.commercialOnly
             let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? ""
@@ -575,7 +646,7 @@ private struct SideCard: View {
                            fill: kind.color, textColor: kind.textColor)
         }
 
-        let urgency = MoveUrgency(days: countdown?.days, scale: scale)
+        let urgency = MoveUrgency(days: countdown?.days)
         let (title, detail) = texts(countdown, segment: segment)
         return Content(title: title, detail: detail, fill: urgency.color, textColor: urgency.textColor)
     }
@@ -616,6 +687,28 @@ private struct SideCard: View {
 
     private static func capitalized(_ text: String) -> String {
         text.prefix(1).uppercased() + text.dropFirst()
+    }
+}
+
+/// Cleaning days in their colors, sized for drive mode.
+private struct DayPills: View {
+    let days: [ParkingDay]
+
+    var body: some View {
+        // Smaller as there are more, so a whole week fits a card.
+        let size: CGFloat = days.count <= 2 ? 20 : days.count <= 4 ? 17 : 13
+        HStack(spacing: 0) {
+            ForEach(days) { day in
+                Text(days.count > 3 ? day.letter : day.short)
+                    .font(.system(size: size, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, size * 0.4)
+                    .padding(.vertical, 3)
+                    .background(day.color)
+            }
+        }
+        .clipShape(Capsule())
     }
 }
 
