@@ -1,13 +1,17 @@
-// A live, simplified version of the app's map, with its two views:
+// A live, simplified version of the app's map, with its three views:
+//  - Long-term parking: one line per block, colored by how soon a car parked
+//    there now would have to move for street cleaning, with countdown pills
+//    when zoomed in.
+//  - Day parking: one line per block, colored by whether a car can stay the
+//    next two hours free, paid, commercial-only or not at all, counting
+//    cleaning, no standing or stopping, and meters, as the app does.
 //  - Cleaning days: every block face as a curb stripe split by restricted day,
 //    with day pills along the street when zoomed in and runs of day-colored
 //    dots when zoomed out.
-//  - Days until move: one line per block, colored by how soon a car parked
-//    there now would have to move, with countdown pills when zoomed in.
 // Block data comes from data/blocks.json and ASP holidays from
 // data/holidays.json (both built by scripts/build_web_data.py).
 
-// "New in 1.5", a parking sign that swings into the map's corner a moment
+// "New in 1.6", a parking sign that swings into the map's corner a moment
 // after the page opens, every visit. The × swings it back out.
 (function newSign() {
   const sign = document.querySelector(".new-sign");
@@ -50,13 +54,32 @@ const URGENCY = [
 ].map(([h, s, b]) => hsbToColor(h, s, b));
 const MAX_LEVEL = URGENCY.length - 1;
 
+// Day parking verdicts, in the app's meter colors and draw order (no parking on top).
+const FREE = 0, PAID = 1, COMMERCIAL = 2, NO_PARKING = 3;
+const VERDICT = [
+  { label: "Free", ...URGENCY[MAX_LEVEL] },
+  { label: "Paid", hex: "#3380ff", ink: "#fff" },
+  { label: "Commercial", ...hsbToColor(24, 0.88, 0.96) },
+  { label: "No parking", ...URGENCY[0] },
+];
+const STAY = 120;   // minutes: the stay day parking plans for, from now
+// Which rule wins when two start together.
+const STRICTNESS = { stopping: 4, standing: 3, cleaning: 2, commercial: 1, meter: 0 };
+// Holidays when meters, and most standing and stopping rules, are off too.
+const MAJOR_HOLIDAYS = ["New Year", "Memorial Day", "Independence Day", "Labor Day", "Thanksgiving", "Christmas"];
+
 const PILL_ZOOM = 15.5;   // pills + stripes at and above, dot runs below
 const CLINTON_HILL = [-73.9662, 40.6885];
 const FONT = 'ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, sans-serif';
-const DEFAULT_READOUT = "Tap any block to see when street cleaning happens.";
+const READOUTS = {
+  countdown: "Tap any block to see when you'd have to move.",
+  dayParking: "Tap any block to see if you can park there for the next 2 hours.",
+  days: "Tap any block to see when street cleaning happens.",
+};
 const LAYERS = {
   days: ["stripes", "dots", "pills"],
   countdown: ["countdown-lines", "countdown-pills"],
+  dayParking: ["day-lines", "day-pills"],
 };
 
 const readout = document.getElementById("readout");
@@ -85,13 +108,14 @@ map.touchPitch.disable();
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
 
 const dataPromise = Promise.all([
-  fetch("data/blocks.json").then((r) => r.json()),
+  fetch("data/blocks.json?v=1.6.0").then((r) => r.json()),
   fetch("data/holidays.json").then((r) => (r.ok ? r.json() : [])).catch(() => []),
 ]).then(([data, holidays]) => decode(data, holidays));
 
 map.on("load", async () => {
   blocks = await dataPromise;
   updateCountdowns();
+  updateDayParking();
   tuneBasemap();
   addDayImages(blocks.keys);
   addCountdownImages();
@@ -106,6 +130,8 @@ map.on("load", async () => {
     ?? layers.find((l) => l.type === "symbol" && l.id.startsWith("place")))?.id;
   const lineWidth = (from) => ["interpolate", ["exponential", 2], ["zoom"],
     ...(from < PILL_ZOOM ? [10, 1, 13, 1.5] : []), PILL_ZOOM, 2.5, 17, 4, 18, 6, 19, 10, 20, 16];
+  // Blocks with street cleaning; the rest only matter to day parking.
+  const cleaned = ["==", ["get", "c"], 1];
   const symbolAlongStreet = (image) => ({
     "symbol-placement": "line-center",
     "icon-image": image,
@@ -143,6 +169,7 @@ map.on("load", async () => {
     id: "countdown-lines",
     type: "line",
     source: "blocks",
+    filter: cleaned,
     layout: {
       "line-cap": "butt",
       "line-join": "round",
@@ -156,11 +183,28 @@ map.on("load", async () => {
     },
   }, firstLabel);
   map.addLayer({
+    id: "day-lines",
+    type: "line",
+    source: "blocks",
+    filter: [">=", ["get", "v"], 0],
+    layout: {
+      "line-cap": "butt",
+      "line-join": "round",
+      "line-sort-key": ["get", "v"],
+      visibility: "none",
+    },
+    paint: {
+      "line-color": ["match", ["get", "v"], ...VERDICT.flatMap((v, i) => [i, v.hex]), "#888"],
+      "line-width": lineWidth(10),
+    },
+  }, firstLabel);
+  map.addLayer({
     id: "dots",
     type: "symbol",
     source: "blocks",
     minzoom: 11.5,
     maxzoom: PILL_ZOOM,
+    filter: cleaned,
     layout: {
       "symbol-placement": "line-center",
       "icon-image": ["concat", "dots:", ["get", "k"]],
@@ -174,6 +218,7 @@ map.on("load", async () => {
     id: "pills",
     type: "symbol",
     source: "blocks",
+    filter: cleaned,
     minzoom: PILL_ZOOM,
     layout: symbolAlongStreet(["concat", "pill:", ["get", "k"]]),
   });
@@ -181,8 +226,17 @@ map.on("load", async () => {
     id: "countdown-pills",
     type: "symbol",
     source: "blocks",
+    filter: cleaned,
     minzoom: PILL_ZOOM,
     layout: { ...symbolAlongStreet(["concat", "cd:", ["to-string", ["get", "u"]]]), visibility: "none" },
+  });
+  map.addLayer({
+    id: "day-pills",
+    type: "symbol",
+    source: "blocks",
+    filter: [">=", ["get", "v"], 0],
+    minzoom: PILL_ZOOM,
+    layout: { ...symbolAlongStreet(["get", "p"]), visibility: "none" },
   });
 
   const legend = document.querySelector(".legend.countdown");
@@ -194,6 +248,15 @@ map.on("load", async () => {
     chip.textContent = level === MAX_LEVEL ? "7+" : String(level);
     legend.append(chip);
   });
+  const dayLegend = document.querySelector(".legend.dayparking");
+  VERDICT.forEach((v) => {
+    const chip = document.createElement("span");
+    chip.className = "u";
+    chip.style.background = v.hex;
+    chip.style.color = v.ink;
+    chip.textContent = v.label;
+    dayLegend.append(chip);
+  });
 
   // Start with the attribution collapsed to its (i) button.
   map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
@@ -201,9 +264,8 @@ map.on("load", async () => {
     button.addEventListener("click", () => setMode(button.dataset.mode));
   });
   setMode(mode);
-  readout.textContent = DEFAULT_READOUT;
 
-  const tappable = [...LAYERS.days, ...LAYERS.countdown];
+  const tappable = Object.values(LAYERS).flat();
   map.on("click", (e) => {
     const r = 14;
     const hit = map.queryRenderedFeatures(
@@ -230,17 +292,20 @@ function setMode(next) {
   });
   document.querySelector(".legend.days").hidden = mode !== "days";
   document.querySelector(".legend.countdown").hidden = mode !== "countdown";
+  document.querySelector(".legend.dayparking").hidden = mode !== "dayParking";
 
-  // Countdowns shift at midnight and as restrictions end; refresh while shown.
+  // Countdowns shift at midnight and as restrictions end, and the next two
+  // hours slide along with the clock; refresh while shown.
   clearInterval(refreshTimer);
-  if (mode === "countdown") {
-    if (updateCountdowns()) map.getSource("blocks").setData(blocks.faces);
+  const update = { countdown: updateCountdowns, dayParking: updateDayParking }[mode];
+  if (update) {
+    if (update()) map.getSource("blocks").setData(blocks.faces);
     refreshTimer = setInterval(() => {
-      if (updateCountdowns()) map.getSource("blocks").setData(blocks.faces);
+      if (update()) map.getSource("blocks").setData(blocks.faces);
       if (selected >= 0) select(selected);
-    }, 5 * 60 * 1000);
+    }, (mode === "dayParking" ? 1 : 5) * 60 * 1000);
   }
-  if (selected >= 0) select(selected);
+  if (selected >= 0) select(selected); else readout.textContent = READOUTS[mode];
 }
 
 // ── Countdowns ───────────────────────────────────────────────────────────────
@@ -261,21 +326,124 @@ function updateCountdowns() {
   return changed;
 }
 
-/** Today and the next seven days in New York, whatever the visitor's timezone. */
+// ── Day parking ──────────────────────────────────────────────────────────────
+
+/** Recomputes each block's verdict for the next two hours; returns whether any changed. */
+function updateDayParking() {
+  const cal = nycCalendar(blocks.holidays);
+  let changed = false;
+  for (const f of blocks.faces.features) {
+    const block = blocks.info[f.properties.i];
+    const verdict = dayParkingVerdict(block.windows, block.meter, cal);
+    block.verdict = verdict;
+    const kind = verdict ? verdict.kind : -1;
+    const image = verdict ? verdictPillImage(verdict, block.meter) : "";
+    if (f.properties.v !== kind || f.properties.p !== image) {
+      f.properties.v = kind;
+      f.properties.p = image;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Whether a rule is off on a day: cleaning on ASP holidays; meters, and
+ *  standing and stopping rules that don't run every day, on major holidays. */
+function suspended(w, day) {
+  if (w.kind === "cleaning") return day.holiday;
+  if (w.kind === "meter" || w.kind === "commercial") return day.metersOff;
+  return day.metersOff && (w.mask & 0x7f) !== 0x7f;
+}
+
+/** Free, paid, commercial-only or no parking for a stay of STAY minutes from
+ *  now, mirroring the app: anything that means moving outranks the meter,
+ *  as does a stay longer than the meter's limit. Null for blocks with no rules. */
+function dayParkingVerdict(windows, meter, cal) {
+  if (!windows.length) return null;
+  const a = cal.minute, b = a + STAY;
+  const spans = [];
+  [[-1, cal.yesterday], [0, cal.days[0]], [1, cal.days[1]], [2, cal.days[2]]].forEach(([offset, day]) => {
+    for (const w of windows) {
+      if (!(w.mask & (1 << day.day)) || suspended(w, day)) continue;
+      spans.push({ kind: w.kind, start: offset * 1440 + w.start, end: offset * 1440 + w.end });
+    }
+  });
+  const soonest = (list) => list.reduce((best, s) => (!best || s.start < best.start
+    || (s.start === best.start && STRICTNESS[s.kind] > STRICTNESS[best.kind]) ? s : best), null);
+  const during = spans.filter((s) => s.kind !== "meter" && s.start < b && s.end > a);
+  const rule = soonest(during.filter((s) => s.kind !== "commercial")) ?? soonest(during);
+  if (rule) return { kind: rule.kind === "commercial" ? COMMERCIAL : NO_PARKING, rule, underway: rule.start <= a };
+
+  // Meter hours, back-to-back windows run together.
+  const paid = [];
+  for (const s of spans.filter((s) => s.kind === "meter").sort((p, q) => p.start - q.start)) {
+    const last = paid[paid.length - 1];
+    if (last && s.start <= last.end) last.end = Math.max(last.end, s.end);
+    else paid.push({ start: s.start, end: s.end });
+  }
+  const inStay = paid.filter((p) => p.start < b && p.end > a);
+  if (inStay.length) {
+    const limit = meter?.limit ?? 0;
+    const over = limit > 0 && inStay.find((p) => Math.min(p.end, b) - Math.max(p.start, a) > limit);
+    if (over) return { kind: NO_PARKING, limit, moveBy: Math.max(over.start, a) + limit };
+    return { kind: PAID, from: inStay[0].start > a ? inStay[0].start : null, until: inStay[inStay.length - 1].end };
+  }
+  const next = spans.filter((s) => s.start >= b).reduce((m, s) => Math.min(m, s.start), Infinity);
+  return { kind: FREE, until: Number.isFinite(next) ? next : null };
+}
+
+/** The pill's words: "FREE", the meter's "$2.50 · 2 HR", "COMMERCIAL",
+ *  "NO PARKING" or "2 HR MAX". */
+function verdictText(v, meter) {
+  if (v.kind === FREE) return "FREE";
+  if (v.kind === COMMERCIAL) return "COMMERCIAL";
+  if (v.kind === PAID) return [priceText(meter), limitText(meter?.limit)].filter(Boolean).join(" · ") || "PAID";
+  return v.limit ? `${limitText(v.limit)} MAX` : "NO PARKING";
+}
+
+/** Draws each pill the first time it's needed; returns its image name. */
+function verdictPillImage(v, meter) {
+  const text = verdictText(v, meter);
+  const name = `dp:${v.kind}:${text}`;
+  if (!map.hasImage(name)) {
+    const c = VERDICT[v.kind];
+    map.addImage(name, drawPill([{ text, fill: c.hex, ink: c.ink }], RATIO), { pixelRatio: RATIO });
+  }
+  return name;
+}
+
+/** "$2", "$2.50" */
+function priceText(meter) {
+  const cents = meter?.firstHour;
+  if (!cents) return "";
+  return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
+}
+
+/** "2 HR", "30 MIN" */
+function limitText(minutes) {
+  if (!minutes) return "";
+  return minutes % 60 === 0 ? `${minutes / 60} HR` : `${minutes} MIN`;
+}
+
+/** Today and the next seven days in New York, whatever the visitor's timezone,
+ *  with yesterday for overnight rules still running. */
 function nycCalendar(holidays) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York", year: "numeric", month: "numeric", day: "numeric",
     hour: "numeric", minute: "numeric", hourCycle: "h23",
   }).formatToParts(new Date()).map((p) => [p.type, Number(p.value)]));
-  const days = [];
-  for (let offset = 0; offset <= 7; offset++) {
+  const day = (offset) => {
     const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + offset, 12));
-    days.push({
+    const name = holidays.get(date.toISOString().slice(0, 10));
+    return {
       day: (date.getUTCDay() + 6) % 7,   // 0 = Monday
-      holiday: holidays.has(date.toISOString().slice(0, 10)),
-    });
-  }
-  return { minute: parts.hour * 60 + parts.minute, days };
+      holiday: name !== undefined,
+      metersOff: name !== undefined && MAJOR_HOLIDAYS.some((h) => name.startsWith(h)),
+    };
+  };
+  const days = [];
+  for (let offset = 0; offset <= 7; offset++) days.push(day(offset));
+  return { minute: parts.hour * 60 + parts.minute, days, yesterday: day(-1) };
 }
 
 /** Next restriction for a rule set, skipping holidays; null if none this week.
@@ -302,7 +470,22 @@ function nextRestriction(rules, cal) {
 
 function decode(data, holidayList) {
   const faces = [], stripes = [], info = [], keys = new Set();
-  data.faces.forEach(([street, from, to, side, ruleSet, c], i) => {
+  // Rule sets with days and times parsed once, for the countdown math.
+  const ruleSets = data.rules.map((rules) => rules.map(([days, start, end]) => ({
+    days: days.split(",").map((k) => DAY_INDEX[k]).filter((d) => d !== undefined),
+    start: minutes(start),
+    end: minutes(end),
+  })));
+  // Meter profiles and whole-block no standing / stopping, as move windows.
+  const span = (kind) => ([mask, start, end]) => ({ kind, mask, start, end });
+  const meters = (data.meters ?? []).map(([paid, commercial, limit, firstHour]) => ({
+    windows: [...paid.map(span("meter")), ...commercial.map(span("commercial"))],
+    limit,
+    firstHour,
+  }));
+  const restrictions = (data.restrictions ?? []).map((set) => set.map(([kind, ...w]) =>
+    span(kind === 1 ? "stopping" : "standing")(w)));
+  data.faces.forEach(([street, from, to, side, ruleSet, c, meterID = -1, restrictionsID = -1], i) => {
     let x = c[0], y = c[1];
     let coords = [[x / 1e5, y / 1e5]];
     for (let j = 2; j < c.length; j += 2) {
@@ -316,29 +499,36 @@ function decode(data, holidayList) {
     const rules = data.rules[ruleSet];
     const days = [...new Set(rules.flatMap((r) => r[0].split(",")))]
       .map((k) => DAY_INDEX[k]).filter((d) => d !== undefined).sort((p, q) => p - q);
-    if (!days.length) return;
     const key = days.map((d) => DAYS[d].key).join(",");
-    keys.add(key);
+    if (days.length) keys.add(key);
 
-    faces.push({ type: "Feature", properties: { k: key, i, r: ruleSet, u: MAX_LEVEL }, geometry: { type: "LineString", coordinates: coords } });
-    splitLine(coords, days.length).forEach((piece, n) => {
-      stripes.push({ type: "Feature", properties: { d: days[n], i }, geometry: { type: "LineString", coordinates: piece } });
-    });
-    info[i] = { street: data.names[street], from: data.names[from], to: data.names[to], side, rules, ruleSet };
+    faces.push({ type: "Feature", properties: { k: key, i, r: ruleSet, c: days.length ? 1 : 0, u: MAX_LEVEL, v: -1, p: "" },
+                 geometry: { type: "LineString", coordinates: coords } });
+    if (days.length) {
+      splitLine(coords, days.length).forEach((piece, n) => {
+        stripes.push({ type: "Feature", properties: { d: days[n], i }, geometry: { type: "LineString", coordinates: piece } });
+      });
+    }
+    const meter = meters[meterID] ?? null;
+    const windows = [
+      ...ruleSets[ruleSet].filter((r) => r.start !== null && r.end !== null).map((r) => ({
+        kind: "cleaning",
+        mask: r.days.reduce((m, d) => m | (1 << d), 0),
+        start: r.start,
+        end: r.end <= r.start ? r.end + 1440 : r.end,
+      })),
+      ...(restrictions[restrictionsID] ?? []),
+      ...(meter?.windows ?? []),
+    ];
+    info[i] = { street: data.names[street], from: data.names[from], to: data.names[to], side, rules, ruleSet, meter, windows };
   });
-  // Rule sets with days and times parsed once, for the countdown math.
-  const ruleSets = data.rules.map((rules) => rules.map(([days, start, end]) => ({
-    days: days.split(",").map((k) => DAY_INDEX[k]).filter((d) => d !== undefined),
-    start: minutes(start),
-    end: minutes(end),
-  })));
   return {
     faces: { type: "FeatureCollection", features: faces },
     stripes: { type: "FeatureCollection", features: stripes },
     info,
     keys: [...keys],
     ruleSets,
-    holidays: new Set(holidayList.map((h) => h.date)),
+    holidays: new Map(holidayList.map((h) => [h.date, h.name])),
   };
 }
 
@@ -511,7 +701,7 @@ function select(i) {
   map.setFilter("selected", ["==", ["get", "i"], i]);
   const block = i >= 0 ? blocks.info[i] : null;
   if (!block) {
-    readout.textContent = DEFAULT_READOUT;
+    readout.textContent = READOUTS[mode];
     return;
   }
   const between = [block.from, block.to].filter(Boolean).map(titleCase).join(" → ");
@@ -521,7 +711,8 @@ function select(i) {
     const pills = list.map((d) => `<span class="d ${d.css}">${list.length <= 2 ? d.short : d.letter}</span>`).join("");
     return `<span class="rule"><span class="pills">${pills}</span>${formatTime(start)}–${formatTime(end)}</span>`;
   }).join("");
-  const move = mode === "countdown" ? `<span class="move">${moveText(blocks.countdowns[block.ruleSet])}</span>` : "";
+  const move = mode === "countdown" ? `<span class="move">${moveText(blocks.countdowns[block.ruleSet])}</span>`
+    : mode === "dayParking" ? `<span class="move">${stayText(block.verdict, block.meter)}</span>` : "";
   readout.innerHTML = `${escape(titleCase(block.street))}`
     + (where ? `<br><span class="where">${escape(where)}</span>` : "")
     + move
@@ -539,6 +730,25 @@ function moveText(c) {
   if (c.days === 0) return `${chip} Move by ${time} today`;
   if (c.days === 1) return `${chip} Move by ${time} tomorrow`;
   return `${chip} Move by ${DAYS[c.day].name} ${time}`;
+}
+
+/** "Free for the next 2 hours, until 7pm", "No parking · street cleaning 11am–12:30pm". */
+function stayText(v, meter) {
+  if (!v) return "No posted rules for the whole block";
+  const c = VERDICT[v.kind];
+  const chip = `<span class="u" style="background:${c.hex};color:${c.ink}">${verdictText(v, meter)}</span>`;
+  const at = (m) => (m >= 1440 ? `${DAYS[(nycCalendar(blocks.holidays).days[0].day + Math.floor(m / 1440)) % 7].name} ` : "") + clock(m);
+  switch (v.kind) {
+    case FREE: return `${chip} Free for the next 2 hours` + (v.until !== null ? `, until ${at(v.until)}` : "");
+    case PAID: return `${chip} ` + (v.from !== null ? `Paid from ${at(v.from)}` : `Paid until ${at(v.until)}`);
+    case COMMERCIAL: {
+      const r = v.rule;
+      return `${chip} Commercial vehicles only ` + (v.underway ? `until ${at(r.end)}` : `from ${at(r.start)}`);
+    }
+  }
+  if (v.limit) return `${chip} ${limitText(v.limit).toLowerCase()} limit, move by ${at(v.moveBy)}`;
+  const what = { cleaning: "Street cleaning", standing: "No standing", stopping: "No stopping" }[v.rule.kind];
+  return `${chip} ${what} ` + (v.underway ? `until ${at(v.rule.end)}` : `${at(v.rule.start)}–${clock(v.rule.end)}`);
 }
 
 function clock(mins) {
