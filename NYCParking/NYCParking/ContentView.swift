@@ -46,8 +46,11 @@ struct ContentView: View {
     @AppStorage(DoubleParking.leadMinutesKey) private var reparkLeadMinutes = DoubleParking.defaultLeadMinutes
     /// Which view the map shows; remembered across launches.
     @AppStorage(MapDisplayMode.storageKey) private var displayMode: MapDisplayMode = .countdown
-    /// How countdown colors read; chosen by tapping the legend.
-    @AppStorage(CountdownScale.storageKey) private var countdownScale: CountdownScale = .standard
+    /// Day parking's stay: when it starts (nil: now, so a fresh launch plans
+    /// for now) and how long, which is remembered.
+    @State private var dayParkingStart: Date?
+    @AppStorage(DayParkingTrip.minutesKey) private var dayParkingMinutes = DayParkingTrip.defaultMinutes
+    @State private var showDayParkingStart = false
     /// Always on in the app; screenshot scenes can turn it off for a cleaner map.
     @State private var showsHolidayBanner = true
     @Environment(\.scenePhase) private var scenePhase
@@ -77,8 +80,7 @@ struct ContentView: View {
                 isDrivingMode: isDrivingMode,
                 displayMode: displayMode,
                 countdown: dataService.countdown,
-                meters: dataService.meters,
-                countdownScale: countdownScale,
+                dayParking: dataService.dayParking,
                 driveLocation: isDrivingMode ? locationManager.location : nil,
                 onDriveMatch: { driveMatch = $0 },
                 onDriveFollowChange: { isDriveFollowing = $0 },
@@ -108,7 +110,8 @@ struct ContentView: View {
         .overlay(alignment: .top) {
             Group {
                 if isDrivingMode {
-                    DriveHUD(match: driveMatch, holidays: holidayService.holidays)
+                    DriveHUD(match: driveMatch, holidays: holidayService.holidays,
+                             mode: displayMode, trip: dayParkingTrip.wrappedValue)
                         .padding(.horizontal, 12)
                         .padding(.top, windowSafeAreaTop + 6)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -167,8 +170,9 @@ struct ContentView: View {
                     EmptyView()
                 } else if displayMode == .countdown {
                     countdownLegend
-                } else if displayMode == .meters {
-                    meterLegend
+                } else if displayMode == .dayParking {
+                    DayParkingCard(trip: dayParkingTrip) { showDayParkingStart = true }
+                        .glassRoundedRect()
                 } else if !labelsVisible {
                     dotLegend
                 }
@@ -238,12 +242,12 @@ struct ContentView: View {
                     }
 
                     Picker("Map view", selection: $displayMode) {
-                        Label("Days until move", systemImage: "hourglass")
+                        Label("Long-term parking", systemImage: "hourglass")
                             .tag(MapDisplayMode.countdown)
+                        Label("Day parking", systemImage: "clock")
+                            .tag(MapDisplayMode.dayParking)
                         Label("Cleaning days", systemImage: "nosign.app")
                             .tag(MapDisplayMode.days)
-                        Label("Meters", systemImage: "parkingsign")
-                            .tag(MapDisplayMode.meters)
                     }
                     .pickerStyle(.inline)
 
@@ -300,6 +304,13 @@ struct ContentView: View {
             .presentationBackground(.regularMaterial)
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showDayParkingStart) {
+            DayParkingStartSheet(trip: dayParkingTrip)
+                .presentationDetents([.height(360)])
+                .presentationCornerRadius(22)
+                .presentationBackground(.regularMaterial)
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showHolidaySheet) {
             HolidaySheet(holidays: holidayService.holidays)
                 .presentationDetents([.medium, .large])
@@ -313,6 +324,7 @@ struct ContentView: View {
                 holidays: holidayService.holidays,
                 sourceDates: dataService.sourceDates,
                 cars: garage.cars,
+                dayParkingTrip: displayMode == .dayParking ? dayParkingTrip.wrappedValue : nil,
                 onPark: { carID, isCommercialVehicle in
                     park(carID: carID, at: segment, isCommercialVehicle: isCommercialVehicle)
                 },
@@ -333,6 +345,14 @@ struct ContentView: View {
         }
         .onAppear {
             if let top = Self.currentWindowSafeAreaTop() { windowSafeAreaTop = top }
+            // 1.5's Meters view, and its "day parking" countdown colors, are
+            // the Day parking view now.
+            let defaults = UserDefaults.standard
+            if defaults.string(forKey: MapDisplayMode.storageKey) == "meters"
+                || defaults.string(forKey: "countdownScale") == "dayParking" {
+                displayMode = .dayParking
+            }
+            defaults.removeObject(forKey: "countdownScale")
             if hasCompletedOnboarding || isStagingScreenshot {
                 locationManager.requestPermission()
                 if !isStagingScreenshot { showWhatsNewIfNeeded() }
@@ -403,17 +423,24 @@ struct ContentView: View {
         }
         .task(id: mapRefreshID) {
             // Countdowns shift at midnight and as restrictions end, so a few
-            // minutes' staleness is fine; meters flip on the hour, so check each
-            // minute. Unchanged results don't redraw the map.
+            // minutes' staleness is fine; meters flip on the hour, and a day
+            // parking stay starting now slides along with the clock, so check
+            // each minute. Unchanged results don't redraw the map.
             guard displayMode != .days, scenePhase == .active else { return }
             while !Task.isCancelled {
-                let calendar = CountdownCalendar(holidays: holidayService.holidays)
-                if displayMode == .countdown {
-                    dataService.refreshCountdown(calendar: calendar)
-                } else {
-                    dataService.refreshMeters(calendar: calendar)
+                let holidays = holidayService.holidays
+                switch displayMode {
+                case .countdown:
+                    dataService.refreshCountdown(calendar: CountdownCalendar(holidays: holidays))
+                case .dayParking:
+                    // A picked start that's come and gone means now.
+                    if let start = dayParkingStart, start <= AppClock.now { dayParkingStart = nil }
+                    let trip = dayParkingTrip.wrappedValue
+                    dataService.refreshDayParking(minutes: trip.minutes, calendar: trip.calendar(holidays: holidays))
+                case .days:
+                    break
                 }
-                try? await Task.sleep(for: .seconds(displayMode == .meters ? 60 : 300))
+                try? await Task.sleep(for: .seconds(displayMode == .countdown ? 300 : 60))
             }
         }
         #if DEBUG
@@ -565,7 +592,15 @@ struct ContentView: View {
 
     /// Restarts the map refresh loop whenever its inputs change.
     private var mapRefreshID: String {
-        "\(displayMode.rawValue)|\(dataService.index != nil)|\(holidayService.holidays.count)|\(scenePhase == .active)"
+        let trip = displayMode == .dayParking
+            ? "|\(dayParkingStart?.timeIntervalSince1970 ?? 0)|\(dayParkingMinutes)" : ""
+        return "\(displayMode.rawValue)|\(dataService.index != nil)|\(holidayService.holidays.count)|\(scenePhase == .active)"
+            + trip
+    }
+
+    private var dayParkingTrip: Binding<DayParkingTrip> {
+        Binding(get: { DayParkingTrip(start: dayParkingStart, minutes: dayParkingMinutes) },
+                set: { dayParkingStart = $0.start; dayParkingMinutes = $0.minutes })
     }
 
     // MARK: - Double parking
@@ -710,48 +745,24 @@ struct ContentView: View {
 
     private var glassIconColor: Color { colorScheme == .dark ? .white : .accentColor }
 
-    /// Tap to choose how the colors read: default, or day parking.
     private var countdownLegend: some View {
-        Menu {
-            countdownScalePicker
-                .pickerStyle(.inline)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Text(countdownScale == .standard ? "Days until move" : "Days until move · day parking")
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Days until move")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.secondary)   // not the menu's tint
-                HStack(spacing: 3) {
-                    ForEach(0...MoveUrgency.maxLevel, id: \.self) { days in
-                        legendSwatch(MoveUrgency(days: days, scale: countdownScale).color,
-                                     label: days == MoveUrgency.maxLevel ? "7+" : "\(days)")
-                    }
-                    // Metered curbs: meter blue, with the countdown on their pills.
-                    legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
-                        .padding(.leading, 6)
+                .foregroundStyle(Color.secondary)
+            HStack(spacing: 3) {
+                ForEach(MoveUrgency.allCases, id: \.self) { urgency in
+                    legendSwatch(urgency.color, label: urgency.legendLabel)
                 }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .glassRoundedRect()
-        }
-        .accessibilityLabel("Days until move colors: \(countdownScale.title)")
-    }
-
-    private var countdownScalePicker: some View {
-        Picker("Countdown colors", selection: $countdownScale) {
-            ForEach(CountdownScale.allCases, id: \.self) { scale in
-                // Menus show the second text as the row's subtitle.
-                VStack {
-                    Text(scale.title)
-                    Text(scale.subtitle)
-                }
-                .tag(scale)
+                // Metered curbs: meter blue, with the countdown on their pills.
+                legendSwatch(Color(uiColor: StripeBuilder.meteredCurbColor), label: "P")
+                    .padding(.leading, 6)
             }
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .glassRoundedRect()
+        .accessibilityElement(children: .combine)
     }
 
     private func legendSwatch(_ color: Color, label: String) -> some View {
@@ -764,24 +775,6 @@ struct ContentView: View {
                 .foregroundStyle(Color.primary)
                 .fixedSize()
         }
-    }
-
-    private var meterLegend: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ForEach([MeterState.Kind.free, .paid, .commercialOnly, .noParking], id: \.self) { kind in
-                HStack(spacing: 7) {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(kind.color)
-                        .frame(width: 16, height: 8)
-                    Text(kind.legendLabel)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .glassRoundedRect()
     }
 
     private var compassNeedle: some View {

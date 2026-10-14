@@ -31,6 +31,7 @@
 		AA2A00000000000000000002 /* DriveMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2A00000000000000000001 /* DriveMode.swift */; };
 		AA2B00000000000000000002 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2B00000000000000000001 /* OnboardingView.swift */; };
 		AA2C00000000000000000002 /* Meters.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2C00000000000000000001 /* Meters.swift */; };
+		AA3600000000000000000002 /* DayParking.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3600000000000000000001 /* DayParking.swift */; };
 		AA2D00000000000000000002 /* CurbRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2D00000000000000000001 /* CurbRules.swift */; };
 		AA2E00000000000000000002 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2E00000000000000000001 /* AboutView.swift */; };
 		AA2F00000000000000000002 /* Signature.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB2F00000000000000000001 /* Signature.swift */; };
@@ -93,6 +94,7 @@
 		BB2A00000000000000000001 /* DriveMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveMode.swift; sourceTree = "<group>"; };
 		BB2B00000000000000000001 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		BB2C00000000000000000001 /* Meters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meters.swift; sourceTree = "<group>"; };
+		BB3600000000000000000001 /* DayParking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayParking.swift; sourceTree = "<group>"; };
 		BB2D00000000000000000001 /* CurbRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurbRules.swift; sourceTree = "<group>"; };
 		BB2E00000000000000000001 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		BB2F00000000000000000001 /* Signature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signature.swift; sourceTree = "<group>"; };
@@ -156,6 +158,7 @@
 				BB2A00000000000000000001 /* DriveMode.swift */,
 				BB2B00000000000000000001 /* OnboardingView.swift */,
 				BB2C00000000000000000001 /* Meters.swift */,
+				BB3600000000000000000001 /* DayParking.swift */,
 				BB2D00000000000000000001 /* CurbRules.swift */,
 				BB2E00000000000000000001 /* AboutView.swift */,
 				BB2F00000000000000000001 /* Signature.swift */,
@@ -309,6 +312,7 @@
 				AA2A00000000000000000002 /* DriveMode.swift in Sources */,
 				AA2B00000000000000000002 /* OnboardingView.swift in Sources */,
 				AA2C00000000000000000002 /* Meters.swift in Sources */,
+				AA3600000000000000000002 /* DayParking.swift in Sources */,
 				AA2D00000000000000000002 /* CurbRules.swift in Sources */,
 				AA2E00000000000000000002 /* AboutView.swift in Sources */,
 				AA2F00000000000000000002 /* Signature.swift in Sources */,

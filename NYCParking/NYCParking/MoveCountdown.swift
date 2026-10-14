@@ -14,9 +14,9 @@ enum AppClock {
 
 /// What the map colors block faces by.
 enum MapDisplayMode: String {
-    case days       // which weekdays each block is restricted
-    case countdown  // how many days until you'd have to move a car parked there now
-    case meters     // metered curbs: free, paid or commercial-only right now
+    case days        // which weekdays each block is restricted
+    case countdown   // long-term parking: how many days until you'd have to move a car parked there now
+    case dayParking  // a stay of a few hours: free the whole time, paid, commercial-only or no parking
 
     static let storageKey = "mapDisplayMode"
 
@@ -24,8 +24,7 @@ enum MapDisplayMode: String {
     func shows(_ segment: ParkingSegment) -> Bool {
         switch self {
         case .days:      return segment.hasCleaning
-        case .countdown: return !segment.moveWindows.isEmpty
-        case .meters:    return segment.meter != nil
+        case .countdown, .dayParking: return !segment.moveWindows.isEmpty
         }
     }
 }
@@ -62,42 +61,16 @@ enum ParkingTime {
     }
 }
 
-/// How countdown colors read. The default spreads red → green over a week,
-/// for leaving a car a while; day parking only warns about today, since a
-/// spot that's good until tomorrow is fine for the day.
-enum CountdownScale: String, CaseIterable, Sendable {
-    case standard
-    case dayParking
-
-    static let storageKey = "countdownScale"
-
-    var title: String { self == .standard ? "Default" : "Day parking" }
-
-    var subtitle: String {
-        self == .standard ? "For leaving the car a while" : "For parking just today"
-    }
-
-    /// The color step for `days` until the move (nil: not this week).
-    func level(forDays days: Int?) -> Int {
-        let d = min(max(days ?? MoveUrgency.maxLevel, 0), MoveUrgency.maxLevel)
-        switch self {
-        case .standard:   return d
-        case .dayParking: return d < 4 ? [0, 3, 5, 6][d] : MoveUrgency.maxLevel   // today red, 1 day yellow
-        }
-    }
-}
-
 /// Countdown color: one step per day until the move, running red → yellow →
 /// green, with a week or more (or nothing scheduled) as the last, greenest step.
 struct MoveUrgency: Hashable, Sendable {
     static let maxLevel = 7
     static let allCases = (0...maxLevel).map(MoveUrgency.init(level:))
 
-    /// Step on the red → green scale: days until the move, capped at
-    /// `maxLevel`, on the default scale.
+    /// Step on the red → green scale: days until the move, capped at `maxLevel`.
     let level: Int
 
-    init(days: Int?, scale: CountdownScale = .standard) { self.init(level: scale.level(forDays: days)) }
+    init(days: Int?) { self.init(level: min(max(days ?? Self.maxLevel, 0), Self.maxLevel)) }
     private init(level: Int) { self.level = level }
 
     /// One hand-tuned (hue°, saturation, brightness) per level. A straight hue

@@ -19,16 +19,16 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
   - Far out: a run of day-colored dots on each block face
   - Mid: day-colored stripes down each curb, with day-name pills (Mon, Tue, Wed…) lying along the street
   - Close in: pills + restriction time (e.g. 8 AM–11 AM)
-- **Meters view** — every metered curb colored by whether it's free, paid or commercial-only right now, with rate and time limit ("$2.50 · 2 HR") on the pills; meters off on Sundays and the holidays DOT suspends them
+- **Day parking** — for a stay of a few hours (now, or a time picked to plan a trip into the city; 2 hours to start, − / + to change), every block is colored by whether a car can stay the whole time: free (green), paid (meter blue), commercial-only (orange) or no parking (red). Anything that means moving — street cleaning, no standing or stopping, commercial hours, or a stay longer than the meter's limit ("2 HR MAX") — outranks the meter. Pills give the meter's rate and limit ("$2.50 · 2 HR"), or what's in the way and when; meters are off on Sundays and the holidays DOT suspends them
 - **Pay with ParkNYC** — a metered block's sheet shows its limit, hours, rate and six-digit ParkNYC zone, and hands off to ParkNYC with the zone copied
-- **Countdown mode** — recolors every block by how soon a car parked there now would have to move, or pay the meter: red 0–1 days, yellow 2–6, green 7+. Counts street cleaning, rush-hour / school / overnight no-standing and no-stopping rules, and meter hours, each skipping the holidays it's suspended on. Metered curbs are drawn in meter blue, with the countdown on their pills ("P · 1 DAY")
+- **Long-term parking** — recolors every block by how soon a car parked there now would have to move, or pay the meter: red 0–1 days, yellow 2–6, green 7+. Counts street cleaning, rush-hour / school / overnight no-standing and no-stopping rules, and meter hours, each skipping the holidays it's suspended on. Metered curbs are drawn in meter blue, with the countdown on their pills ("P · 1 DAY")
 - **Curb verdict** — a block's sheet leads with what its rules mean right now, strictest first ("No standing until 7 PM", "Free until tomorrow 8:30 AM · then street cleaning")
 - **"Park here" mode** — tap any marker to record where you left your car; drag it along the block to the exact spot
 - **Next move date** — banner shows the next day you need to move, skipping holidays
 - **Reminders** — notifications the evening before, an hour before and ten minutes before the next cleaning, no-standing rule or meter start
 - **Double-parking** — from half an hour before street cleaning on your car's block until it ends, the app offers an alarm to repark a set time before it ends (15 minutes to start; your choice is remembered): an alert when the app is open, a notice when cleaning starts, and a toggle on the car's sheet. On iOS 26 it's an AlarmKit alarm that rings through silent mode and Focus, counting down on the Lock Screen and in the Dynamic Island (the `NYCParkingWidgets` extension); earlier, a notification
 - **What's New** — a page shown once to people who update, listing that version's highlights (`WhatsNew.releases`)
-- **Driving mode** — a 3D view with the parking rules on each side of you, including meters
+- **Driving mode** — a 3D view with the parking rules on each side of you, led by the map's view: days until the move, free / paid / no parking for the planned stay, or the cleaning days in their colors
 - **Holiday calendar** — browse the full NYC ASP holiday list
 
 ## Data
@@ -51,6 +51,7 @@ No-standing and no-stopping signs limited to set hours (rush hour, school days, 
 | `MoveCountdown` | Days-until-move per block (holiday-aware) and the countdown color buckets |
 | `CurbRules` | Day windows, no-standing / no-stopping rules, and the move-or-pay windows countdowns and reminders run on |
 | `Meters` | Meter profiles, free/paid/commercial-only status at a moment, and the ParkNYC hand-off |
+| `DayParking` | A planned stay, each block's free / paid / commercial / no-parking verdict for it, and the planner |
 | `SignParser` | Parses raw NYC sign descriptions into structured `ParkingRule` objects |
 | `ASPHolidayService` | Fetches and caches the NYC ASP holiday calendar |
 

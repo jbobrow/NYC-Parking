@@ -140,8 +140,8 @@ extension MeterState.Kind {
 
     var legendLabel: String {
         switch self {
-        case .free:           return "Free now"
-        case .paid:           return "Paid now"
+        case .free:           return "Free"
+        case .paid:           return "Paid"
         case .commercialOnly: return "Commercial"
         case .noParking:      return "No parking"
         }
@@ -206,35 +206,6 @@ extension MeterProfile.Tier {
     /// "2 HR", "30 MIN"
     var limitText: String? {
         limitMinutes.map { $0 % 60 == 0 ? "\($0 / 60) HR" : "\($0) MIN" }
-    }
-}
-
-extension ParkingSegment {
-    /// What a metered curb's meters mean right now, unless cleaning, no
-    /// standing or no stopping is in effect, in which case no one can park
-    /// whatever the meter says. Nil for curbs without meters.
-    func meterState(in cal: CountdownCalendar) -> MeterState? {
-        guard let meter else { return nil }
-        if let rule = moveWindows.restrictionInEffect(in: cal), rule.kind != .commercial {
-            return .noParking(until: rule.endMinutes, reason: rule.kind)
-        }
-        return meter.profile.state(in: cal)
-    }
-}
-
-/// Meter states for every metered curb at one moment. Immutable, so the map can
-/// compare snapshots by identity and only redraw when one actually changes.
-final class MeterSnapshot: @unchecked Sendable {
-    let entries: [String: MeterState]
-
-    init(entries: [String: MeterState]) { self.entries = entries }
-
-    static func compute(for segments: [ParkingSegment], calendar: CountdownCalendar) -> MeterSnapshot {
-        var entries: [String: MeterState] = [:]
-        for seg in segments {
-            if let state = seg.meterState(in: calendar) { entries[seg.id] = state }
-        }
-        return MeterSnapshot(entries: entries)
     }
 }
 
