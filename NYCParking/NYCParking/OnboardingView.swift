@@ -4,7 +4,7 @@ import CoreMotion
 import CoreLocation
 import UserNotifications
 
-/// First-launch walkthrough: what the map shows, parking reminders, drive mode,
+/// First-launch walkthrough: what the map shows, day parking, parking reminders, drive mode,
 /// then the permissions each feature needs, asked in context.
 struct OnboardingView: View {
     @ObservedObject var locationManager: LocationManager
@@ -15,7 +15,10 @@ struct OnboardingView: View {
     let onFinish: () -> Void
 
     @State private var page = 0
-    private let pageCount = 5
+    private let pageCount = 6
+    /// The day parking example: a weekday morning, when meters run and some
+    /// blocks are cleaned.
+    private var exampleTrip: DayParkingTrip { DayParkingTrip.example(holidays: holidays) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,19 +53,29 @@ struct OnboardingView: View {
                 }
                     .tag(1)
                 OnboardingPage(
+                    title: "Parking for a few hours?",
+                    message: "Switch to Day parking from the layers button. Every block shows whether you can stay the whole time: free, paid at the meter, or no parking."
+                ) {
+                    VStack(spacing: 16) {
+                        RealMapArt(kind: .dayParking(exampleTrip), index: index, holidays: holidays) { DayParkingArt() }
+                        DayParkingScale(trip: exampleTrip)
+                    }
+                }
+                    .tag(2)
+                OnboardingPage(
                     title: "Or see cleaning days",
-                    message: "Switch views from the layers button to see which days each side of the street is cleaned."
+                    message: "Another view shows which days each side of the street is cleaned."
                 ) {
                     RealMapArt(kind: .days, index: index, holidays: holidays) { CleaningDaysArt() }
                 }
-                    .tag(2)
+                    .tag(3)
                 OnboardingPage(
                     title: "Park and get reminded",
                     message: "Tap any block and choose Park Here. The banner turns yellow the day before and red in the final hour. Holidays are skipped automatically."
                 ) { ParkArt() }
-                    .tag(3)
-                PermissionsPage(locationManager: locationManager, driveDetector: driveDetector)
                     .tag(4)
+                PermissionsPage(locationManager: locationManager, driveDetector: driveDetector)
+                    .tag(5)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
 
@@ -179,7 +192,11 @@ private struct StreetsArt<TopPill: View, BottomPill: View>: View {
 /// A real example: a snapshot of Clinton Hill with the app's curb lines and
 /// pills drawn on the actual blocks, using live countdowns.
 private struct RealMapArt<Fallback: View>: View {
-    enum Kind { case countdown, days }
+    enum Kind {
+        case countdown, days
+        /// Verdicts for this stay, on Myrtle Ave's meters.
+        case dayParking(DayParkingTrip)
+    }
 
     let kind: Kind
     let index: SegmentIndex?
@@ -190,9 +207,12 @@ private struct RealMapArt<Fallback: View>: View {
     @State private var failed = false
 
     private static var size: CGSize { CGSize(width: 340, height: 280) }
-    private static var region: MKCoordinateRegion {
-        MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 40.6886, longitude: -73.9655),
-                           latitudinalMeters: 390, longitudinalMeters: 475)
+    private var region: MKCoordinateRegion {
+        let center = switch kind {
+        case .countdown, .days: CLLocationCoordinate2D(latitude: 40.6886, longitude: -73.9655)
+        case .dayParking:       CLLocationCoordinate2D(latitude: 40.6928, longitude: -73.9690)
+        }
+        return MKCoordinateRegion(center: center, latitudinalMeters: 390, longitudinalMeters: 475)
     }
 
     var body: some View {
@@ -220,7 +240,7 @@ private struct RealMapArt<Fallback: View>: View {
     private func render() async {
         guard image == nil, let index else { return }
         let options = MKMapSnapshotter.Options()
-        options.region = Self.region
+        options.region = region
         options.size = Self.size
         options.traitCollection = UITraitCollection { traits in
             traits.userInterfaceStyle = .dark
@@ -237,12 +257,23 @@ private struct RealMapArt<Fallback: View>: View {
 
     private func draw(_ snapshot: MKMapSnapshotter.Snapshot, index: SegmentIndex) -> UIImage {
         let calendar = CountdownCalendar(holidays: holidays)
-        let r = Self.region
-        let segments = index.segments(minLat: r.center.latitude - r.span.latitudeDelta,
-                                      maxLat: r.center.latitude + r.span.latitudeDelta,
-                                      minLon: r.center.longitude - r.span.longitudeDelta,
-                                      maxLon: r.center.longitude + r.span.longitudeDelta)
-            .filter(\.hasCleaning)
+        let r = region
+        let nearby = index.segments(minLat: r.center.latitude - r.span.latitudeDelta,
+                                    maxLat: r.center.latitude + r.span.latitudeDelta,
+                                    minLon: r.center.longitude - r.span.longitudeDelta,
+                                    maxLon: r.center.longitude + r.span.longitudeDelta)
+        var verdicts: [String: DayParkingVerdict] = [:]
+        if case .dayParking(let trip) = kind {
+            let tripCalendar = trip.calendar(holidays: holidays)
+            for seg in nearby {
+                verdicts[seg.id] = seg.dayParkingVerdict(minutes: trip.minutes, in: tripCalendar)
+            }
+        }
+        let segments: [ParkingSegment]
+        switch kind {
+        case .countdown, .days: segments = nearby.filter(\.hasCleaning)
+        case .dayParking:       segments = nearby.filter { verdicts[$0.id] != nil }
+        }
         let countdowns = Dictionary(uniqueKeysWithValues: segments.map {
             // Onboarding introduces street cleaning, so count only that.
             ($0.id, MoveCountdown.next(for: $0.moveWindows.filter { $0.kind == .cleaning }, in: calendar))
@@ -279,6 +310,8 @@ private struct RealMapArt<Fallback: View>: View {
                     for (day, piece) in zip(days, StripeBuilder.split(seg.readingOrderCurve, into: days.count)) {
                         stroke(piece, day.uiColor)
                     }
+                case .dayParking:
+                    if let verdict = verdicts[seg.id] { stroke(seg.curve, verdict.kind.uiColor) }
                 }
             }
 
@@ -286,7 +319,11 @@ private struct RealMapArt<Fallback: View>: View {
             var placed: [OrientedRect] = []
             let bounds = CGRect(origin: .zero, size: Self.size).insetBy(dx: 12, dy: 12)
             for seg in segments.sorted(by: { $0.halfBlockLengthMeters > $1.halfBlockLengthMeters }) {
-                let content: LabelContent = kind == .countdown ? .countdown(countdowns[seg.id].flatMap { $0 }) : .days
+                let content: LabelContent = switch kind {
+                case .countdown:  .countdown(countdowns[seg.id].flatMap { $0 })
+                case .days:       .days
+                case .dayParking: .dayParking(DayParkingPill(meter: seg.meter, verdict: verdicts[seg.id]))
+                }
                 let pill = ParkingLabelRenderer.image(for: seg, content: content, style: .small)
                 let pad = ParkingLabelRenderer.shadowPadding
                 let center = snapshot.point(for: seg.coordinate)
@@ -361,6 +398,57 @@ private struct CleaningDaysArt: View {
     private func pill(_ days: [ParkingDay]) -> some View {
         ParkingLabel(days: days, rule: nil, style: .days)
             .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+    }
+}
+
+/// Stand-in for the day parking map: a metered avenue, a block cleaned
+/// during the stay, and free side streets.
+private struct DayParkingArt: View {
+    private let rows: [(MeterState.Kind, String, MeterState.Kind, String)] = [
+        (.paid, "$2 · 2 HR", .paid, "$2 · 2 HR"),
+        (.free, "FREE", .noParking, "NO PARKING"),
+        (.commercialOnly, "COMMERCIAL", .free, "FREE"),
+    ]
+
+    var body: some View {
+        StreetsArt(
+            streets: rows.map { .init(top: [$0.0.color], bottom: [$0.2.color]) },
+            topPill: { pill(rows[$0].0, rows[$0].1) },
+            bottomPill: { pill(rows[$0].2, rows[$0].3) })
+    }
+
+    private func pill(_ kind: MeterState.Kind, _ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .foregroundStyle(kind.textColor)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(kind.color, in: Capsule())
+            .fixedSize()
+            .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+    }
+}
+
+/// The day parking colors, and the stay the example is colored for.
+private struct DayParkingScale: View {
+    let trip: DayParkingTrip
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 3) {
+                ForEach([MeterState.Kind.free, .paid, .commercialOnly, .noParking], id: \.self) { kind in
+                    Text(kind.legendLabel)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(kind.textColor)
+                        .padding(.horizontal, 8)
+                        .frame(height: 20)
+                        .background(kind.color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                }
+            }
+            Label("\(trip.startText) · \(trip.durationText)", systemImage: "clock")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -560,6 +648,24 @@ private struct PermissionRow: View {
         }
         .padding(14)
         .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+private extension DayParkingTrip {
+    /// Two hours from 10 AM on the next weekday that isn't a holiday.
+    static func example(holidays: [NamedHoliday], now: Date = AppClock.now) -> DayParkingTrip {
+        let cal = Calendar.newYork
+        var day = cal.startOfDay(for: now)
+        for _ in 0..<14 {
+            if let start = cal.date(bySettingHour: 10, minute: 0, second: 0, of: day), start > now,
+               !cal.isDateInWeekend(day),
+               !holidays.contains(where: { cal.isDate($0.date, inSameDayAs: day) }) {
+                return DayParkingTrip(start: start, minutes: 120)
+            }
+            guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
+            day = next
+        }
+        return DayParkingTrip(start: nil, minutes: 120)
     }
 }
 
