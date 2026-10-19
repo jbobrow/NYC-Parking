@@ -27,10 +27,10 @@ struct DayParkingTrip: Hashable, Sendable {
     /// "Now", "3:30 PM" later today, "Sat 10:00 AM" another day.
     var startText: String {
         guard let start else { return "Now" }
-        if Calendar.current.isDate(start, inSameDayAs: AppClock.now) {
-            return start.formatted(date: .omitted, time: .shortened)
+        if Calendar.newYork.isDate(start, inSameDayAs: AppClock.now) {
+            return start.formatted(.newYorkTime)
         }
-        return start.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        return start.formatted(.newYorkDateTime.weekday(.abbreviated).hour().minute())
     }
 
     /// The next step up or down the duration list.
@@ -396,6 +396,8 @@ struct DayParkingStartSheet: View {
             DatePicker("Arriving", selection: $later, in: AppClock.now..., displayedComponents: [.date, .hourAndMinute])
                 .datePickerStyle(.wheel)
                 .labelsHidden()
+                // A picked "Tue 9:00" means 9:00 in the city.
+                .environment(\.timeZone, .newYork)
                 .frame(height: 180)
                 .clipped()
                 .opacity(trip.start == nil ? 0.35 : 1)

@@ -99,7 +99,7 @@ private struct Caption: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
             if let ends = attributes.metadata?.cleaningEnds {
-                Text("Cleaning ends \(ends.formatted(date: .omitted, time: .shortened))")
+                Text("Cleaning ends \(ends.formatted(.newYorkTime))")
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)

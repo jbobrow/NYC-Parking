@@ -29,14 +29,14 @@ struct NamedHoliday: Identifiable {
 /// lookup table.
 enum NYCHolidayCalendar {
 
-    static func isHoliday(_ date: Date, calendar: Calendar = .current) -> Bool {
+    static func isHoliday(_ date: Date, calendar: Calendar = .newYork) -> Bool {
         let year = calendar.component(.year, from: date)
         return namedHolidays(for: year, calendar: calendar)
             .contains { calendar.isDate($0.date, inSameDayAs: date) }
     }
 
     /// Returns upcoming NYC ASP holidays within the next `months` months, sorted chronologically.
-    static func upcomingHolidays(months: Int = 13, calendar: Calendar = .current) -> [NamedHoliday] {
+    static func upcomingHolidays(months: Int = 13, calendar: Calendar = .newYork) -> [NamedHoliday] {
         let today = calendar.startOfDay(for: Date())
         let year = calendar.component(.year, from: today)
         let cutoff = calendar.date(byAdding: .month, value: months, to: today) ?? today
@@ -51,7 +51,7 @@ enum NYCHolidayCalendar {
 
     // MARK: - Named holiday list
 
-    static func namedHolidays(for year: Int, calendar: Calendar = .current) -> [NamedHoliday] {
+    static func namedHolidays(for year: Int, calendar: Calendar = .newYork) -> [NamedHoliday] {
         var holidays: [NamedHoliday] = []
 
         func add(_ name: String, _ date: Date?) {

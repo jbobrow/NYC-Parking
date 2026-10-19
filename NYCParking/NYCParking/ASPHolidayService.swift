@@ -18,14 +18,14 @@ final class ASPHolidayService: ObservableObject {
         Task { await refresh() }
     }
 
-    func isHoliday(_ date: Date, calendar: Calendar = .current) -> Bool {
+    func isHoliday(_ date: Date, calendar: Calendar = .newYork) -> Bool {
         holidays.contains { calendar.isDate($0.date, inSameDayAs: date) }
     }
 
     // MARK: - Refresh
 
     func refresh() async {
-        let year = Calendar.current.component(.year, from: Date())
+        let year = Calendar.newYork.component(.year, from: Date())
 
         // Fetch both years concurrently; next year may 404 before it's published — that's fine.
         async let a = fetchICS(year: year)
@@ -33,7 +33,7 @@ final class ASPHolidayService: ObservableObject {
         let all = (await a ?? []) + (await b ?? [])
         guard !all.isEmpty else { return }
 
-        let today = Calendar.current.startOfDay(for: Date())
+        let today = Calendar.newYork.startOfDay(for: Date())
         let upcoming = all
             .filter { $0.date >= today }
             .sorted { $0.date < $1.date }
@@ -131,7 +131,7 @@ final class ASPHolidayService: ObservableObject {
     private static func loadCache() -> [NamedHoliday]? {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
               let entries = try? JSONDecoder().decode([CachedEntry].self, from: data) else { return nil }
-        let today = Calendar.current.startOfDay(for: Date())
+        let today = Calendar.newYork.startOfDay(for: Date())
         let holidays = entries
             .map { NamedHoliday(name: $0.name, date: Date(timeIntervalSince1970: $0.timestamp),
                                 metersSuspended: $0.metersSuspended) }

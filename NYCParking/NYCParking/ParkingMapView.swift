@@ -18,6 +18,10 @@ final class MapController {
 
     var camera: MKMapCamera? { mapView?.camera }
 
+    /// Where the map opens: Midtown, around Times Square.
+    static let nycRegion = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
+                                              latitudinalMeters: 600, longitudinalMeters: 600)
+
     /// Drive mode: go back to following the car after the user moved the map.
     func recenterDrive() {
         drive?.resume()
@@ -109,9 +113,7 @@ struct ParkingMapView: UIViewRepresentable {
         mapView.pointOfInterestFilter = .excludingAll
         mapView.register(SegmentLabelView.self,
                          forAnnotationViewWithReuseIdentifier: SegmentLabelView.reuseID)
-        mapView.setRegion(MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
-            latitudinalMeters: 600, longitudinalMeters: 600), animated: false)
+        mapView.setRegion(MapController.nycRegion, animated: false)
         controller.mapView = mapView
         controller.drive = context.coordinator.drive
         context.coordinator.install(on: mapView)

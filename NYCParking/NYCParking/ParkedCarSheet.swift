@@ -147,8 +147,7 @@ struct ParkedCarSheet: View {
     }
 
     private func moveDateString(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "h:mm a, EEE MMM d"
+        let df = DateFormatter.newYork("h:mm a, EEE MMM d")
         return df.string(from: date)
     }
 
@@ -213,14 +212,14 @@ private struct DoubleParkRow: View {
 
     /// "Alarm at 10:10 AM · cleaning ends 10:30 AM"; just when it ends once it's too late.
     private var caption: String {
-        let ends = "cleaning ends \(cleaning.end.formatted(date: .omitted, time: .shortened))"
+        let ends = "cleaning ends \(cleaning.end.formatted(.newYorkTime))"
         let at = remindAt(leadMinutes)
         guard isOn || at > now else { return ends.prefix(1).uppercased() + ends.dropFirst() }
-        let time = at.formatted(date: .omitted, time: .shortened)
-        let cal = Calendar.current
+        let time = at.formatted(.newYorkTime)
+        let cal = Calendar.newYork
         let when = cal.isDate(at, inSameDayAs: now) ? time
             : cal.isDateInTomorrow(at) ? "tomorrow \(time)"
-            : "\(at.formatted(.dateTime.weekday(.abbreviated))) \(time)"
+            : "\(at.formatted(.newYorkDateTime.weekday(.abbreviated))) \(time)"
         return "\(NotificationService.reparkUsesAlarm ? "Alarm at" : "At") \(when) · \(ends)"
     }
 
@@ -356,11 +355,11 @@ struct CarsSheet: View {
         guard let record = car.parked else { return "Not parked" }
         let street = record.street.localizedCapitalized
         guard let move = nextMove(car) else { return street }
-        let date = move.date, cal = Calendar.current
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let date = move.date, cal = Calendar.newYork
+        let time = date.formatted(.newYorkTime)
         let when = cal.isDate(date, inSameDayAs: AppClock.now) ? "\(time) today"
             : cal.isDate(date, inSameDayAs: cal.date(byAdding: .day, value: 1, to: AppClock.now) ?? date) ? "\(time) tomorrow"
-            : "\(date.formatted(.dateTime.weekday(.abbreviated))) \(time)"
+            : "\(date.formatted(.newYorkDateTime.weekday(.abbreviated))) \(time)"
         return "\(street) · \(move.verb) \(when)"
     }
 
