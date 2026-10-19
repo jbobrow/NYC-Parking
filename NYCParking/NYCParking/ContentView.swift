@@ -20,8 +20,6 @@ struct ContentView: View {
     @State private var driveMatch: DriveMatch?
     @State private var isDriveFollowing = true
     @State private var showDrivePrompt = false
-    /// "Parking rules cover the five boroughs", closed for this session.
-    @State private var coverageBannerDismissed = false
     /// The map's center is where the data reaches.
     @State private var isMapOnNYC = true
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -135,10 +133,10 @@ struct ContentView: View {
                                 if showDrivePrompt { snoozeDrivePrompt() }
                             }
                         }
-                        if isOutsideCoverage && !coverageBannerDismissed && !isStagingScreenshot {
+                        if isOutsideCoverage && !isStagingScreenshot {
                             CoverageBanner(onShowNYC: isMapOnNYC ? nil : {
                                 mapController.setRegion(MapController.nycRegion)
-                            }, onDismiss: { coverageBannerDismissed = true })
+                            })
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                         TopBanners(cars: garage.parkedCars,
@@ -153,7 +151,7 @@ struct ContentView: View {
                     .padding(.top, windowSafeAreaTop + 10)
                     .transition(.opacity)
                     .animation(.easeInOut(duration: 0.3), value: showDrivePrompt)
-                    .animation(.easeInOut(duration: 0.3), value: isOutsideCoverage && !coverageBannerDismissed)
+                    .animation(.easeInOut(duration: 0.3), value: isOutsideCoverage)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: isDrivingMode)
@@ -1054,9 +1052,9 @@ private struct TopBanners: View {
 
 /// Outside NYC: says the rules cover the five boroughs, rather than leave an
 /// empty map unexplained. "Show NYC" goes back while the map's elsewhere.
+/// It stays while you're outside NYC, so the way back is always there.
 private struct CoverageBanner: View {
     let onShowNYC: (() -> Void)?
-    let onDismiss: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1078,16 +1076,10 @@ private struct CoverageBanner: View {
                         .background(Color.blue, in: Capsule())
                 }
             }
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 44)
-            }
-            .accessibilityLabel("Dismiss")
         }
+        .frame(minHeight: 44)
         .padding(.leading, 16)
-        .padding(.trailing, 4)
+        .padding(.trailing, onShowNYC == nil ? 16 : 6)
         .padding(.vertical, 4)
         .modifier(GlassRoundedBackground())
     }
