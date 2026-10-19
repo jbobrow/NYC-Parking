@@ -63,6 +63,8 @@ final class SegmentIndex: @unchecked Sendable {
     let segments: [ParkingSegment]
     private let cells: [Int64: [Int32]]
     private let byID: [String: Int32]
+    /// Grid cells holding a block face, or next to one: where the data reaches.
+    private let coveredCells: Set<Int64>
     private static let cellDegrees = 0.004   // ≈ 450 m × 340 m in NYC
 
     init(segments: [ParkingSegment]) {
@@ -79,6 +81,12 @@ final class SegmentIndex: @unchecked Sendable {
             }
         }
         self.cells = cells
+        var covered = Set<Int64>()
+        for key in cells.keys {
+            let r = Int(key >> 32), c = Int(Int32(truncatingIfNeeded: key))
+            for dr in -1...1 { for dc in -1...1 { covered.insert(Self.key(r + dr, c + dc)) } }
+        }
+        self.coveredCells = covered
         var byID: [String: Int32] = [:]
         byID.reserveCapacity(segments.count)
         for (i, seg) in segments.enumerated() { byID[seg.id] = Int32(i) }
@@ -87,6 +95,13 @@ final class SegmentIndex: @unchecked Sendable {
 
     func segment(id: String) -> ParkingSegment? {
         byID[id].map { segments[Int($0)] }
+    }
+
+    /// Whether the data covers `coordinate`: its grid cell, or one beside it,
+    /// holds a block face. The neighbours give about 400 m of slack for parks,
+    /// rail yards and GPS error, without taking in New Jersey or Nassau.
+    func covers(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        coveredCells.contains(Self.key(Self.cell(coordinate.latitude), Self.cell(coordinate.longitude)))
     }
 
     private static func cell(_ deg: Double) -> Int { Int((deg / cellDegrees).rounded(.down)) }

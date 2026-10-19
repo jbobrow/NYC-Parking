@@ -152,7 +152,7 @@ struct ParkedCarRecord: Codable, Equatable {
     /// skipping days each rule is suspended. A rule already in effect doesn't
     /// count: the car is assumed fine until the next one starts.
     func nextMove(after now: Date, holidays: [NamedHoliday],
-                  calendar cal: Calendar = .current) -> MoveDeadline? {
+                  calendar cal: Calendar = .newYork) -> MoveDeadline? {
         let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
         guard let next = MoveCountdown.next(for: windows, in: calendar, upcomingOnly: true),
               let day = cal.date(byAdding: .day, value: next.days, to: cal.startOfDay(for: now)),
@@ -165,7 +165,7 @@ struct ParkedCarRecord: Codable, Equatable {
     /// The street cleaning under way now, or else the next one: what a
     /// double-parked car waits out.
     func cleaning(around now: Date, holidays: [NamedHoliday],
-                  calendar cal: Calendar = .current) -> CleaningTime? {
+                  calendar cal: Calendar = .newYork) -> CleaningTime? {
         let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
         guard let next = MoveCountdown.next(for: windows.filter { $0.kind == .cleaning }, in: calendar),
               let end = next.endMinutes else { return nil }

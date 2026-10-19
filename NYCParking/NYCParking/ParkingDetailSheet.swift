@@ -431,10 +431,10 @@ struct ParkingDetailSheet: View {
     private var footnote: String {
         var sources: [String] = []
         if let signs = sourceDates.signs, segment.hasCleaning || !segment.restrictions.isEmpty {
-            sources.append("Signs as of \(signs.formatted(date: .abbreviated, time: .omitted))")
+            sources.append("Signs as of \(signs.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: .newYork)))")
         }
         if let meters = sourceDates.meters, segment.meter != nil {
-            sources.append("Meters as of \(meters.formatted(date: .abbreviated, time: .omitted))")
+            sources.append("Meters as of \(meters.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: .newYork)))")
         }
         let asOf = sources.isEmpty ? "" : "\n" + sources.joined(separator: " · ")
         return "Posted signs take precedence." + asOf
@@ -645,7 +645,7 @@ private struct MeterSection: View {
             title = "No parking"
             details.append(state.untilText ?? "")
         case .free:
-            let holiday = holidays.first { $0.metersSuspended && Calendar.current.isDate($0.date, inSameDayAs: AppClock.now) }
+            let holiday = holidays.first { $0.metersSuspended && Calendar.newYork.isDate($0.date, inSameDayAs: AppClock.now) }
             // "Today" when they don't run at all today (Sunday, a holiday).
             let windows = (meter.profile.paid?.windows ?? []) + (meter.profile.commercial?.windows ?? [])
             let runsToday = cal.days.first.map { day in

@@ -38,6 +38,8 @@
 		AA3000000000000000000002 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3000000000000000000001 /* WhatsNewView.swift */; };
 		AA3100000000000000000002 /* ReparkAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3100000000000000000001 /* ReparkAlarmMetadata.swift */; };
 		AA3100000000000000000003 /* ReparkAlarmMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3100000000000000000001 /* ReparkAlarmMetadata.swift */; };
+		AA3700000000000000000002 /* NewYorkTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3700000000000000000001 /* NewYorkTime.swift */; };
+		AA3700000000000000000003 /* NewYorkTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3700000000000000000001 /* NewYorkTime.swift */; };
 		AA3200000000000000000002 /* NYCParkingWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3200000000000000000001 /* NYCParkingWidgetsBundle.swift */; };
 		AA3300000000000000000002 /* ReparkLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3300000000000000000001 /* ReparkLiveActivity.swift */; };
 		AA3500000000000000000002 /* NYCParkingWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB3500000000000000000001 /* NYCParkingWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -100,6 +102,7 @@
 		BB2F00000000000000000001 /* Signature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signature.swift; sourceTree = "<group>"; };
 		BB3000000000000000000001 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		BB3100000000000000000001 /* ReparkAlarmMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReparkAlarmMetadata.swift; sourceTree = "<group>"; };
+		BB3700000000000000000001 /* NewYorkTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewYorkTime.swift; sourceTree = "<group>"; };
 		BB3200000000000000000001 /* NYCParkingWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NYCParkingWidgetsBundle.swift; sourceTree = "<group>"; };
 		BB3300000000000000000001 /* ReparkLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReparkLiveActivity.swift; sourceTree = "<group>"; };
 		BB3400000000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -164,6 +167,7 @@
 				BB2F00000000000000000001 /* Signature.swift */,
 				BB3000000000000000000001 /* WhatsNewView.swift */,
 				BB3100000000000000000001 /* ReparkAlarmMetadata.swift */,
+				BB3700000000000000000001 /* NewYorkTime.swift */,
 				BB2400000000000000000001 /* segments.db */,
 				BB1B00000000000000000001 /* Assets.xcassets */,
 				BB1C00000000000000000001 /* Info.plist */,
@@ -318,6 +322,7 @@
 				AA2F00000000000000000002 /* Signature.swift in Sources */,
 				AA3000000000000000000002 /* WhatsNewView.swift in Sources */,
 				AA3100000000000000000002 /* ReparkAlarmMetadata.swift in Sources */,
+				AA3700000000000000000002 /* NewYorkTime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -328,6 +333,7 @@
 				AA3200000000000000000002 /* NYCParkingWidgetsBundle.swift in Sources */,
 				AA3300000000000000000002 /* ReparkLiveActivity.swift in Sources */,
 				AA3100000000000000000003 /* ReparkAlarmMetadata.swift in Sources */,
+				AA3700000000000000000003 /* NewYorkTime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -465,7 +471,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -479,7 +485,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -498,7 +504,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				ENABLE_PREVIEWS = YES;
@@ -512,7 +518,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -529,7 +535,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NYCParkingWidgets/Info.plist;
@@ -539,7 +545,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -555,7 +561,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 21;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = 63KWA2RPU8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NYCParkingWidgets/Info.plist;
@@ -565,7 +571,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.6;
+				MARKETING_VERSION = 1.6.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jonathanbobrow.nycparking.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

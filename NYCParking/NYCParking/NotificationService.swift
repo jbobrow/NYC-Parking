@@ -43,7 +43,7 @@ final class NotificationService: ObservableObject {
             // Ask for alarms now, while the app is open: the repark reminder
             // can be set from the notification, with the app in the background.
             if #available(iOS 26, *) { _ = await Self.alarmsAuthorized() }
-            let ends = cleaning.end.formatted(date: .omitted, time: .shortened)
+            let ends = cleaning.end.formatted(.newYorkTime)
             Self.schedule(id: Self.id("parking-cleaning-started", for: carID),
                           title: "Street cleaning has started", subtitle: carName,
                           body: "It runs until \(ends) on \(street.localizedCapitalized). Double-parked? "
@@ -54,11 +54,10 @@ final class NotificationService: ObservableObject {
         }
 
         guard let deadline else { return }
-        let cal = Calendar.current
+        let cal = Calendar.newYork
         let moveTime = deadline.date
-        let df = DateFormatter()
-        df.dateFormat = "EEE, MMM d"
-        let body = "\(deadline.what) starts at \(moveTime.formatted(date: .omitted, time: .shortened))"
+        let df = DateFormatter.newYork("EEE, MMM d")
+        let body = "\(deadline.what) starts at \(moveTime.formatted(.newYorkTime))"
             + " on \(df.string(from: moveTime))."
         // A meter can be paid instead of moving the car.
         let action = deadline.kind.isMeter ? "Pay the meter or move your car" : "Move your car"
@@ -121,7 +120,7 @@ final class NotificationService: ObservableObject {
         if !scheduled {
             let center = UNUserNotificationCenter.current()
             guard (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false else { return false }
-            let ends = cleaningEnds.formatted(date: .omitted, time: .shortened)
+            let ends = cleaningEnds.formatted(.newYorkTime)
             schedule(id: id(reparkID, for: carID), title: "Time to repark", subtitle: carName,
                      body: "Street cleaning on \(street.localizedCapitalized) ends at \(ends). "
                          + "Move your car back to the curb.",
@@ -222,7 +221,10 @@ final class NotificationService: ObservableObject {
         content.userInfo = userInfo
         if let category { content.categoryIdentifier = category }
 
-        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        // The New York wall time, zone included, so it fires at the same
+        // moment after the phone changes time zone.
+        var comps = Calendar.newYork.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        comps.timeZone = .newYork
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)

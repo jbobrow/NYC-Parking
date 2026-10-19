@@ -427,6 +427,8 @@ struct DriveHUD: View {
     let mode: MapDisplayMode
     /// The stay day parking judges each side for.
     let trip: DayParkingTrip
+    /// You're past where the data reaches: no rules isn't the same as free.
+    var isOutsideCoverage = false
 
     var body: some View {
         TimelineView(.everyMinute) { _ in
@@ -434,14 +436,14 @@ struct DriveHUD: View {
             let tripCalendar = trip.calendar(holidays: holidays)
             VStack(spacing: 8) {
                 header
-                if let match {
+                if match != nil || isOutsideCoverage {
                     HStack(alignment: .top, spacing: 8) {
-                        SideCard(side: .left, segment: match.left, mode: mode, calendar: calendar,
-                                 trip: trip, tripCalendar: tripCalendar)
-                        SideCard(side: .right, segment: match.right, mode: mode, calendar: calendar,
-                                 trip: trip, tripCalendar: tripCalendar)
+                        SideCard(side: .left, segment: match?.left, mode: mode, calendar: calendar,
+                                 trip: trip, tripCalendar: tripCalendar, isOutsideCoverage: isOutsideCoverage)
+                        SideCard(side: .right, segment: match?.right, mode: mode, calendar: calendar,
+                                 trip: trip, tripCalendar: tripCalendar, isOutsideCoverage: isOutsideCoverage)
                     }
-                    .id(match.blockID)
+                    .id(match?.blockID)
                     .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 }
             }
@@ -475,6 +477,12 @@ struct DriveHUD: View {
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
+            } else if isOutsideCoverage {
+                Text("Parking rules cover the five boroughs")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             } else {
                 Text("Finding your street…")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -498,6 +506,7 @@ private struct SideCard: View {
     let calendar: CountdownCalendar
     let trip: DayParkingTrip
     let tripCalendar: CountdownCalendar
+    let isOutsideCoverage: Bool
 
     var body: some View {
         let c = content()
@@ -558,7 +567,11 @@ private struct SideCard: View {
     }
 
     private func content() -> Content {
-        guard let segment else { return Content(title: "NO RULES", detail: "No posted rules", fill: nil) }
+        guard let segment else {
+            // Outside NYC there's no data, which mustn't read as free to park.
+            return isOutsideCoverage ? Content(title: "NO DATA", detail: "Outside NYC", fill: nil)
+                                     : Content(title: "NO RULES", detail: "No posted rules", fill: nil)
+        }
         switch mode {
         case .countdown:  return countdownContent(segment)
         case .dayParking: return dayParkingContent(segment)
@@ -712,7 +725,7 @@ private struct DayPills: View {
     }
 }
 
-private struct GlassRoundedBackground: ViewModifier {
+struct GlassRoundedBackground: ViewModifier {
     var enabled = true
 
     func body(content: Content) -> some View {

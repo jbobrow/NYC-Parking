@@ -20,6 +20,10 @@ struct ContentView: View {
     @State private var driveMatch: DriveMatch?
     @State private var isDriveFollowing = true
     @State private var showDrivePrompt = false
+    /// "Parking rules cover the five boroughs", closed for this session.
+    @State private var coverageBannerDismissed = false
+    /// The map's center is where the data reaches.
+    @State private var isMapOnNYC = true
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @State private var showOnboarding = false
     /// The last version whose What's New was shown, or skipped because
@@ -90,6 +94,7 @@ struct ContentView: View {
                 onCameraSettled: { camera in
                     let mapCenter = CLLocation(latitude: camera.center.latitude,
                                                longitude: camera.center.longitude)
+                    isMapOnNYC = dataService.index?.covers(camera.center) ?? true
                     if isFollowingUser, !isDrivingMode, let userLoc = locationManager.location,
                        mapCenter.distance(from: userLoc) > 80 {
                         isFollowingUser = false
@@ -111,7 +116,8 @@ struct ContentView: View {
             Group {
                 if isDrivingMode {
                     DriveHUD(match: driveMatch, holidays: holidayService.holidays,
-                             mode: displayMode, trip: dayParkingTrip.wrappedValue)
+                             mode: displayMode, trip: dayParkingTrip.wrappedValue,
+                             isOutsideCoverage: isOutsideCoverage)
                         .padding(.horizontal, 12)
                         .padding(.top, windowSafeAreaTop + 6)
                         .transition(.opacity.combined(with: .move(edge: .top)))
@@ -129,6 +135,12 @@ struct ContentView: View {
                                 if showDrivePrompt { snoozeDrivePrompt() }
                             }
                         }
+                        if isOutsideCoverage && !coverageBannerDismissed && !isStagingScreenshot {
+                            CoverageBanner(onShowNYC: isMapOnNYC ? nil : {
+                                mapController.setRegion(MapController.nycRegion)
+                            }, onDismiss: { coverageBannerDismissed = true })
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
                         TopBanners(cars: garage.parkedCars,
                                showsNames: garage.hasSeveralCars,
                                holidays: holidayService.holidays,
@@ -141,6 +153,7 @@ struct ContentView: View {
                     .padding(.top, windowSafeAreaTop + 10)
                     .transition(.opacity)
                     .animation(.easeInOut(duration: 0.3), value: showDrivePrompt)
+                    .animation(.easeInOut(duration: 0.3), value: isOutsideCoverage && !coverageBannerDismissed)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: isDrivingMode)
@@ -411,15 +424,11 @@ struct ContentView: View {
         .onChange(of: locationManager.location) { _, newLocation in
             guard let loc = newLocation else { return }
             driveDetector.ingest(loc)
-            if !hasSnappedToUserLocation {
-                hasSnappedToUserLocation = true
-                isFollowingUser = true
-                mapController.setRegion(center: loc.coordinate, meters: 600)
-            } else if isFollowingUser && !isDrivingMode {
-                // Normal follow: re-center, keep current zoom and heading.
-                // (Drive mode's camera follows the car itself, every frame.)
-                mapController.setCenter(loc.coordinate)
-            }
+            follow(loc)
+        }
+        // A fix can come before the data that says whether it's in NYC.
+        .onChange(of: dataService.index != nil) {
+            if let loc = locationManager.location { follow(loc) }
         }
         .task(id: mapRefreshID) {
             // Countdowns shift at midnight and as restrictions end, so a few
@@ -490,7 +499,7 @@ struct ContentView: View {
             WhatsNewView(whatsNew: whatsNew) { self.whatsNew = nil }
         }
         .onChange(of: driveDetector.isLikelyDriving) { _, driving in
-            if driving, !isDrivingMode, Date() >= drivePromptSnoozedUntil {
+            if driving, !isDrivingMode, !isOutsideCoverage, Date() >= drivePromptSnoozedUntil {
                 showDrivePrompt = true
             } else if !driving {
                 showDrivePrompt = false
@@ -546,12 +555,42 @@ struct ContentView: View {
             mapController.recenterDrive()
             return
         }
-        isFollowingUser = true
         guard let loc = locationManager.location else {
+            isFollowingUser = true
             mapController.followUser()
             return
         }
+        // Outside NYC it goes there once, without following onto an empty map.
+        isFollowingUser = dataService.index?.covers(loc.coordinate) ?? true
         mapController.setRegion(center: loc.coordinate, meters: 300)
+    }
+
+    /// The first fix in NYC moves the map there, and then it follows. Outside
+    /// the area the data covers, the map stays on NYC, and following stops
+    /// on driving out of it. Waits for the data to know which.
+    private func follow(_ loc: CLLocation) {
+        guard let index = dataService.index else { return }
+        let isCovered = index.covers(loc.coordinate)
+        if !hasSnappedToUserLocation {
+            hasSnappedToUserLocation = true
+            guard isCovered else { return }
+            isFollowingUser = true
+            mapController.setRegion(center: loc.coordinate, meters: 600)
+        } else if isFollowingUser && !isDrivingMode {
+            // Normal follow: re-center, keep current zoom and heading.
+            // (Drive mode's camera follows the car itself, every frame.)
+            if isCovered {
+                mapController.setCenter(loc.coordinate)
+            } else {
+                isFollowingUser = false
+            }
+        }
+    }
+
+    /// You're somewhere the parking data doesn't reach.
+    private var isOutsideCoverage: Bool {
+        guard let index = dataService.index, let loc = locationManager.location else { return false }
+        return !index.covers(loc.coordinate)
     }
 
     /// Drive mode: a 3D camera that follows the car, with the parking rules for
@@ -635,8 +674,8 @@ struct ContentView: View {
     /// "Street cleaning at 8:30 AM", or "…until 10:00 AM" once it's started.
     private func doubleParkOfferTitle(_ offer: DoubleParkOffer) -> String {
         AppClock.now < offer.start
-            ? "Street cleaning at \(offer.start.formatted(date: .omitted, time: .shortened))"
-            : "Street cleaning until \(offer.end.formatted(date: .omitted, time: .shortened))"
+            ? "Street cleaning at \(offer.start.formatted(.newYorkTime))"
+            : "Street cleaning until \(offer.end.formatted(.newYorkTime))"
     }
 
     /// "Double-parked on 81 Street? …", or "Civic double-parked on…" with several cars.
@@ -645,7 +684,7 @@ struct ContentView: View {
         let street = garage[offer.carID]?.parked?.street.localizedCapitalized ?? "your street"
         let what = NotificationService.reparkUsesAlarm ? "An alarm can ring" : "You can be reminded"
         let who = garage.label(for: offer.carID).map { "\($0) double-parked" } ?? "Double-parked"
-        return "\(who) on \(street)? \(what) at \(at.formatted(date: .omitted, time: .shortened)), "
+        return "\(who) on \(street)? \(what) at \(at.formatted(.newYorkTime)), "
             + "\(reparkLeadMinutes) minutes before cleaning ends, so you can move back to the curb."
     }
 
@@ -938,8 +977,8 @@ private struct TopBanners: View {
         let at = DoubleParking.reminderDate(cleaningEnds: cleaning.end, leadMinutes: reparkLeadMinutes)
         let isTime = at <= now
         let text = isTime
-            ? "Repark now · cleaning ends \(cleaning.end.formatted(date: .omitted, time: .shortened))"
-            : "Double-parked · repark at \(at.formatted(date: .omitted, time: .shortened))"
+            ? "Repark now · cleaning ends \(cleaning.end.formatted(.newYorkTime))"
+            : "Double-parked · repark at \(at.formatted(.newYorkTime))"
         return Label(named(text, name), systemImage: isTime ? "car.fill" : "car.2.fill")
             .font(.system(size: 14, weight: .semibold, design: .rounded))
             .lineLimit(1)
@@ -954,19 +993,18 @@ private struct TopBanners: View {
     private func moveCarBanner(for move: MoveDeadline, name: String?, now: Date) -> some View {
         let date = move.date
         let stage = MoveBannerStage(deadline: date, now: now)
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let time = date.formatted(.newYorkTime)
         let text: String
         switch stage {
         case .imminent:
             let minutes = max(1, Int((date.timeIntervalSince(now) / 60).rounded(.up)))
             text = "\(move.kind.isMeter ? "Pay or move" : "Move") in \(minutes) min · \(time)"
-        case .dayBefore where Calendar.current.isDate(date, inSameDayAs: now):
+        case .dayBefore where Calendar.newYork.isDate(date, inSameDayAs: now):
             text = "\(move.verb) \(time) today"
         case .dayBefore:
             text = "\(move.verb) \(time) tomorrow"
         case .normal:
-            let df = DateFormatter()
-            df.dateFormat = "h:mm a, EEE MMM d"
+            let df = DateFormatter.newYork("h:mm a, EEE MMM d")
             text = "\(move.verb) \(df.string(from: date))"
         }
         let icon = stage == .imminent ? "clock.badge.exclamationmark.fill" : "calendar.badge.clock"
@@ -981,7 +1019,7 @@ private struct TopBanners: View {
 
     /// An ASP holiday within two weeks means a skipped cleaning day.
     private func upcomingHoliday(from now: Date) -> (holiday: NamedHoliday, days: Int)? {
-        let cal = Calendar.current
+        let cal = Calendar.newYork
         let today = cal.startOfDay(for: now)
         return holidays
             .compactMap { holiday -> (holiday: NamedHoliday, days: Int)? in
@@ -998,7 +1036,7 @@ private struct TopBanners: View {
         switch daysAway {
         case 0:  when = "today"
         case 1:  when = "tomorrow"
-        default: when = holiday.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        default: when = holiday.date.formatted(.newYorkDateTime.weekday(.abbreviated).month(.abbreviated).day())
         }
         return Label {
             Text("No ASP \(when) · \(holiday.name)")
@@ -1011,6 +1049,47 @@ private struct TopBanners: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .modifier(BannerBackground(tint: nil))
+    }
+}
+
+/// Outside NYC: says the rules cover the five boroughs, rather than leave an
+/// empty map unexplained. "Show NYC" goes back while the map's elsewhere.
+private struct CoverageBanner: View {
+    let onShowNYC: (() -> Void)?
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "map")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.blue)
+            Text("Parking rules cover the five boroughs.")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            if let onShowNYC {
+                Button(action: onShowNYC) {
+                    Text("Show NYC")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 36)
+                        .background(Color.blue, in: Capsule())
+                }
+            }
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 44)
+            }
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 4)
+        .padding(.vertical, 4)
+        .modifier(GlassRoundedBackground())
     }
 }
 
@@ -1033,7 +1112,7 @@ private enum MoveBannerStage: Equatable {
     case imminent   // within the hour
 
     init(deadline: Date, now: Date) {
-        let cal = Calendar.current
+        let cal = Calendar.newYork
         let days = cal.dateComponents([.day], from: cal.startOfDay(for: now),
                                       to: cal.startOfDay(for: deadline)).day ?? 0
         if deadline.timeIntervalSince(now) <= 3600 {

@@ -124,7 +124,7 @@ struct CountdownCalendar: Sendable {
     let yesterday: Day?
 
     /// - Parameter dayCount: how many days ahead to look, past today.
-    init(now: Date = AppClock.now, calendar: Calendar = .current, holidays: [NamedHoliday],
+    init(now: Date = AppClock.now, calendar: Calendar = .newYork, holidays: [NamedHoliday],
          dayCount: Int = 7) {
         let comps = calendar.dateComponents([.hour, .minute], from: now)
         minuteOfDay = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)

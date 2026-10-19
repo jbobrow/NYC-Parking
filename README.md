@@ -30,6 +30,7 @@ NYC alternate-side parking rules are notoriously hard to remember — different 
 - **What's New** — a page shown once to people who update, listing that version's highlights (`WhatsNew.releases`)
 - **Driving mode** — a 3D view with the parking rules on each side of you, led by the map's view: days until the move, free / paid / no parking for the planned stay, or the cleaning days in their colors
 - **Holiday calendar** — browse the full NYC ASP holiday list
+- **New York time, five boroughs** — rules, deadlines, reminders and holidays are worked out and shown in New York time, as posted on the signs, whatever the phone's time zone. Outside the area the data covers (`SegmentIndex.covers`), the map stays on NYC with a note, and drive mode says "NO DATA" rather than "no rules"
 
 ## Data
 
@@ -54,6 +55,7 @@ No-standing and no-stopping signs limited to set hours (rush hour, school days, 
 | `DayParking` | A planned stay, each block's free / paid / commercial / no-parking verdict for it, and the planner |
 | `SignParser` | Parses raw NYC sign descriptions into structured `ParkingRule` objects |
 | `ASPHolidayService` | Fetches and caches the NYC ASP holiday calendar |
+| `NewYorkTime` | The New York calendar and formatters rules are worked out and shown in (shared with the widget extension) |
 
 ## Scripts
 

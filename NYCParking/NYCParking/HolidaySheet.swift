@@ -45,7 +45,7 @@ private struct HolidayRow: View {
     let holiday: NamedHoliday
 
     private var parkingDay: ParkingDay? {
-        let weekday = Calendar.current.component(.weekday, from: holiday.date)
+        let weekday = Calendar.newYork.component(.weekday, from: holiday.date)
         return ParkingDay.from(weekday: weekday)
     }
 
@@ -95,15 +95,14 @@ private struct HolidayRow: View {
     }
 
     private var daysUntil: Int {
-        let cal = Calendar.current
+        let cal = Calendar.newYork
         return cal.dateComponents([.day],
             from: cal.startOfDay(for: AppClock.now),
             to: cal.startOfDay(for: holiday.date)).day ?? 0
     }
 
     private var dateString: String {
-        let df = DateFormatter()
-        df.dateFormat = "EEEE, MMMM d, yyyy"
+        let df = DateFormatter.newYork("EEEE, MMMM d, yyyy")
         return df.string(from: holiday.date)
     }
 }
