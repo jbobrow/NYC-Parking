@@ -22,8 +22,9 @@ final class MapController {
     static let nycRegion = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 40.7580, longitude: -73.9855),
                                               latitudinalMeters: 600, longitudinalMeters: 600)
 
-    /// The city from outside it: most of Manhattan, Harlem to SoHo, with Astoria,
-    /// Long Island City, Greenpoint and Williamsburg across the East River.
+    /// The city from outside it, or with location off: most of Manhattan, Harlem
+    /// to SoHo, with Astoria, Long Island City, Greenpoint and Williamsburg
+    /// across the East River.
     static let cityRegion = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 40.7550, longitude: -73.9650),
                                                latitudinalMeters: 15_500, longitudinalMeters: 7_600)
 

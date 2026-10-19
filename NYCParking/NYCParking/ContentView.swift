@@ -428,6 +428,13 @@ struct ContentView: View {
         .onChange(of: dataService.index != nil) {
             if let loc = locationManager.location { follow(loc) }
         }
+        // With location off, show the city, as from outside it. Turning it
+        // back on still goes to the first fix.
+        .onChange(of: locationManager.authorizationStatus) { _, status in
+            if (status == .denied || status == .restricted) && !hasSnappedToUserLocation {
+                mapController.setRegion(MapController.cityRegion)
+            }
+        }
         .task(id: mapRefreshID) {
             // Countdowns shift at midnight and as restrictions end, so a few
             // minutes' staleness is fine; meters flip on the hour, and a day
