@@ -222,10 +222,10 @@ private struct RealMapArt<Fallback: View>: View {
         let options = MKMapSnapshotter.Options()
         options.region = Self.region
         options.size = Self.size
-        options.traitCollection = UITraitCollection(traitsFrom: [
-            UITraitCollection(userInterfaceStyle: .dark),
-            UITraitCollection(displayScale: UIScreen.main.scale),
-        ])
+        options.traitCollection = UITraitCollection { traits in
+            traits.userInterfaceStyle = .dark
+            traits.displayScale = UIScreen.main.scale
+        }
         options.pointOfInterestFilter = .excludingAll
         do {
             let snapshot = try await MKMapSnapshotter(options: options).start()
