@@ -212,5 +212,7 @@ extension MeterProfile.Tier {
 /// Paying is left to NYC's ParkNYC app; there's no supported deep link that
 /// fills in a zone, so the app copies the zone number before opening it.
 enum ParkNYC {
-    static let url = URL(string: "https://www.parknyc.org")!
+    /// ParkNYC's web pay site. The app (us.parkmobile.nycdot) claims it as a
+    /// universal link, so this opens the app when installed and the site when not.
+    static let url = URL(string: "https://my.nyc.flowbirdapp.com")!
 }

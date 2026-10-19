@@ -47,8 +47,8 @@ struct ParkingDetailSheet: View {
         let isCommercialVehicle: Bool?
     }
     /// The sheet rests at two heights that fit its content: collapsed (header,
-    /// verdict, toggle) and expanded (every posted rule), with the park button
-    /// and footnote pinned below either way.
+    /// verdict, toggle) and expanded (every posted rule), with the pay and park
+    /// buttons and footnote pinned below either way.
     @State private var summaryHeight: CGFloat = 0
     @State private var fullHeight: CGFloat = 0
     @State private var bottomHeight: CGFloat = 0
@@ -139,6 +139,13 @@ struct ParkingDetailSheet: View {
             .scrollDisabled(!showsDetails)   // a drag while collapsed moves the sheet
 
             VStack(spacing: 0) {
+                // Pinned with the park button, so paying never needs the rules open.
+                if let meter = segment.meter {
+                    PayWithParkNYCButton(zone: meter.zone)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                }
+
                 Button {
                     if hasSeveralCars {
                         showCarPicker = true
@@ -167,6 +174,9 @@ struct ParkingDetailSheet: View {
                     .padding(.bottom, 12)
             }
             .padding(.top, 24)
+            // Never squeezed, even at the placeholder height before the sheet
+            // has measured itself: a squeezed footnote would be measured short.
+            .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bottomHeight = $0 }
         }
         .presentationDetents([collapsedDetent, expandedDetent], selection: Binding(
@@ -574,15 +584,12 @@ private struct SectionTitle: View {
 }
 
 /// A metered curb: what the meters mean right now, the posted limit, hours and
-/// rate, and a hand-off to ParkNYC to pay.
+/// rate. Paying is the pinned `PayWithParkNYCButton`.
 private struct MeterSection: View {
     let meter: MeterInfo
     let holidays: [NamedHoliday]
     /// The curb's rules, to skip a status the verdict above already gives.
     let moveWindows: [CurbWindow]
-
-    @Environment(\.openURL) private var openURL
-    @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -605,28 +612,7 @@ private struct MeterSection: View {
                     }
                 }
             }
-
-            payButton
         }
-    }
-
-    private var payButton: some View {
-        Button(action: pay) {
-            HStack {
-                Label("Pay with ParkNYC", systemImage: "arrow.up.forward.app")
-                    .font(.system(size: 15, weight: .semibold))
-                Spacer()
-                Text(copied ? "Zone copied" : "Zone \(meter.zone)")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .contentTransition(.opacity)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Copies zone \(meter.zone) and opens ParkNYC")
     }
 
     /// "Paid now · until 7 PM", "Meters off today · Christmas Day · free until Mon 9 AM"
@@ -691,10 +677,38 @@ private struct MeterSection: View {
         }
     }
 
+}
+
+/// Hands off to ParkNYC to pay, with the curb's zone copied for pasting there.
+private struct PayWithParkNYCButton: View {
+    let zone: String
+
+    @Environment(\.openURL) private var openURL
+    @State private var copied = false
+
+    var body: some View {
+        Button(action: pay) {
+            HStack {
+                Label("Pay with ParkNYC", systemImage: "arrow.up.forward.app")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer()
+                Text(copied ? "Zone copied" : "Zone \(zone)")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.opacity)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Copies zone \(zone) and opens ParkNYC")
+    }
+
     /// There's no supported ParkNYC link that fills in a zone, so copy it for
     /// pasting there. Opening it leaves this sheet as it was.
     private func pay() {
-        UIPasteboard.general.string = meter.zone
+        UIPasteboard.general.string = zone
         withAnimation { copied = true }
         openURL(ParkNYC.url)
     }
