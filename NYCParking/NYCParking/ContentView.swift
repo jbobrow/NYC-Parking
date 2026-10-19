@@ -135,7 +135,7 @@ struct ContentView: View {
                         }
                         if isOutsideCoverage && !isStagingScreenshot {
                             CoverageBanner(onShowNYC: isMapOnNYC ? nil : {
-                                mapController.setRegion(MapController.nycRegion)
+                                mapController.setRegion(MapController.cityRegion)
                             })
                             .transition(.opacity.combined(with: .move(edge: .top)))
                         }
@@ -564,14 +564,17 @@ struct ContentView: View {
     }
 
     /// The first fix in NYC moves the map there, and then it follows. Outside
-    /// the area the data covers, the map stays on NYC, and following stops
-    /// on driving out of it. Waits for the data to know which.
+    /// the area the data covers, the map pulls back to show the city, and
+    /// following stops on driving out of it. Waits for the data to know which.
     private func follow(_ loc: CLLocation) {
         guard let index = dataService.index else { return }
         let isCovered = index.covers(loc.coordinate)
         if !hasSnappedToUserLocation {
             hasSnappedToUserLocation = true
-            guard isCovered else { return }
+            guard isCovered else {
+                mapController.setRegion(MapController.cityRegion)
+                return
+            }
             isFollowingUser = true
             mapController.setRegion(center: loc.coordinate, meters: 600)
         } else if isFollowingUser && !isDrivingMode {
