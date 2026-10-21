@@ -46,6 +46,9 @@ struct ContentView: View {
     /// once whether to set the repark alarm.
     @State private var doubleParkOffer: DoubleParkOffer?
     @AppStorage(DoubleParking.leadMinutesKey) private var reparkLeadMinutes = DoubleParking.defaultLeadMinutes
+    /// The car just parked from a block's sheet: once that sheet has closed,
+    /// a moment to maybe ask for a review.
+    @State private var justParkedCarID: UUID?
     /// Which view the map shows; remembered across launches.
     @AppStorage(MapDisplayMode.storageKey) private var displayMode: MapDisplayMode = .countdown
     /// Day parking's stay: when it starts (nil: now, so a fresh launch plans
@@ -329,7 +332,7 @@ struct ContentView: View {
                 .presentationBackground(.regularMaterial)
                 .presentationDragIndicator(.hidden)
         }
-        .sheet(item: $selectedSegment) { segment in
+        .sheet(item: $selectedSegment, onDismiss: requestReviewAfterParking) { segment in
             ParkingDetailSheet(
                 segment: segment,
                 holidays: holidayService.holidays,
@@ -471,9 +474,11 @@ struct ContentView: View {
                presenting: doubleParkOffer) { offer in
             Button(NotificationService.reparkUsesAlarm ? "Set Alarm" : "Remind Me") {
                 guard let street = garage[offer.carID]?.parked?.street else { return }
-                Task {
-                    _ = await NotificationService.scheduleRepark(for: offer.carID, cleaningEnds: offer.end,
-                                                                 leadMinutes: reparkLeadMinutes, street: street)
+                Task { @MainActor in
+                    if await NotificationService.scheduleRepark(for: offer.carID, cleaningEnds: offer.end,
+                                                                leadMinutes: reparkLeadMinutes, street: street) {
+                        ReviewPrompter.shared.recordSignificantEvent()
+                    }
                 }
             }
             Button("Not Now", role: .cancel) { }
@@ -504,6 +509,7 @@ struct ContentView: View {
             WhatsNewView(whatsNew: whatsNew) { self.whatsNew = nil }
         }
         .onChange(of: driveDetector.isLikelyDriving) { _, driving in
+            if driving { ReviewPrompter.shared.cancelPendingRequest() }
             if driving, !isDrivingMode, !isOutsideCoverage, Date() >= drivePromptSnoozedUntil {
                 showDrivePrompt = true
             } else if !driving {
@@ -513,6 +519,7 @@ struct ContentView: View {
         .onChange(of: isDrivingMode) { _, driving in
             if driving {
                 showDrivePrompt = false
+                ReviewPrompter.shared.cancelPendingRequest()
                 locationManager.startNavigationMode()
             } else {
                 locationManager.stopNavigationMode()
@@ -674,6 +681,7 @@ struct ContentView: View {
                   !DoubleParking.isReminderSet(car.reparkOfferedCleaningEnds, forCleaningEnding: cleaning.end)
             else { continue }
             garage.update(car.id) { $0.reparkOfferedCleaningEnds = cleaning.end.timeIntervalSince1970 }
+            ReviewPrompter.shared.cancelPendingRequest()
             doubleParkOffer = DoubleParkOffer(carID: car.id, start: cleaning.start, end: cleaning.end)
             return
         }
@@ -730,6 +738,23 @@ struct ContentView: View {
             $0.reparkOfferedCleaningEnds = nil
         }
         scheduleNotifications(for: id)
+        ReviewPrompter.shared.recordSignificantEvent()
+        justParkedCarID = id
+    }
+
+    /// Back on the map after parking: if the car's legally parked, with no
+    /// rule in effect and no cleaning about to start, and you're not driving,
+    /// maybe ask for a review.
+    private func requestReviewAfterParking() {
+        guard let id = justParkedCarID else { return }
+        justParkedCarID = nil
+        guard !isStagingScreenshot, !isDrivingMode, !showDrivePrompt, !driveDetector.isLikelyDriving,
+              let record = garage[id]?.parked else { return }
+        let now = AppClock.now, holidays = holidayService.holidays
+        guard record.restrictionInEffect(at: now, holidays: holidays) == nil else { return }
+        if let cleaning = record.cleaning(around: now, holidays: holidays),
+           DoubleParking.isOffered(for: cleaning, at: now) { return }
+        ReviewPrompter.shared.requestReviewIfAppropriate()
     }
 
     private func unpark(_ id: UUID) {
