@@ -8,8 +8,11 @@ Usage
 
 Run after scripts/build_segments.py. Also writes docs/data/holidays.json, the
 official NYC DOT alternate-side parking holiday calendar for this year and next,
-since browsers can't fetch it from nyc.gov directly (no CORS). Re-run when NYC
-publishes the next year's calendar.
+since browsers can't fetch it from nyc.gov directly (no CORS). The app reads
+it too, as a fallback when nyc.gov fails. A weekly GitHub Action
+(.github/workflows/holidays.yml) runs `--holidays-only` to pick up next year's
+calendar once NYC publishes it; if DOT ever moves the file, update ICS_URL
+here (or edit holidays.json by hand) and the app follows, no update needed.
 
 Block output format (docs/data/blocks.json):
 
@@ -41,27 +44,62 @@ import urllib.request
 ICS_URL = "https://www.nyc.gov/html/dot/downloads/misc/{year}-alternate-side.ics"
 
 
-def fetch_holidays():
-    """[{"date": "2026-10-03", "name": "Shemini Atzereth"}, ...] for this year and next."""
+def fetch_holidays(existing=()):
+    """[{"date": "2026-10-03", "name": "Shemini Atzereth", "meters": false}, ...]
+    for this year and next. "meters" is whether parking meters are suspended
+    too. A year that can't be fetched (next year, until DOT publishes it) keeps
+    its entries from `existing`, so a failed fetch never drops a calendar."""
     year = datetime.date.today().year
-    holidays = []
+    by_year = {}
+    for h in existing:
+        by_year.setdefault(int(h["date"][:4]), []).append(h)
+    by_year = {y: hs for y, hs in by_year.items() if y >= year}
     for y in (year, year + 1):
         req = urllib.request.Request(ICS_URL.format(year=y),
                                      headers={"User-Agent": "Mozilla/5.0 (NYC Parking site build)"})
         try:
             with urllib.request.urlopen(req, timeout=30) as r:
                 text = r.read().decode("utf-8", "replace")
-        except urllib.error.HTTPError:
+        except (urllib.error.URLError, TimeoutError):
             continue   # next year's calendar may not be published yet
         text = re.sub(r"\r?\n[ \t]", "", text)   # unfold continuation lines
+        holidays = []
         for event in text.split("BEGIN:VEVENT")[1:]:
             start = re.search(r"^DTSTART[^:]*:(\d{8})", event, re.M)
-            desc = re.search(r"^DESCRIPTION:(.*)$", event, re.M)
-            name = re.search(r"suspended for (.*?)(?:\.|$)", desc.group(1).replace("\\,", ","), re.I) if desc else None
-            if start and name:
+            desc = re.search(r"^DESCRIPTION[^:]*:(.*)$", event, re.M)
+            desc = desc.group(1).replace("\\,", ",") if desc else ""
+            name = re.search(r"suspended for (.*?)(?:\.|$)", desc, re.I)
+            if start and name and start.group(1).startswith(str(y)):
                 d = start.group(1)
-                holidays.append({"date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "name": name.group(1).strip()})
-    return sorted(holidays, key=lambda h: h["date"])
+                holiday = {"date": f"{d[:4]}-{d[4:6]}-{d[6:]}", "name": name.group(1).strip()}
+                if re.search(r"meters will not be in effect", desc, re.I):
+                    holiday["meters"] = True
+                elif re.search(r"meters will be in effect", desc, re.I):
+                    holiday["meters"] = False
+                holidays.append(holiday)
+        # DOT lists 30-some days a year; fewer means an error page, not the calendar.
+        if len(holidays) >= 10:
+            by_year[y] = holidays
+        else:
+            print(f"{ICS_URL.format(year=y)}: {len(holidays)} holidays, kept the old list")
+    return sorted((h for hs in by_year.values() for h in hs), key=lambda h: h["date"])
+
+
+def write_holidays(path):
+    try:
+        with open(path) as f:
+            existing = json.load(f)
+    except (OSError, ValueError):
+        existing = []
+    holidays = fetch_holidays(existing)
+    if holidays and holidays != existing:
+        with open(path, "w") as f:
+            json.dump(holidays, f, indent=1)
+            f.write("\n")
+        print(f"Wrote {path}: {len(holidays)} holidays "
+              f"({holidays[0]['date']} – {holidays[-1]['date']})")
+    else:
+        print(f"No new holidays; left {path} unchanged")
 
 
 def main():
@@ -69,7 +107,13 @@ def main():
     ap.add_argument("--db", default="NYCParking/NYCParking/segments.db")
     ap.add_argument("--out", default="docs/data/blocks.json")
     ap.add_argument("--holidays-out", default="docs/data/holidays.json")
+    ap.add_argument("--holidays-only", action="store_true",
+                    help="only refresh the holiday calendar (as .github/workflows/holidays.yml does)")
     args = ap.parse_args()
+
+    if args.holidays_only:
+        write_holidays(args.holidays_out)
+        return
 
     conn = sqlite3.connect(args.db)
     names, name_index = [], {}
@@ -140,14 +184,7 @@ def main():
           f"{len(rule_sets)} rule sets, {len(meters)} meter profiles, "
           f"{len(restriction_sets)} restriction sets, {os.path.getsize(args.out) / 1_048_576:.1f} MB")
 
-    holidays = fetch_holidays()
-    if holidays:
-        with open(args.holidays_out, "w") as f:
-            json.dump(holidays, f, indent=1)
-        print(f"Wrote {args.holidays_out}: {len(holidays)} holidays "
-              f"({holidays[0]['date']} – {holidays[-1]['date']})")
-    else:
-        print("Could not fetch the holiday calendar; left holidays.json unchanged")
+    write_holidays(args.holidays_out)
 
 
 if __name__ == "__main__":

@@ -33,11 +33,22 @@ struct HolidaySheet: View {
                         HolidayRow(holiday: holiday)
                         Divider().padding(.leading, 64)
                     }
+                    if let year = estimatedYear {
+                        Text("Estimated dates follow the usual rules until NYC DOT publishes its \(String(year)) calendar, and may leave out some religious holidays.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 12)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
         }
+    }
+
+    /// The first year shown from estimates, not DOT's calendar.
+    private var estimatedYear: Int? {
+        holidays.first(where: \.isEstimated).map { Calendar.newYork.component(.year, from: $0.date) }
     }
 }
 
@@ -67,7 +78,7 @@ private struct HolidayRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(holiday.name)
                     .font(.system(size: 15, weight: .medium))
-                Text(dateString)
+                Text(holiday.isEstimated ? "\(dateString) · Estimated" : dateString)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }

@@ -38,6 +38,8 @@ Parking restriction data comes from the [NYC Open Data alternate-side parking si
 
 Meter holidays come from the same DOT holiday calendar as ASP holidays: each entry says whether meters are in effect.
 
+The app checks for holiday calendars on launch and when it comes back to the foreground (every 6 hours at most), so next year's calendar arrives once DOT publishes it, no app update needed. A weekly GitHub Action (`.github/workflows/holidays.yml`) keeps `docs/data/holidays.json` current from DOT too; if DOT ever moves its file, fixing `ICS_URL` in `scripts/build_web_data.py` (or editing that JSON by hand) fixes the app.
+
 No-standing and no-stopping signs limited to set hours (rush hour, school days, overnight) are parsed and snapped the same way. "Anytime" signs, bus stops and fire zones mark a stretch of curb whose reach isn't in the data, so they're left to the posted signs. A rule signed only once on a longer block is flagged as covering part of it, shown on the block's sheet but not counted on the map. School days are read as Monday to Friday, since there's no school calendar to narrow them.
 
 ## Architecture
@@ -54,7 +56,7 @@ No-standing and no-stopping signs limited to set hours (rush hour, school days, 
 | `Meters` | Meter profiles, free/paid/commercial-only status at a moment, and the ParkNYC hand-off |
 | `DayParking` | A planned stay, each block's free / paid / commercial / no-parking verdict for it, and the planner |
 | `SignParser` | Parses raw NYC sign descriptions into structured `ParkingRule` objects |
-| `ASPHolidayService` | Fetches and caches the NYC ASP holiday calendar |
+| `ASPHolidayService` | The NYC ASP holiday calendar, this year and next: from DOT, else the website's copy (`docs/data/holidays.json`), else the last one saved, else estimated until DOT publishes |
 | `NewYorkTime` | The New York calendar and formatters rules are worked out and shown in (shared with the widget extension) |
 
 ## Scripts

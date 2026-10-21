@@ -7,10 +7,13 @@ struct NamedHoliday: Identifiable {
     /// Parking meters are off too. DOT's calendar says so for each holiday;
     /// otherwise it's the six major legal holidays.
     let metersSuspended: Bool
+    /// Worked out by NYCHolidayCalendar, not from DOT's published calendar.
+    let isEstimated: Bool
 
-    init(name: String, date: Date, metersSuspended: Bool? = nil) {
+    init(name: String, date: Date, metersSuspended: Bool? = nil, isEstimated: Bool = false) {
         self.name = name
         self.date = date
+        self.isEstimated = isEstimated
         self.metersSuspended = metersSuspended ?? Self.majorLegalHolidays.contains { name.hasPrefix($0) }
     }
 
@@ -56,7 +59,7 @@ enum NYCHolidayCalendar {
 
         func add(_ name: String, _ date: Date?) {
             guard let d = date else { return }
-            holidays.append(NamedHoliday(name: name, date: d))
+            holidays.append(NamedHoliday(name: name, date: d, isEstimated: true))
         }
 
         // Fixed-date holidays — shift to Monday if Sunday, Friday if Saturday

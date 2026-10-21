@@ -484,6 +484,7 @@ struct ContentView: View {
             phase == .active && !showOnboarding ? driveDetector.start() : driveDetector.stop()
             if phase == .active {
                 Task { await NotificationService.restoreReparkAlarmsIfNeeded() }
+                holidayService.refreshIfStale()
             }
         }
         .fullScreenCover(isPresented: $showOnboarding) {
