@@ -218,8 +218,9 @@ struct MoveCountdown: Hashable, Sendable {
     }
 }
 
-/// Countdowns for every block face at one moment. Immutable, so the map can
-/// compare snapshots by identity and only redraw when one actually changes.
+/// Countdowns for every block face, and each of its zones (`CurbZone.key`), at
+/// one moment. Immutable, so the map can compare snapshots by identity and only
+/// redraw when one actually changes.
 final class CountdownSnapshot: @unchecked Sendable {
     let entries: [String: MoveCountdown]
 
@@ -230,6 +231,9 @@ final class CountdownSnapshot: @unchecked Sendable {
         entries.reserveCapacity(segments.count)
         for seg in segments {
             if let c = MoveCountdown.next(for: seg.moveWindows, in: calendar) { entries[seg.id] = c }
+            for (i, zone) in seg.zones.enumerated() {
+                if let c = MoveCountdown.next(for: zone.moveWindows, in: calendar) { entries[CurbZone.key(seg.id, i)] = c }
+            }
         }
         return CountdownSnapshot(entries: entries)
     }

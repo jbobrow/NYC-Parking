@@ -325,8 +325,9 @@ struct ParkingDetailSheet: View {
 
     /// Asks whether it's a commercial vehicle where that matters, then parks.
     private func continuePark() {
-        if segment.meter?.profile.commercial != nil {
-            // Commercial hours mean pay for some cars, move for others.
+        if segment.meter?.profile.commercial != nil || loadingZone != nil {
+            // Commercial hours mean pay for some cars, move for others; truck
+            // loading hours, stay for some, move for others.
             showVehicleQuestion = true
         } else {
             attemptPark(isCommercialVehicle: nil)
@@ -357,16 +358,30 @@ struct ParkingDetailSheet: View {
         }
     }
 
-    /// "Only commercial vehicles can park here until 2 PM." / "…Mon–Fri 7 AM–2 PM."
+    /// A truck loading zone covering the block.
+    private var loadingZone: CurbRestriction? {
+        segment.restrictions.first { $0.kind == .loading && !$0.partOfBlock }
+    }
+
+    /// "Only commercial vehicles can park here until 2 PM." / "…Mon–Fri 7 AM–2 PM.",
+    /// or "Only trucks loading and unloading can stand here until 7 PM."
     private var commercialMessage: String {
-        guard let profile = segment.meter?.profile, let tier = profile.commercial else { return "" }
-        let when: String
-        if case .commercialOnly(let until) = profile.state(in: CountdownCalendar(holidays: holidays)) {
-            when = "until \(ParkingTime.format(minutes: until % (24 * 60)))"
-        } else {
-            when = tier.compactHours
+        let cal = CountdownCalendar(holidays: holidays)
+        if let profile = segment.meter?.profile, let tier = profile.commercial {
+            let when: String
+            if case .commercialOnly(let until) = profile.state(in: cal) {
+                when = "until \(ParkingTime.format(minutes: until % (24 * 60)))"
+            } else {
+                when = tier.compactHours
+            }
+            return "Only commercial vehicles can park here \(when).\(movesHereNote)"
         }
-        return "Only commercial vehicles can park here \(when).\(movesHereNote)"
+        guard let zone = loadingZone else { return "" }
+        let now = MoveCountdown.next(for: segment.moveWindows.filter { $0.kind == .loading }, in: cal)
+        let when = now.flatMap { c in
+            c.isUnderway ? c.endMinutes.map { "until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } : nil
+        } ?? zone.hoursText
+        return "Only trucks loading and unloading can stand here \(when).\(movesHereNote)"
     }
 
     /// "Street cleaning · No standing · Meter" · Show / Hide
@@ -464,10 +479,13 @@ private struct VerdictRow: View {
     let trip: DayParkingTrip?
 
     var body: some View {
-        if let trip, let verdict = segment.dayParkingVerdict(minutes: trip.minutes,
-                                                             in: trip.calendar(holidays: holidays)) {
+        let tripCal = trip?.calendar(holidays: holidays)
+        if let trip, let tripCal, let verdict = segment.dayParkingVerdict(minutes: trip.minutes, in: tripCal) {
+            let canPark = if case .noParking = verdict { false } else { true }
             row(color: verdict.kind.color, title: Self.title(verdict, trip),
-                detail: (trip.start == nil ? "" : "From \(trip.startText) · ") + verdict.sentence)
+                detail: (trip.start == nil ? "" : "From \(trip.startText) · ") + verdict.sentence,
+                partOfBlock: canPark ? segment.partOfBlockRule(in: tripCal,
+                                                               before: tripCal.minuteOfDay + trip.minutes) : nil)
         } else {
             nowRow
         }
@@ -477,12 +495,17 @@ private struct VerdictRow: View {
         switch v.kind {
         case .free:           return "Free for \(trip.durationText)"
         case .paid:           return "Paid parking for \(trip.durationText)"
-        case .commercialOnly: return "Commercial vehicles only"
+        case .commercialOnly:
+            if case .noParking(.rule(.loading), _, _, _) = v { return "Truck loading only" }
+            return "Commercial vehicles only"
         case .noParking:      return "No parking for \(trip.durationText)"
         }
     }
 
-    private func row(color: Color, title: String, detail: String?) -> some View {
+    /// `partOfBlock`: a rule on part of the block that the title doesn't count,
+    /// in its own color so it isn't missed.
+    private func row(color: Color, title: String, detail: String?,
+                     partOfBlock: (rule: CurbRestriction, when: MoveCountdown)? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle()
                 .fill(color)
@@ -495,24 +518,58 @@ private struct VerdictRow: View {
                         .font(.system(size: 15))
                         .foregroundStyle(.secondary)
                 }
+                if let partOfBlock {
+                    Text(partOfBlockText(partOfBlock.rule, partOfBlock.when))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(partOfBlock.rule.kind == .loading ? MeterState.Kind.commercialOnly.color
+                                                                           : MoveUrgency(days: 0).color)
+                        .padding(.top, 2)
+                }
             }
         }
         .accessibilityElement(children: .combine)
     }
 
     private var nowRow: some View {
-        let countdown = MoveCountdown.next(for: segment.moveWindows,
-                                           in: CountdownCalendar(holidays: holidays))
+        let cal = CountdownCalendar(holidays: holidays)
+        let countdown = MoveCountdown.next(for: segment.moveWindows, in: cal)
         let (title, detail) = texts(countdown)
-        return row(color: dotColor(countdown), title: title, detail: detail)
+        let cantPark = countdown.map { $0.isUnderway && !$0.kind.isMeter } ?? false
+        // Before "Free until …" runs out, or any time this week.
+        let deadline = countdown.map { $0.days * 24 * 60 + $0.startMinutes } ?? 8 * 24 * 60
+        return row(color: dotColor(countdown), title: title, detail: detail,
+                   partOfBlock: cantPark ? nil : segment.partOfBlockRule(in: cal, before: deadline))
+    }
+
+    /// "Truck loading at the Greenwich Street end until 7 PM", "No standing on
+    /// part of the block from Thu 7 AM".
+    private func partOfBlockText(_ rule: CurbRestriction, _ c: MoveCountdown) -> String {
+        let what = switch c.kind {
+        case .loading:    "Truck loading"
+        case .noStopping: "No stopping"
+        default:          "No standing"
+        }
+        let when: String
+        if c.isUnderway {
+            when = c.endMinutes.map { "until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "now"
+        } else {
+            let time = ParkingTime.format(minutes: c.startMinutes)
+            let day = switch c.days {
+            case 0:  ""
+            case 1:  "tomorrow "
+            default: "\(c.weekday.short.capitalized) "
+            }
+            when = "from \(day)\(time)"
+        }
+        return "\(what) \(segment.whereText(rule)) \(when)"
     }
 
     /// Meter colors while the meter or commercial hours apply, as in the Meters
     /// view, so red only ever means no one can park; the countdown's otherwise.
     private func dotColor(_ c: MoveCountdown?) -> Color {
         switch c {
-        case let c? where c.isUnderway && c.kind == .meter:      return MeterState.Kind.paid.color
-        case let c? where c.isUnderway && c.kind == .commercial: return MeterState.Kind.commercialOnly.color
+        case let c? where c.isUnderway && c.kind == .meter:         return MeterState.Kind.paid.color
+        case let c? where c.isUnderway && c.kind.isCommercialOnly: return MeterState.Kind.commercialOnly.color
         default: return MoveUrgency(days: c?.days).color
         }
     }
@@ -527,6 +584,7 @@ private struct VerdictRow: View {
             case .noStanding: return ("No standing" + until, "You can stop to drop off or pick up passengers.")
             case .noStopping: return ("No stopping" + until, nil)
             case .commercial: return ("Commercial vehicles only" + until, nil)
+            case .loading:    return ("Truck loading only" + until, "You can stop to drop off or pick up passengers.")
             case .meter:      return ("Paid parking" + until, nil)
             }
         }
@@ -541,22 +599,24 @@ private struct VerdictRow: View {
         case .noStanding: "no standing"
         case .noStopping: "no stopping"
         case .commercial: "commercial vehicles only"
+        case .loading:    "truck loading only"
         case .meter:      "meters"
         }
         return ("Free until \(when)", "Then \(then)")
     }
 }
 
-/// Rush-hour, school and overnight no-standing / no-stopping rules.
+/// Rush-hour, school and overnight no-standing / no-stopping rules, and truck
+/// loading zones.
 private struct RestrictionsSection: View {
     let restrictions: [CurbRestriction]
 
     var body: some View {
         let kinds = Set(restrictions.map(\.kind))
         VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(text: kinds.count > 1 ? "No standing or stopping"
-                                               : restrictions[0].title,
-                         systemImage: "exclamationmark.octagon")
+            SectionTitle(text: kinds.count == 1 ? restrictions[0].title
+                             : kinds.contains(.loading) ? "Standing and loading" : "No standing or stopping",
+                         systemImage: kinds == [.loading] ? "box.truck" : "exclamationmark.octagon")
             ForEach(restrictions, id: \.self) { r in
                 VStack(alignment: .leading, spacing: 3) {
                     Text((kinds.count > 1 ? "\(r.title) · " : "") + r.hoursText)

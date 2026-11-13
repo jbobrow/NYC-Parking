@@ -81,13 +81,15 @@ enum DayParkingVerdict: Hashable, Sendable {
         case meterLimit(minutes: Int)
     }
 
-    /// The Meters colors and legend: commercial-only hours in their own color.
+    /// The Meters colors and legend: commercial-only and truck loading hours
+    /// in their own color.
     var kind: MeterState.Kind {
         switch self {
-        case .free:                                  return .free
-        case .paid:                                  return .paid
-        case .noParking(.rule(.commercial), _, _, _): return .commercialOnly
-        case .noParking:                             return .noParking
+        case .free:      return .free
+        case .paid:      return .paid
+        case .noParking(.rule(let rule), _, _, _):
+            return rule.isCommercialOnly ? .commercialOnly : .noParking
+        case .noParking: return .noParking
         }
     }
 
@@ -108,6 +110,7 @@ enum DayParkingVerdict: Hashable, Sendable {
             case .noStanding: what = "No standing"
             case .noStopping: what = "No stopping"
             case .commercial: what = "Commercial vehicles only"
+            case .loading:    what = "Truck loading only"
             case .meter:      what = "Paid parking"
             }
             return "\(what) \(Self.whenText(start: start, end: end, isUnderway: isUnderway))"
@@ -127,8 +130,11 @@ enum DayParkingVerdict: Hashable, Sendable {
 extension ParkingSegment {
     /// What this block means for a stay of `minutes` starting at `cal`'s
     /// moment, as a passenger car. Nil for blocks without rules, which the
-    /// map leaves to the posted signs.
-    func dayParkingVerdict(minutes: Int, in cal: CountdownCalendar) -> DayParkingVerdict? {
+    /// map leaves to the posted signs. `windows`: in place of the block's
+    /// own, for one of its zones.
+    func dayParkingVerdict(minutes: Int, in cal: CountdownCalendar,
+                           windows: [CurbWindow]? = nil) -> DayParkingVerdict? {
+        let moveWindows = windows ?? moveWindows
         guard !moveWindows.isEmpty else { return nil }
         let dayMinutes = 24 * 60
         let a = cal.minuteOfDay, b = a + minutes
@@ -151,13 +157,13 @@ extension ParkingSegment {
                             minutes: m - offset * dayMinutes)
         }
 
-        // Cleaning, no standing or no stopping, then commercial-only hours:
-        // the soonest of them (strictest when they start together).
+        // Cleaning, no standing or no stopping, then commercial-only and truck
+        // loading hours: the soonest of them (strictest when they start together).
         let during = spans.filter { !$0.kind.isMeter && $0.start < b && $0.end > a }
         let soonest = { (spans: [Span]) in
             spans.min { ($0.start, -$0.kind.strictness) < ($1.start, -$1.kind.strictness) }
         }
-        if let rule = soonest(during.filter { $0.kind != .commercial }) ?? soonest(during) {
+        if let rule = soonest(during.filter { !$0.kind.isCommercialOnly }) ?? soonest(during) {
             return .noParking(.rule(rule.kind), start: time(rule.start), end: time(rule.end),
                               isUnderway: rule.start <= a)
         }
@@ -199,6 +205,11 @@ final class DayParkingSnapshot: @unchecked Sendable {
         entries.reserveCapacity(segments.count)
         for seg in segments {
             if let v = seg.dayParkingVerdict(minutes: minutes, in: calendar) { entries[seg.id] = v }
+            for (i, zone) in seg.zones.enumerated() {
+                if let v = seg.dayParkingVerdict(minutes: minutes, in: calendar, windows: zone.moveWindows) {
+                    entries[CurbZone.key(seg.id, i)] = v
+                }
+            }
         }
         return DayParkingSnapshot(entries: entries)
     }
@@ -207,7 +218,7 @@ final class DayParkingSnapshot: @unchecked Sendable {
 // MARK: - Pills
 
 /// Day parking pill text, as the meters put it: "FREE", the meter's
-/// "$2 · 2 HR", "COMMERCIAL" or "NO PARKING" ("2 HR MAX" for a stay longer
+/// "$2 · 2 HR", "COMMERCIAL", "LOADING" or "NO PARKING" ("2 HR MAX" for a stay longer
 /// than the meter allows), with what and when at the closest zoom. A neutral
 /// "…" until the verdict is known.
 struct DayParkingPill: Hashable {
@@ -233,13 +244,17 @@ struct DayParkingPill: Hashable {
             title = "\(DayParkingTrip.durationText(limit).uppercased()) MAX"
             detail = "move by \(start.text)"
         case .noParking(.rule(let rule), let start, let end, let isUnderway):
-            title = rule == .commercial ? "COMMERCIAL" : "NO PARKING"
+            title = switch rule {
+            case .commercial: "COMMERCIAL"
+            case .loading:    "LOADING"
+            default:          "NO PARKING"
+            }
             let what: String
             switch rule {
             case .cleaning:   what = "cleaning "
             case .noStanding: what = "no standing "
             case .noStopping: what = "no stopping "
-            case .commercial, .meter: what = ""
+            case .commercial, .loading, .meter: what = ""
             }
             detail = what + DayParkingVerdict.whenText(start: start, end: end, isUnderway: isUnderway)
         }

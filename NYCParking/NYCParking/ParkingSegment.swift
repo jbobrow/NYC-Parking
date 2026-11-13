@@ -20,13 +20,17 @@ struct ParkingSegment: Identifiable, Hashable {
     let rules: [ParkingRule]
     /// Set on metered curbs.
     let meter: MeterInfo?
-    /// Posted no-standing / no-stopping rules limited to set hours.
+    /// Posted no-standing / no-stopping rules and truck loading zones limited
+    /// to set hours.
     let restrictions: [CurbRestriction]
     /// Every time the curb's rules say move or pay (see `moveWindows`).
     let moveWindows: [CurbWindow]
     /// The curb line down the middle of the parking lane, trimmed back from each
     /// intersection (built offline from the NYC street centerline).
     let curve: [CLLocationCoordinate2D]
+    /// Short zones on part of the curb whose stretch is known, drawn over the
+    /// block on the map.
+    let zones: [CurbZone]
 
     static func == (lhs: ParkingSegment, rhs: ParkingSegment) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -125,5 +129,64 @@ final class SegmentIndex: @unchecked Sendable {
         let se = MKMapPoint(x: rect.maxX, y: rect.maxY).coordinate
         return segments(minLat: se.latitude, maxLat: nw.latitude,
                         minLon: nw.longitude, maxLon: se.longitude)
+    }
+}
+
+/// A stretch of curb where a rule on part of the block applies (a short
+/// truck loading or no-standing zone), from its sign the way the sign's arrow
+/// points. On the map it's drawn over the block, colored as a curb of its own
+/// with the block's rules and its own.
+struct CurbZone: Sendable {
+    let restriction: CurbRestriction
+    let curve: [CLLocationCoordinate2D]
+    /// The block's move windows plus the zone's own.
+    let moveWindows: [CurbWindow]
+
+    /// Its countdown and day parking entry, in the block's snapshots.
+    static func key(_ segmentID: String, _ index: Int) -> String { "\(segmentID)#\(index)" }
+
+    static func zones(restrictions: [CurbRestriction], moveWindows: [CurbWindow],
+                      curve: [CLLocationCoordinate2D]) -> [CurbZone] {
+        restrictions.filter(\.partOfBlock).flatMap { r in
+            let windows = moveWindows + r.windows.map { CurbWindow(kind: r.windowKind, window: $0) }
+            return r.stretches.map { range in
+                CurbZone(restriction: r, curve: subCurve(curve, range), moveWindows: windows)
+            }
+        }
+    }
+
+    /// The piece of `curve` between two fractions of its length.
+    private static func subCurve(_ curve: [CLLocationCoordinate2D],
+                                 _ range: ClosedRange<Double>) -> [CLLocationCoordinate2D] {
+        let (cumulative, total) = lengths(curve)
+        guard total > 0 else { return curve }
+        var piece = [point(curve, at: range.lowerBound)]
+        for i in 1..<(curve.count - 1) {
+            let f = cumulative[i] / total
+            if f > range.lowerBound && f < range.upperBound { piece.append(curve[i]) }
+        }
+        piece.append(point(curve, at: range.upperBound))
+        return piece
+    }
+
+    /// The point a fraction of the way along `curve`.
+    private static func point(_ curve: [CLLocationCoordinate2D], at f: Double) -> CLLocationCoordinate2D {
+        let (cumulative, total) = lengths(curve)
+        guard total > 0, curve.count >= 2 else { return curve.first ?? CLLocationCoordinate2D() }
+        let s = f * total
+        var i = 1
+        while i < cumulative.count - 1 && cumulative[i] < s { i += 1 }
+        let a = MKMapPoint(curve[i - 1]), b = MKMapPoint(curve[i])
+        let span = cumulative[i] - cumulative[i - 1]
+        let t = span > 0 ? (s - cumulative[i - 1]) / span : 0
+        return MKMapPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t).coordinate
+    }
+
+    private static func lengths(_ curve: [CLLocationCoordinate2D]) -> ([Double], Double) {
+        var cumulative = [0.0]
+        for (a, b) in zip(curve, curve.dropFirst()) {
+            cumulative.append(cumulative.last! + MKMapPoint(a).distance(to: MKMapPoint(b)))
+        }
+        return (cumulative, cumulative.last!)
     }
 }
