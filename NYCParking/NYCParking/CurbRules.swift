@@ -48,20 +48,40 @@ struct DayWindow: Hashable, Sendable, Codable {
 }
 
 /// A posted no-standing or no-stopping rule limited to set hours: rush hour,
-/// school days, overnight. "Anytime" zones (by corners, hydrants, bus stops)
-/// aren't in the data, so they're left to the posted signs.
+/// school days, overnight; or a truck loading zone, no standing for anyone but
+/// trucks loading. "Anytime" zones (by corners, hydrants, bus stops) aren't in
+/// the data, so they're left to the posted signs.
 struct CurbRestriction: Hashable, Sendable {
-    enum Kind: String, Sendable { case standing, stopping }
+    enum Kind: String, Sendable { case standing, stopping, loading }
 
     let kind: Kind
     let windows: [DayWindow]
     /// Posted for school days; read as Monday to Friday, since there's no
     /// school calendar to narrow it.
     let schoolDays: Bool
-    /// Signed only once on a longer block, so likely a short stretch of it.
+    /// Covers only a stretch of the block (its signs' arrows say so), or,
+    /// where they don't say, is signed only once on a longer block.
     let partOfBlock: Bool
+    /// Where along the curb a part-of-block rule applies, 0 at the curve's
+    /// start (`fromStreet`) to 1 at its end; empty when that isn't known.
+    let stretches: [ClosedRange<Double>]
 
-    var title: String { kind == .stopping ? "No stopping" : "No standing" }
+    var title: String {
+        switch kind {
+        case .standing: return "No standing"
+        case .stopping: return "No stopping"
+        case .loading:  return "Truck loading only"
+        }
+    }
+
+    /// What the rule means for a car at the curb.
+    var windowKind: CurbWindow.Kind {
+        switch kind {
+        case .standing: return .noStanding
+        case .stopping: return .noStopping
+        case .loading:  return .loading
+        }
+    }
 
     /// "Mon–Fri 7–10 AM, 4–7 PM", or "School days 7 AM–4 PM".
     var hoursText: String {
@@ -74,7 +94,7 @@ struct CurbRestriction: Hashable, Sendable {
 /// A time a car left at the curb has to move, or at a meter, pay.
 struct CurbWindow: Hashable, Sendable, Codable {
     enum Kind: String, Hashable, Sendable, Codable {
-        case cleaning, noStanding, noStopping, commercial, meter
+        case cleaning, noStanding, noStopping, commercial, loading, meter
 
         /// Which wins when two apply at once: the stricter rule.
         var strictness: Int {
@@ -82,28 +102,32 @@ struct CurbWindow: Hashable, Sendable, Codable {
             case .noStopping: return 4
             case .noStanding: return 3
             case .cleaning:   return 2
-            case .commercial: return 1
+            case .commercial, .loading: return 1
             case .meter:      return 0
             }
         }
 
         /// The meter can be paid rather than moving the car.
         var isMeter: Bool { self == .meter }
+
+        /// Only commercial vehicles may be here: commercial meter hours, or a
+        /// truck loading zone.
+        var isCommercialOnly: Bool { self == .commercial || self == .loading }
     }
 
     let kind: Kind
     let window: DayWindow
 
-    /// Cleaning stops on alternate-side holidays. Meters, and stopping and
-    /// standing rules, stop on the major legal holidays, except rules that run
-    /// every day of the week.
+    /// Cleaning stops on alternate-side holidays. Meters, and stopping,
+    /// standing and loading rules, stop on the major legal holidays, except
+    /// rules that run every day of the week.
     func isSuspended(on day: CountdownCalendar.Day) -> Bool {
         switch kind {
         case .cleaning:
             return day.isHoliday
         case .meter, .commercial:
             return day.metersOff
-        case .noStanding, .noStopping:
+        case .noStanding, .noStopping, .loading:
             return day.metersOff && window.dayMask & DayWindow.everyDay != DayWindow.everyDay
         }
     }
@@ -111,7 +135,7 @@ struct CurbWindow: Hashable, Sendable, Codable {
 
 extension ParkingSegment {
     /// Every time this curb's rules say move (or pay): cleaning, whole-block
-    /// standing and stopping rules, and meter hours.
+    /// standing, stopping and loading rules, and meter hours.
     static func moveWindows(rules: [ParkingRule], restrictions: [CurbRestriction],
                             meter: MeterInfo?) -> [CurbWindow] {
         var out: [CurbWindow] = []
@@ -123,7 +147,7 @@ extension ParkingSegment {
             out.append(CurbWindow(kind: .cleaning, window: DayWindow(dayMask: mask, start: start, end: end)))
         }
         for r in restrictions where !r.partOfBlock {
-            out += r.windows.map { CurbWindow(kind: r.kind == .stopping ? .noStopping : .noStanding, window: $0) }
+            out += r.windows.map { CurbWindow(kind: r.windowKind, window: $0) }
         }
         if let profile = meter?.profile {
             out += (profile.commercial?.windows ?? []).map { CurbWindow(kind: .commercial, window: $0) }
@@ -131,14 +155,45 @@ extension ParkingSegment {
         }
         return out
     }
+
+    /// The next rule on only part of the block (left out of `moveWindows`):
+    /// in effect now, or starting before `deadline` (minutes after the
+    /// calendar's midnight). In effect wins, then the soonest.
+    func partOfBlockRule(in cal: CountdownCalendar,
+                         before deadline: Int) -> (rule: CurbRestriction, when: MoveCountdown)? {
+        let order = { (c: MoveCountdown) in (c.isUnderway ? 0 : 1, c.days * 24 * 60 + c.startMinutes) }
+        return restrictions.filter(\.partOfBlock)
+            .compactMap { r in
+                MoveCountdown.next(for: r.windows.map { CurbWindow(kind: r.windowKind, window: $0) }, in: cal)
+                    .map { (rule: r, when: $0) }
+            }
+            .filter { $0.when.isUnderway || order($0.when).1 < deadline }
+            .min { order($0.when) < order($1.when) }
+    }
+
+    /// "at the Greenwich Street end", or "on part of the block" when the
+    /// rule's stretch isn't known or isn't at one end.
+    func whereText(_ rule: CurbRestriction) -> String {
+        let atStart = !rule.stretches.isEmpty && rule.stretches.allSatisfy { $0.lowerBound <= 0.02 }
+        let atEnd = !rule.stretches.isEmpty && rule.stretches.allSatisfy { $0.upperBound >= 0.98 }
+        let name = atStart != atEnd ? (atStart ? fromStreet : toStreet).localizedCapitalized : ""
+        return name.isEmpty ? "on part of the block" : "at the \(name) end"
+    }
 }
 
 extension Array where Element == CurbWindow {
     /// The windows as they apply to one car: for a commercial vehicle,
-    /// commercial-only hours are meter time to pay, not a time to move.
+    /// commercial-only hours are meter time to pay, not a time to move, and
+    /// truck loading hours are its to use.
     func forVehicle(isCommercial: Bool?) -> [CurbWindow] {
         guard isCommercial == true else { return self }
-        return map { $0.kind == .commercial ? CurbWindow(kind: .meter, window: $0.window) : $0 }
+        return compactMap {
+            switch $0.kind {
+            case .commercial: return CurbWindow(kind: .meter, window: $0.window)
+            case .loading:    return nil
+            default:          return $0
+            }
+        }
     }
 
     /// A rule in effect right now that means the car can't be here (anything
@@ -157,6 +212,7 @@ extension MoveCountdown {
         case .noStanding: what = "No standing"
         case .noStopping: what = "No stopping"
         case .commercial: what = "Commercial vehicles only"
+        case .loading:    what = "Truck loading only"
         case .meter:      what = "Paid parking"
         }
         return what + (endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "")

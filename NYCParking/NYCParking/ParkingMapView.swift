@@ -764,13 +764,34 @@ enum StripeBuilder {
             groups[Key(row: row, col: col, urgency: urgency), default: []]
                 .append(MKPolyline(coordinates: seg.curve, count: seg.curve.count))
         }
-        return groups
+        let blocks = groups
             .sorted { ($0.key.urgency?.level ?? -1) < ($1.key.urgency?.level ?? -1) }
             .map { key, lines in
                 let overlay = StripeOverlay(lines)
                 overlay.color = key.urgency?.uiColor ?? meteredCurbColor
                 return overlay
             }
+        return blocks + zoneOverlays(for: segments) { key in
+            entries[key].map { $0.kind.isMeter ? meteredCurbColor : $0.urgency.uiColor }
+        }
+    }
+
+    /// Short zones over their blocks, each colored as a curb of its own
+    /// (`color` by its `CurbZone.key`; nil leaves it out).
+    private static func zoneOverlays(for segments: [ParkingSegment],
+                                     color: (String) -> UIColor?) -> [StripeOverlay] {
+        var groups: [UIColor: [MKPolyline]] = [:]
+        for seg in segments {
+            for (i, zone) in seg.zones.enumerated() where zone.curve.count >= 2 {
+                guard let c = color(CurbZone.key(seg.id, i)) else { continue }
+                groups[c, default: []].append(MKPolyline(coordinates: zone.curve, count: zone.curve.count))
+            }
+        }
+        return groups.map { color, lines in
+            let overlay = StripeOverlay(lines)
+            overlay.color = color
+            return overlay
+        }
     }
 
     /// Metered curbs in the countdown view: the same blue as paid meters.
@@ -790,13 +811,14 @@ enum StripeBuilder {
             groups[Key(row: row, col: col, kind: kind), default: []]
                 .append(MKPolyline(coordinates: seg.curve, count: seg.curve.count))
         }
-        return groups
+        let blocks = groups
             .sorted { $0.key.kind.rawValue < $1.key.kind.rawValue }
             .map { key, lines in
                 let overlay = StripeOverlay(lines)
                 overlay.color = key.kind.uiColor
                 return overlay
             }
+        return blocks + zoneOverlays(for: segments) { entries[$0]?.kind.uiColor }
     }
 
     static func overlays(for segments: [ParkingSegment]) -> [StripeOverlay] {

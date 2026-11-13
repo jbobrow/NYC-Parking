@@ -23,6 +23,7 @@ struct MoveDeadline: Hashable {
         case .noStanding: return "No standing"
         case .noStopping: return "No stopping"
         case .commercial: return "Commercial-only parking"
+        case .loading:    return "Truck loading"
         case .meter:      return "Meters"
         }
     }

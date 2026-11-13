@@ -92,6 +92,7 @@ final class ParkingDatabase {
         guard !rules.isEmpty || meter != nil || !restrictions.isEmpty else { return nil }
         var curve = Self.parseGeometry(str(10))
         if curve.count < 2 { curve = [coord, coord] }
+        let moveWindows = ParkingSegment.moveWindows(rules: rules, restrictions: restrictions, meter: meter)
 
         return ParkingSegment(
             id: id, street: str(1), fromStreet: str(2), toStreet: str(3), side: str(4),
@@ -101,8 +102,9 @@ final class ParkingDatabase {
             rules: rules,
             meter: meter,
             restrictions: restrictions,
-            moveWindows: ParkingSegment.moveWindows(rules: rules, restrictions: restrictions, meter: meter),
-            curve: curve
+            moveWindows: moveWindows,
+            curve: curve,
+            zones: CurbZone.zones(restrictions: restrictions, moveWindows: moveWindows, curve: curve)
         )
     }
 
@@ -118,18 +120,22 @@ final class ParkingDatabase {
         }
     }
 
-    /// [["standing", [[day mask, start, end], ...], school days, part of block], ...]
+    /// [["standing", [[day mask, start, end], ...], school days, part of block,
+    ///   [[start, end], ...] along the curb (part of block only, when known)], ...]
     private static func parseRestrictions(_ json: String) -> [CurbRestriction] {
         guard !json.isEmpty, let data = json.data(using: .utf8),
               let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[Any]] else { return [] }
         return arr.compactMap { entry in
-            guard entry.count == 4,
+            guard entry.count >= 4,
                   let kind = (entry[0] as? String).flatMap(CurbRestriction.Kind.init(rawValue:)),
                   let raw = entry[1] as? [[Int]] else { return nil }
             let windows = raw.compactMap { w in w.count == 3 ? DayWindow(dayMask: w[0], start: w[1], end: w[2]) : nil }
             guard !windows.isEmpty else { return nil }
+            let stretches = (entry.count > 4 ? entry[4] as? [[Double]] : nil)?
+                .compactMap { $0.count == 2 && $0[0] < $0[1] ? $0[0]...$0[1] : nil } ?? []
             return CurbRestriction(kind: kind, windows: windows,
-                                   schoolDays: (entry[2] as? Int) == 1, partOfBlock: (entry[3] as? Int) == 1)
+                                   schoolDays: (entry[2] as? Int) == 1, partOfBlock: (entry[3] as? Int) == 1,
+                                   stretches: stretches)
         }
     }
 

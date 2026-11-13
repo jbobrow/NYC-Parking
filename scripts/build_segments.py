@@ -17,10 +17,10 @@ are grouped by (centerline segment, side of centerline). The curb polyline is th
 centerline offset by half the street width, trimmed back from each intersection
 by half the cross street's width.
 
-Metered curbs (from the ParkNYC block-face dataset) and time-limited
-no-standing / no-stopping signs (rush hour, school days, overnight) are snapped
-to the same (centerline block, side) keys, so a face can carry any mix of
-cleaning rules, a meter and restrictions.
+Metered curbs (from the ParkNYC block-face dataset), time-limited
+no-standing / no-stopping signs (rush hour, school days, overnight) and truck
+loading zones are snapped to the same (centerline block, side) keys, so a face
+can carry any mix of cleaning rules, a meter and restrictions.
 
 Sources
 -------
@@ -65,6 +65,7 @@ PARKING_LANE_M = 2.4       # the stripe is drawn down the middle of the parking 
 CORNER_CLEARANCE_M = 2.0   # extra gap between the stripe end and the cross street's curb
 METER_SAMPLE_M = 15.0      # spacing of the points snapped along a metered curb
 PARTIAL_BLOCK_M = 40.0     # a no-standing rule signed once on a longer block covers part of it
+WHOLE_BLOCK_SHARE = 0.75   # a rule whose signs cover this much of the block counts for all of it
 
 
 # ── Download ──────────────────────────────────────────────────────────────────
@@ -108,8 +109,18 @@ def fetch_standing_signs(cache_dir):
     return fetch_paged(SIGNS_URL, {
         "$where": "upper(sign_description) LIKE '%NO STANDING%' OR upper(sign_description) LIKE '%NO STOPPING%'",
         "$select": "order_number,borough,on_street,from_street,to_street,side_of_street,"
-                   "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code",
+                   "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code,"
+                   "arrow_direction",
     }, os.path.join(cache_dir, "standing.json"))
+
+
+def fetch_loading_signs(cache_dir):
+    return fetch_paged(SIGNS_URL, {
+        "$where": "upper(sign_description) LIKE '%LOADING ONLY%' OR upper(sign_description) LIKE '%EXCEPT TRUCKS LOADING%'",
+        "$select": "order_number,borough,on_street,from_street,to_street,side_of_street,"
+                   "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code,"
+                   "arrow_direction",
+    }, os.path.join(cache_dir, "loading.json"))
 
 
 def fetch_meters(cache_dir):
@@ -239,7 +250,7 @@ def parse_rule(desc):
     return (",".join(days), m.group(1), m.group(2))
 
 
-# ── No standing / no stopping (read by Swift CurbRestriction) ────────────────
+# ── No standing / no stopping / truck loading (read by Swift CurbRestriction) ─
 
 _SIGN_TOKEN_RE = re.compile(
     r"(?P<time>(\d{1,2}(?::\d\d)?)\s*(AM|PM)?\s*-\s*(\d{1,2}(?::\d\d)?)\s*(AM|PM)"
@@ -316,6 +327,33 @@ def parse_standing(desc):
         return None
     if "ANYTIME" in u or ("BUS" in u and "STOP" in u) or "OTHER TIMES" in u:
         return None
+    windows, school = _posted_hours(u)
+    return (kind, windows, school) if windows else None
+
+
+# "TRUCK LOADING ONLY", "TRUCKS LOADING ONLY", "NLZ (SYMBOL) LOADING ONLY" (a
+# neighborhood loading zone), "NO STANDING EXCEPT TRUCKS LOADING & UNLOADING";
+# not farmers or flea market loading, which keep to their own season.
+_LOADING_RE = re.compile(r"\bTRUCKS? LOADING ONLY\b|^NLZ\b|\bEXCEPT TRUCKS LOADING\b")
+
+
+def parse_loading(desc):
+    """A truck loading zone limited to set hours, as ("loading", [[day mask,
+    start, end], ...], False): no standing for anyone else.
+
+    "OTHER TIMES NO STANDING" (or a bus layover) after the hours is anytime,
+    left to the posted signs like other anytime rules, as are zones with no
+    hours at all.
+    """
+    u = desc.upper().replace("–", "-")
+    if not _LOADING_RE.search(u):
+        return None
+    windows, _ = _posted_hours(u.split("OTHER TIMES")[0])
+    return ("loading", windows, False) if windows else None
+
+
+def _posted_hours(u):
+    """([[day mask, start, end], ...], school days?) for a sign's hours."""
     u = re.sub(r"\([^)]*\)", " ", u)            # "(SUPERSEDES SP-1120B)", "(SYMBOLS)"
     u = re.sub(r"<?-{2,}>?|<-+|->", " ", u)     # arrows
     school = "SCHOOL DAYS" in u
@@ -349,8 +387,6 @@ def parse_standing(desc):
             else:
                 days |= bits
             prev, dash = d, False
-    if not groups:
-        return None
     default = 0x1F if school else 0x7F
     windows = []
     for mask, times in groups:
@@ -360,7 +396,7 @@ def parse_standing(desc):
                 end += 24 * 60      # overnight: "10PM-5AM"
             if mask:
                 windows.append([mask, start, end])
-    return (kind, windows, school) if windows else None
+    return windows, school
 
 
 # ── Meter parsing (read by Swift MeterInfo) ───────────────────────────────────
@@ -820,7 +856,7 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
     # Snap signs.
     faces = defaultdict(lambda: {"rules": [], "rule_keys": set(), "names": Counter(),
                                  "n": 0, "meter": None, "meter_len": 0.0,
-                                 "standing": defaultdict(list)})
+                                 "standing": defaultdict(list), "anytime": []})
     stats = Counter()
     for sg in signs_raw:
         rule = parse_rule(sg.get("sign_description") or "")
@@ -848,11 +884,17 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
             f["rules"].append(rule)
     print(f"Block faces with rules: {len(faces)}")
 
-    # Snap time-limited no-standing / no-stopping signs, keeping where along
-    # the block each one stands, to judge how much of the block a rule covers.
+    # Snap time-limited no-standing / no-stopping signs and truck loading
+    # zones, keeping where along the block each one stands, to judge how much
+    # of the block a rule covers. A loading zone's sign reads "no standing" for
+    # everyone else, so it's read as a loading zone first. Anytime and bus stop
+    # zones aren't shown, but where they are tells how much of the rest of the
+    # block a rule covers.
     for sg in standing_raw:
-        parsed = parse_standing(sg.get("sign_description") or "")
-        if not parsed:
+        desc = sg.get("sign_description") or ""
+        parsed = parse_loading(desc) or parse_standing(desc)
+        anytime = not parsed and _is_anytime(desc)
+        if not parsed and not anytime:
             stats["standing not_time_limited"] += 1
             continue
         try:
@@ -868,9 +910,14 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
                        sg.get("side_of_street"), stats, "standing")
         if not key:
             continue
-        _, along, _, _ = project_on_polyline(px, py, blocks[key[0]]["pts"])
+        pts = blocks[key[0]]["pts"]
+        _, along, _, _ = project_on_polyline(px, py, pts)
+        reach = sign_reach(desc, sg.get("arrow_direction"), pts, along)
+        if anytime:
+            faces[key]["anytime"].append((along, reach))
+            continue
         rule = json.dumps(parsed, separators=(",", ":"))
-        faces[key]["standing"][rule].append(along)
+        faces[key]["standing"][rule].append((along, reach))
 
     # Snap metered curbs. One ParkNYC face can span several blocks, so sample
     # points along it; each block face that collects enough samples gets the
@@ -906,11 +953,14 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
 
     for k, v in sorted(stats.items()):
         print(f"  {k}: {v}")
-    print(f"Block faces with rules or meters: {len(faces)}")
+    print(f"Block faces with rules or meters: "
+          f"{sum(1 for f in faces.values() if f['rules'] or f['meter'] is not None or f['standing'])}")
 
     # Build geometry per face.
     out = []
     for (bid, side), f in faces.items():
+        if not f["rules"] and f["meter"] is None and not f["standing"]:
+            continue    # only anytime zones, which aren't shown
         s = blocks[bid]
         pts = s["pts"]
         sign = 1 if side == "L" else -1
@@ -963,25 +1013,109 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
             "half_len": round(length / 2, 1),
             "rules": [list(r) for r in rules],
             "meter": f["meter"],
-            "restrictions": restrictions(f["standing"], polyline_length(pts)),
+            "restrictions": restrictions(f["standing"], f["anytime"], polyline_length(pts),
+                                         lambda along: curb_fraction(along, polyline_length(pts), total,
+                                                                     trim_a * scale, trim_b * scale)),
             "geom": geom,
         })
     print(f"Block faces written: {len(out)}")
     return out
 
 
-def restrictions(standing, block_len):
-    """[[kind, windows, school days?, part of block?], ...] for a face.
+_COMPASS = {"EAST": (1, 0), "WEST": (-1, 0), "NORTH": (0, 1), "SOUTH": (0, -1)}
 
-    Each sign applies until the next one, so a rule's signs rarely span its
-    whole stretch; but a rule posted only once on a longer block is likely a
-    short zone (by a school entrance, say) rather than the block.
+
+def _is_anytime(desc):
+    """No standing or stopping at any hour: "ANYTIME", bus stops."""
+    u = desc.upper()
+    return ("NO STANDING" in u or "NO STOPPING" in u) and ("ANYTIME" in u or ("BUS" in u and "STOP" in u))
+
+
+def sign_reach(desc, arrow_direction, pts, along):
+    """Which way along the block a sign's rule runs from it: +1 toward the
+    block's end, -1 toward its start, 0 both ways, None when it can't be told.
+
+    Every single arrow reads "-->" in the description; the way it points is
+    the compass `arrow_direction`, matched against the street's direction at
+    the sign. A double arrow, or none, runs both ways.
     """
+    u = re.sub(r"\([^)]*\)", " ", desc.upper())
+    if re.search(r"<-+>", u) or not re.search(r"-->|<--|SINGLE ARROW|\(ARROW\)", desc.upper()):
+        return 0
+    cx, cy = _COMPASS.get((arrow_direction or "").upper(), (0, 0))
+    _, bearing = point_and_bearing_at(pts, along)
+    dot = math.sin(math.radians(bearing)) * cx + math.cos(math.radians(bearing)) * cy
+    return 1 if dot > 0.3 else -1 if dot < -0.3 else None
+
+
+def sign_coverage(signs, block_len):
+    """[(start, end), ...] along the block that a rule's signs cover, or None
+    when a sign's direction is unknown. Each runs from the sign the way its
+    arrow points, to the rule's next sign or the end of the block."""
+    if any(reach is None for _, reach in signs):
+        return None
+    signs = sorted(signs)
+    spans = []
+    for i, (at, reach) in enumerate(signs):
+        if reach >= 0:
+            spans.append((at, next((p for p, _ in signs[i + 1:] if p > at + 1), block_len)))
+        if reach <= 0:
+            spans.append((max((p for p, _ in signs[:i] if p < at - 1), default=0.0), at))
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    return merged
+
+
+def _union_length(spans):
+    total, end = 0.0, None
+    for a, b in sorted(spans):
+        if end is None or a > end:
+            total += b - a
+            end = b
+        elif b > end:
+            total += b - end
+            end = b
+    return total
+
+
+def curb_fraction(along, block_len, curb_len, trim_a, trim_b):
+    """Where a point `along` the centerline falls on the drawn curb, 0…1."""
+    at = along * curb_len / max(block_len, 1e-6) - trim_a
+    return min(1.0, max(0.0, at / max(curb_len - trim_a - trim_b, 1e-6)))
+
+
+def restrictions(standing, anytime, block_len, to_curb):
+    """[[kind, windows, school days?, part of block?, stretches?], ...] for a face.
+
+    A rule covers the block when its signs reach across most of it, as their
+    arrows say, counting curb that's no standing anytime (`anytime` signs: bus
+    stops, hydrant and corner zones) as covered already. Where a sign's
+    direction isn't known, a rule posted only once on a longer block is taken
+    as a short zone (by a school entrance, say). A short zone's stretches are
+    [start, end] fractions of the drawn curb, when they're known.
+    """
+    always = sign_coverage(anytime, block_len) or []
     out = []
-    for rule, positions in sorted(standing.items()):
+    for rule, signs in sorted(standing.items()):
         kind, windows, school = json.loads(rule)
-        partial = len(positions) == 1 and block_len > PARTIAL_BLOCK_M
-        out.append([kind, windows, int(school), int(partial)])
+        spans = sign_coverage(signs, block_len)
+        if block_len <= PARTIAL_BLOCK_M:
+            partial = False
+        elif spans is None:
+            partial = len(signs) == 1
+        else:
+            partial = _union_length(spans + always) < WHOLE_BLOCK_SHARE * block_len
+        entry = [kind, windows, int(school), int(partial)]
+        if partial and spans:
+            stretches = [[round(to_curb(a), 3), round(to_curb(b), 3)] for a, b in spans]
+            stretches = [st for st in stretches if st[1] - st[0] >= 0.02]
+            if stretches:
+                entry.append(stretches)
+        out.append(entry)
     return out
 
 
@@ -1058,6 +1192,12 @@ def main():
     print("Fetching no-standing / no-stopping signs…")
     standing = fetch_standing_signs(args.cache)
     print(f"  {len(standing)} signs")
+    print("Fetching truck loading zone signs…")
+    loading = fetch_loading_signs(args.cache)
+    print(f"  {len(loading)} signs")
+    # A few signs are in both ("TRUCK LOADING ONLY … OTHER TIMES NO STANDING").
+    seen = {json.dumps(sg, sort_keys=True) for sg in standing}
+    standing += [sg for sg in loading if json.dumps(sg, sort_keys=True) not in seen]
     print(f"  {len(meters)} metered block faces")
     updated = fetch_updated_dates(args.cache)
     print(f"  source dates: {updated}")

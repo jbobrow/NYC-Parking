@@ -651,11 +651,13 @@ private struct SideCard: View {
             }
         }
 
-        // Commercial-only hours: the commercial color, as in the Day parking view.
-        if let c = countdown, c.isUnderway, c.kind == .commercial {
+        // Commercial-only and truck loading hours: the commercial color, as in
+        // the Day parking view.
+        if let c = countdown, c.isUnderway, c.kind.isCommercialOnly {
             let kind = MeterState.Kind.commercialOnly
             let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? ""
-            return Content(title: "COMMERCIAL", detail: "Trucks only" + until,
+            return Content(title: c.kind == .loading ? "LOADING" : "COMMERCIAL",
+                           detail: (c.kind == .loading ? "Truck loading" : "Trucks only") + until,
                            fill: kind.color, textColor: kind.textColor)
         }
 
@@ -674,6 +676,7 @@ private struct SideCard: View {
             case .noStanding: return ("NOW", "No standing" + until)
             case .noStopping: return ("NOW", "No stopping" + until)
             case .commercial: return ("NOW", "Trucks only" + until)
+            case .loading:    return ("NOW", "Truck loading" + until)
             case .meter:      return ("PAY", "Paid" + until)
             }
         }
@@ -692,6 +695,7 @@ private struct SideCard: View {
         case .noStanding: what = "no standing"
         case .noStopping: what = "no stopping"
         case .commercial: what = "trucks only"
+        case .loading:    what = "truck loading"
         case .meter:      what = "pay"
         }
         let time = ParkingTime.format(minutes: c.startMinutes)

@@ -20,7 +20,7 @@ Block output format (docs/data/blocks.json):
       "names": ["EAST 9 STREET", ...],               # street-name table
       "rules": [[["MON,THURS","9AM","10:30AM"]], ...],  # unique cleaning rule sets
       "meters": [[paid, commercial, limit_min, first_hour_cents], ...],  # meter profiles
-      "restrictions": [[[kind, day_mask, start, end], ...], ...],  # no standing (0) / stopping (1)
+      "restrictions": [[[kind, day_mask, start, end], ...], ...],  # no standing (0) / stopping (1) / truck loading (2)
       "faces": [[street, from, to, "N", ruleSet, [lon, lat, dlon, dlat, ...], meter, restrictions], ...]
     }
 
@@ -146,9 +146,11 @@ def main():
                            spec.get("limit_min") or 0, spec.get("first_hour") or 0])
         return meter_index[profile]
 
+    kinds = {"standing": 0, "stopping": 1, "loading": 2}
+
     def restrictions_id(restrictions_json):
-        windows = [[0 if kind == "standing" else 1, *w]
-                   for kind, ws, _school, part in json.loads(restrictions_json or "[]")
+        windows = [[kinds[kind], *w]
+                   for kind, ws, _school, part, *_stretches in json.loads(restrictions_json or "[]")
                    if not part for w in ws]
         if not windows:
             return -1

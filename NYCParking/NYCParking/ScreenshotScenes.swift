@@ -141,6 +141,25 @@ struct ScreenshotScene {
             center: .init(latitude: 40.7075, longitude: -74.0084), spanMeters: (600, 280),
             heading: 0, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
             selectedSegmentID: "820R"),
+        // Tribeca mid-morning: Franklin St is a truck loading zone Mon–Sat
+        // 7 AM–7 PM; parking there asks whether it's a commercial vehicle.
+        "loading": ScreenshotScene(
+            center: .init(latitude: 40.7186, longitude: -74.0060), spanMeters: (420, 190),
+            heading: manhattanGrid, mode: .dayParking, clock: "2026-09-30T10:00:00-04:00"),
+        "loading-detail": ScreenshotScene(
+            center: .init(latitude: 40.7186, longitude: -74.0060), spanMeters: (600, 280),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "944R"),
+        // A loading zone signed once on a longer block: listed, but the block
+        // keeps its cleaning countdown.
+        "loading-short": ScreenshotScene(
+            center: .init(latitude: 40.7193, longitude: -74.0095), spanMeters: (600, 280),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "949L"),
+        "loading-short-night": ScreenshotScene(
+            center: .init(latitude: 40.7193, longitude: -74.0095), spanMeters: (600, 280),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T01:00:00-04:00",
+            selectedSegmentID: "949L"),
         // Meters around Mulberry St at midday: no parking under way on one side,
         // commercial-only hours on Grand and Hester.
         "meters-midday": ScreenshotScene(

@@ -4,7 +4,8 @@
 //    when zoomed in.
 //  - Day parking: one line per block, colored by whether a car can stay the
 //    next two hours free, paid, commercial-only or not at all, counting
-//    cleaning, no standing or stopping, and meters, as the app does.
+//    cleaning, no standing or stopping, truck loading zones and meters, as
+//    the app does.
 //  - Cleaning days: every block face as a curb stripe split by restricted day,
 //    with day pills along the street when zoomed in and runs of day-colored
 //    dots when zoomed out.
@@ -64,7 +65,9 @@ const VERDICT = [
 ];
 const STAY = 120;   // minutes: the stay day parking plans for, from now
 // Which rule wins when two start together.
-const STRICTNESS = { stopping: 4, standing: 3, cleaning: 2, commercial: 1, meter: 0 };
+const STRICTNESS = { stopping: 4, standing: 3, cleaning: 2, commercial: 1, loading: 1, meter: 0 };
+// Only commercial vehicles may be there: commercial meter hours, or a truck loading zone.
+const COMMERCIAL_ONLY = new Set(["commercial", "loading"]);
 // Holidays when meters, and most standing and stopping rules, are off too.
 const MAJOR_HOLIDAYS = ["New Year", "Memorial Day", "Independence Day", "Labor Day", "Thanksgiving", "Christmas"];
 
@@ -348,7 +351,7 @@ function updateDayParking() {
 }
 
 /** Whether a rule is off on a day: cleaning on ASP holidays; meters, and
- *  standing and stopping rules that don't run every day, on major holidays. */
+ *  standing, stopping and loading rules that don't run every day, on major holidays. */
 function suspended(w, day) {
   if (w.kind === "cleaning") return day.holiday;
   if (w.kind === "meter" || w.kind === "commercial") return day.metersOff;
@@ -371,8 +374,8 @@ function dayParkingVerdict(windows, meter, cal) {
   const soonest = (list) => list.reduce((best, s) => (!best || s.start < best.start
     || (s.start === best.start && STRICTNESS[s.kind] > STRICTNESS[best.kind]) ? s : best), null);
   const during = spans.filter((s) => s.kind !== "meter" && s.start < b && s.end > a);
-  const rule = soonest(during.filter((s) => s.kind !== "commercial")) ?? soonest(during);
-  if (rule) return { kind: rule.kind === "commercial" ? COMMERCIAL : NO_PARKING, rule, underway: rule.start <= a };
+  const rule = soonest(during.filter((s) => !COMMERCIAL_ONLY.has(s.kind))) ?? soonest(during);
+  if (rule) return { kind: COMMERCIAL_ONLY.has(rule.kind) ? COMMERCIAL : NO_PARKING, rule, underway: rule.start <= a };
 
   // Meter hours, back-to-back windows run together.
   const paid = [];
@@ -393,10 +396,10 @@ function dayParkingVerdict(windows, meter, cal) {
 }
 
 /** The pill's words: "FREE", the meter's "$2.50 · 2 HR", "COMMERCIAL",
- *  "NO PARKING" or "2 HR MAX". */
+ *  "LOADING", "NO PARKING" or "2 HR MAX". */
 function verdictText(v, meter) {
   if (v.kind === FREE) return "FREE";
-  if (v.kind === COMMERCIAL) return "COMMERCIAL";
+  if (v.kind === COMMERCIAL) return v.rule.kind === "loading" ? "LOADING" : "COMMERCIAL";
   if (v.kind === PAID) return [priceText(meter), limitText(meter?.limit)].filter(Boolean).join(" · ") || "PAID";
   return v.limit ? `${limitText(v.limit)} MAX` : "NO PARKING";
 }
@@ -476,7 +479,7 @@ function decode(data, holidayList) {
     start: minutes(start),
     end: minutes(end),
   })));
-  // Meter profiles and whole-block no standing / stopping, as move windows.
+  // Meter profiles and whole-block no standing / stopping / loading, as move windows.
   const span = (kind) => ([mask, start, end]) => ({ kind, mask, start, end });
   const meters = (data.meters ?? []).map(([paid, commercial, limit, firstHour]) => ({
     windows: [...paid.map(span("meter")), ...commercial.map(span("commercial"))],
@@ -484,7 +487,7 @@ function decode(data, holidayList) {
     firstHour,
   }));
   const restrictions = (data.restrictions ?? []).map((set) => set.map(([kind, ...w]) =>
-    span(kind === 1 ? "stopping" : "standing")(w)));
+    span(["standing", "stopping", "loading"][kind])(w)));
   data.faces.forEach(([street, from, to, side, ruleSet, c, meterID = -1, restrictionsID = -1], i) => {
     let x = c[0], y = c[1];
     let coords = [[x / 1e5, y / 1e5]];
@@ -743,7 +746,8 @@ function stayText(v, meter) {
     case PAID: return `${chip} ` + (v.from !== null ? `Paid from ${at(v.from)}` : `Paid until ${at(v.until)}`);
     case COMMERCIAL: {
       const r = v.rule;
-      return `${chip} Commercial vehicles only ` + (v.underway ? `until ${at(r.end)}` : `from ${at(r.start)}`);
+      const what = r.kind === "loading" ? "Truck loading only" : "Commercial vehicles only";
+      return `${chip} ${what} ` + (v.underway ? `until ${at(r.end)}` : `from ${at(r.start)}`);
     }
   }
   if (v.limit) return `${chip} ${limitText(v.limit).toLowerCase()} limit, move by ${at(v.moveBy)}`;
