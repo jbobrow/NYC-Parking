@@ -24,6 +24,9 @@ struct ScreenshotScene {
     var showsHolidayBanner = false
     /// Starts drive mode (pair with `xcrun simctl location … start` to replay a drive).
     var startsDriving = false
+    /// Opens the selected block's posted rules. Also `-showsDetails YES` at
+    /// launch, for any scene.
+    var showsDetails = false
     /// Several named cars, each parked on a block or not, in place of the one
     /// parked car.
     var cars: [(name: String, segmentID: String?)]? = nil
