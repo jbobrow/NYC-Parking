@@ -674,6 +674,7 @@ private struct SideCard: View {
             switch c.kind {
             case .cleaning:   return ("NOW", end.map { "Until \($0)" } ?? "Cleaning now")
             case .noStanding: return ("NOW", "No standing" + until)
+            case .noParking:  return ("NOW", "No parking" + until)
             case .noStopping: return ("NOW", "No stopping" + until)
             case .commercial: return ("NOW", "Trucks only" + until)
             case .loading:    return ("NOW", "Truck loading" + until)
@@ -693,6 +694,7 @@ private struct SideCard: View {
         switch c.kind {
         case .cleaning:   what = "clean"
         case .noStanding: what = "no standing"
+        case .noParking:  what = "no parking"
         case .noStopping: what = "no stopping"
         case .commercial: what = "trucks only"
         case .loading:    what = "truck loading"

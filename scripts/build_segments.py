@@ -18,9 +18,10 @@ centerline offset by half the street width, trimmed back from each intersection
 by half the cross street's width.
 
 Metered curbs (from the ParkNYC block-face dataset), time-limited
-no-standing / no-stopping signs (rush hour, school days, overnight) and truck
-loading zones are snapped to the same (centerline block, side) keys, so a face
-can carry any mix of cleaning rules, a meter and restrictions.
+no-standing / no-stopping signs (rush hour, school days, overnight), no-parking
+signs other than street cleaning, and truck loading zones are snapped to the
+same (centerline block, side) keys, so a face can carry any mix of cleaning
+rules, a meter and restrictions.
 
 Sources
 -------
@@ -121,6 +122,18 @@ def fetch_loading_signs(cache_dir):
                    "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code,"
                    "arrow_direction",
     }, os.path.join(cache_dir, "loading.json"))
+
+
+def fetch_no_parking_signs(cache_dir):
+    """Time-limited No Parking signs that aren't street cleaning ("NO PARKING
+    MONDAY-FRIDAY 8AM-6PM"), with the fields the standing signs have."""
+    return fetch_paged(SIGNS_URL, {
+        "$where": "upper(sign_description) LIKE '%NO PARKING%' AND upper(sign_description) NOT LIKE '%BROOM%'"
+                  " AND upper(sign_description) NOT LIKE '%BRROM%' AND upper(sign_description) NOT LIKE '%SANITATION%'",
+        "$select": "order_number,borough,on_street,from_street,to_street,side_of_street,"
+                   "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code,"
+                   "arrow_direction",
+    }, os.path.join(cache_dir, "no_parking.json"))
 
 
 def fetch_meters(cache_dir):
@@ -237,9 +250,17 @@ def _extract_days(u):
     return sorted(days, key=lambda d: _DAY_ORDER[d])
 
 
+def is_cleaning(desc):
+    """A street cleaning sign: the broom symbol (sometimes "BRROM"), or the
+    sanitation department's."""
+    return bool(re.search(r"BROOM|BRROM|SANITATION", desc.upper()))
+
+
 def parse_rule(desc):
+    """A street cleaning rule, as (days, start, end). Other No Parking signs
+    are read by `parse_standing`."""
     u = desc.upper()
-    if "NO PARKING" not in u:
+    if "NO PARKING" not in u or not is_cleaning(u):
         return None
     m = _TIME_RE.search(u)
     if not m:
@@ -250,7 +271,7 @@ def parse_rule(desc):
     return (",".join(days), m.group(1), m.group(2))
 
 
-# ── No standing / no stopping / truck loading (read by Swift CurbRestriction) ─
+# ── No standing / stopping / parking, truck loading (Swift CurbRestriction) ──
 
 _SIGN_TOKEN_RE = re.compile(
     r"(?P<time>(\d{1,2}(?::\d\d)?)\s*(AM|PM)?\s*-\s*(\d{1,2}(?::\d\d)?)\s*(AM|PM)"
@@ -308,8 +329,9 @@ def _sign_days(text):
 
 
 def parse_standing(desc):
-    """A time-limited no-standing or no-stopping sign, as
-    ("standing" | "stopping", [[day mask, start, end], ...], school days?).
+    """A time-limited no-standing, no-stopping or no-parking sign (other
+    than street cleaning), as ("standing" | "stopping" | "parking",
+    [[day mask, start, end], ...], school days?).
 
     None for anything that isn't limited to set hours. "Anytime" signs, bus
     stops and fire zones mark a stretch of curb (often by a corner or hydrant)
@@ -323,6 +345,8 @@ def parse_standing(desc):
         kind = "stopping"
     elif "NO STANDING" in u:
         kind = "standing"
+    elif "NO PARKING" in u and not is_cleaning(u):
+        kind = "parking"
     else:
         return None
     if "ANYTIME" in u or ("BUS" in u and "STOP" in u) or "OTHER TIMES" in u:
@@ -1026,9 +1050,10 @@ _COMPASS = {"EAST": (1, 0), "WEST": (-1, 0), "NORTH": (0, 1), "SOUTH": (0, -1)}
 
 
 def _is_anytime(desc):
-    """No standing or stopping at any hour: "ANYTIME", bus stops."""
+    """No standing, stopping or parking at any hour: "ANYTIME", bus stops."""
     u = desc.upper()
-    return ("NO STANDING" in u or "NO STOPPING" in u) and ("ANYTIME" in u or ("BUS" in u and "STOP" in u))
+    return (("NO STANDING" in u or "NO STOPPING" in u or "NO PARKING" in u)
+            and ("ANYTIME" in u or ("BUS" in u and "STOP" in u)))
 
 
 def sign_reach(desc, arrow_direction, pts, along):
@@ -1195,9 +1220,16 @@ def main():
     print("Fetching truck loading zone signs…")
     loading = fetch_loading_signs(args.cache)
     print(f"  {len(loading)} signs")
-    # A few signs are in both ("TRUCK LOADING ONLY … OTHER TIMES NO STANDING").
+    print("Fetching no-parking signs other than street cleaning…")
+    no_parking = fetch_no_parking_signs(args.cache)
+    print(f"  {len(no_parking)} signs")
+    # A few signs are in more than one ("TRUCK LOADING ONLY … OTHER TIMES NO STANDING").
     seen = {json.dumps(sg, sort_keys=True) for sg in standing}
-    standing += [sg for sg in loading if json.dumps(sg, sort_keys=True) not in seen]
+    for sg in loading + no_parking:
+        key = json.dumps(sg, sort_keys=True)
+        if key not in seen:
+            seen.add(key)
+            standing.append(sg)
     print(f"  {len(meters)} metered block faces")
     updated = fetch_updated_dates(args.cache)
     print(f"  source dates: {updated}")

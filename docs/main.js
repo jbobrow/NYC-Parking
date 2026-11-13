@@ -4,8 +4,8 @@
 //    when zoomed in.
 //  - Day parking: one line per block, colored by whether a car can stay the
 //    next two hours free, paid, commercial-only or not at all, counting
-//    cleaning, no standing or stopping, truck loading zones and meters, as
-//    the app does.
+//    cleaning, no standing, stopping or parking, truck loading zones and
+//    meters, as the app does.
 //  - Cleaning days: every block face as a curb stripe split by restricted day,
 //    with day pills along the street when zoomed in and runs of day-colored
 //    dots when zoomed out.
@@ -65,7 +65,7 @@ const VERDICT = [
 ];
 const STAY = 120;   // minutes: the stay day parking plans for, from now
 // Which rule wins when two start together.
-const STRICTNESS = { stopping: 4, standing: 3, cleaning: 2, commercial: 1, loading: 1, meter: 0 };
+const STRICTNESS = { stopping: 5, standing: 4, parking: 3, cleaning: 2, commercial: 1, loading: 1, meter: 0 };
 // Only commercial vehicles may be there: commercial meter hours, or a truck loading zone.
 const COMMERCIAL_ONLY = new Set(["commercial", "loading"]);
 // Holidays when meters, and most standing and stopping rules, are off too.
@@ -479,7 +479,7 @@ function decode(data, holidayList) {
     start: minutes(start),
     end: minutes(end),
   })));
-  // Meter profiles and whole-block no standing / stopping / loading, as move windows.
+  // Meter profiles and whole-block no standing / stopping / parking / loading, as move windows.
   const span = (kind) => ([mask, start, end]) => ({ kind, mask, start, end });
   const meters = (data.meters ?? []).map(([paid, commercial, limit, firstHour]) => ({
     windows: [...paid.map(span("meter")), ...commercial.map(span("commercial"))],
@@ -487,7 +487,7 @@ function decode(data, holidayList) {
     firstHour,
   }));
   const restrictions = (data.restrictions ?? []).map((set) => set.map(([kind, ...w]) =>
-    span(["standing", "stopping", "loading"][kind])(w)));
+    span(["standing", "stopping", "loading", "parking"][kind])(w)));
   data.faces.forEach(([street, from, to, side, ruleSet, c, meterID = -1, restrictionsID = -1], i) => {
     let x = c[0], y = c[1];
     let coords = [[x / 1e5, y / 1e5]];
@@ -751,7 +751,7 @@ function stayText(v, meter) {
     }
   }
   if (v.limit) return `${chip} ${limitText(v.limit).toLowerCase()} limit, move by ${at(v.moveBy)}`;
-  const what = { cleaning: "Street cleaning", standing: "No standing", stopping: "No stopping" }[v.rule.kind];
+  const what = { cleaning: "Street cleaning", standing: "No standing", stopping: "No stopping", parking: "No parking" }[v.rule.kind];
   return `${chip} ${what} ` + (v.underway ? `until ${at(v.rule.end)}` : `${at(v.rule.start)}–${clock(v.rule.end)}`);
 }
 

@@ -47,12 +47,12 @@ struct DayWindow: Hashable, Sendable, Codable {
     }
 }
 
-/// A posted no-standing or no-stopping rule limited to set hours: rush hour,
-/// school days, overnight; or a truck loading zone, no standing for anyone but
-/// trucks loading. "Anytime" zones (by corners, hydrants, bus stops) aren't in
+/// A posted no-standing, no-stopping or no-parking rule (other than street
+/// cleaning) limited to set hours: rush hour, school days, overnight; or a
+/// truck loading zone, no standing for anyone but trucks loading. "Anytime" zones (by corners, hydrants, bus stops) aren't in
 /// the data, so they're left to the posted signs.
 struct CurbRestriction: Hashable, Sendable {
-    enum Kind: String, Sendable { case standing, stopping, loading }
+    enum Kind: String, Sendable { case standing, stopping, parking, loading }
 
     let kind: Kind
     let windows: [DayWindow]
@@ -70,6 +70,7 @@ struct CurbRestriction: Hashable, Sendable {
         switch kind {
         case .standing: return "No standing"
         case .stopping: return "No stopping"
+        case .parking:  return "No parking"
         case .loading:  return "Truck loading only"
         }
     }
@@ -79,6 +80,7 @@ struct CurbRestriction: Hashable, Sendable {
         switch kind {
         case .standing: return .noStanding
         case .stopping: return .noStopping
+        case .parking:  return .noParking
         case .loading:  return .loading
         }
     }
@@ -94,13 +96,14 @@ struct CurbRestriction: Hashable, Sendable {
 /// A time a car left at the curb has to move, or at a meter, pay.
 struct CurbWindow: Hashable, Sendable, Codable {
     enum Kind: String, Hashable, Sendable, Codable {
-        case cleaning, noStanding, noStopping, commercial, loading, meter
+        case cleaning, noParking, noStanding, noStopping, commercial, loading, meter
 
         /// Which wins when two apply at once: the stricter rule.
         var strictness: Int {
             switch self {
-            case .noStopping: return 4
-            case .noStanding: return 3
+            case .noStopping: return 5
+            case .noStanding: return 4
+            case .noParking:  return 3
             case .cleaning:   return 2
             case .commercial, .loading: return 1
             case .meter:      return 0
@@ -119,15 +122,15 @@ struct CurbWindow: Hashable, Sendable, Codable {
     let window: DayWindow
 
     /// Cleaning stops on alternate-side holidays. Meters, and stopping,
-    /// standing and loading rules, stop on the major legal holidays, except
-    /// rules that run every day of the week.
+    /// standing, parking and loading rules, stop on the major legal holidays,
+    /// except rules that run every day of the week.
     func isSuspended(on day: CountdownCalendar.Day) -> Bool {
         switch kind {
         case .cleaning:
             return day.isHoliday
         case .meter, .commercial:
             return day.metersOff
-        case .noStanding, .noStopping, .loading:
+        case .noParking, .noStanding, .noStopping, .loading:
             return day.metersOff && window.dayMask & DayWindow.everyDay != DayWindow.everyDay
         }
     }
@@ -135,7 +138,7 @@ struct CurbWindow: Hashable, Sendable, Codable {
 
 extension ParkingSegment {
     /// Every time this curb's rules say move (or pay): cleaning, whole-block
-    /// standing, stopping and loading rules, and meter hours.
+    /// standing, stopping, parking and loading rules, and meter hours.
     static func moveWindows(rules: [ParkingRule], restrictions: [CurbRestriction],
                             meter: MeterInfo?) -> [CurbWindow] {
         var out: [CurbWindow] = []
@@ -211,6 +214,7 @@ extension MoveCountdown {
         case .cleaning:   what = "Street cleaning"
         case .noStanding: what = "No standing"
         case .noStopping: what = "No stopping"
+        case .noParking:  what = "No parking"
         case .commercial: what = "Commercial vehicles only"
         case .loading:    what = "Truck loading only"
         case .meter:      what = "Paid parking"
