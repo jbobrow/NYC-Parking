@@ -655,7 +655,7 @@ private struct SideCard: View {
         // the Day parking view.
         if let c = countdown, c.isUnderway, c.kind.isCommercialOnly {
             let kind = MeterState.Kind.commercialOnly
-            let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? ""
+            let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? " anytime"
             return Content(title: c.kind == .loading ? "LOADING" : "COMMERCIAL",
                            detail: (c.kind == .loading ? "Truck loading" : "Trucks only") + until,
                            fill: kind.color, textColor: kind.textColor)

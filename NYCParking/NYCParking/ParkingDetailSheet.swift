@@ -553,7 +553,7 @@ private struct VerdictRow: View {
         }
         let when: String
         if c.isUnderway {
-            when = c.endMinutes.map { "until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "now"
+            when = c.endMinutes.map { "until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? "anytime"
         } else {
             let time = ParkingTime.format(minutes: c.startMinutes)
             let day = switch c.days {

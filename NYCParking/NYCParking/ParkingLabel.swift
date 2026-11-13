@@ -58,7 +58,8 @@ struct MeterPill: Hashable {
 }
 
 /// Countdown-mode pill: urgency-colored "TODAY" / "3 DAYS" / "7+ DAYS", plus
-/// the restriction's day and time at the closest zoom.
+/// the restriction's day and time at the closest zoom ("NO STANDING" alone
+/// for an anytime rule, which has no time).
 struct CountdownLabel: View {
     let countdown: MoveCountdown?
     let style: LabelStyle
@@ -75,7 +76,7 @@ struct CountdownLabel: View {
                 .padding(.vertical, 5 * s)
                 .background(urgency.color, in: Capsule())
                 .fixedSize()
-            if style == .full, let countdown, countdown.days < 7 {
+            if style == .full, let countdown, countdown.days < 7, !countdown.isAnytime {
                 Text(countdown.timeText)
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(.black.opacity(0.85))
@@ -178,7 +179,7 @@ enum ParkingLabelRenderer {
             return cached(key, style: style) { ParkingLabel(days: days, rule: rule, style: style) }
         case .countdown(let countdown):
             let key = "countdown|\(MoveCountdown.shortText(countdown))|\(style)"
-                + (style == .full ? "|\(countdown?.timeText ?? "")" : "")
+                + (style == .full && countdown?.isAnytime != true ? "|\(countdown?.timeText ?? "")" : "")
             return cached(key, style: style) { CountdownLabel(countdown: countdown, style: style) }
         case .dayParking(let pill):
             let key = "day|\(pill.kind.map { "\($0)" } ?? "unknown")|\(pill.title)|\(style)"

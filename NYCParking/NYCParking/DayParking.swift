@@ -241,8 +241,9 @@ final class DayParkingSnapshot: @unchecked Sendable {
 
 /// Day parking pill text, as the meters put it: "FREE", the meter's
 /// "$2 · 2 HR", "COMMERCIAL", "LOADING" or "NO PARKING" ("2 HR MAX" for a stay longer
-/// than the meter allows), with what and when at the closest zoom. A neutral
-/// "…" until the verdict is known.
+/// than the meter allows), with what and when at the closest zoom; just "NO
+/// STANDING" (or stopping, or parking) when it's anytime. A neutral "…" until
+/// the verdict is known.
 struct DayParkingPill: Hashable {
     let kind: MeterState.Kind?
     let title: String
@@ -265,6 +266,15 @@ struct DayParkingPill: Hashable {
         case .noParking(.timeLimit(let limit), let start, _, _):
             title = "\(DayParkingTrip.durationText(limit).uppercased()) MAX"
             detail = "move by \(start.text)"
+        case .noParking(.rule(let rule), _, nil, true):
+            // Anytime: the rule says it all.
+            title = switch rule {
+            case .noStanding: "NO STANDING"
+            case .noStopping: "NO STOPPING"
+            case .loading:    "LOADING"
+            default:          "NO PARKING"
+            }
+            detail = nil
         case .noParking(.rule(let rule), let start, let end, let isUnderway):
             title = switch rule {
             case .commercial: "COMMERCIAL"
