@@ -115,6 +115,8 @@ struct CountdownCalendar: Sendable {
         let isHoliday: Bool
         /// Meters are suspended too (only a few major holidays).
         let metersOff: Bool
+        /// Month × 100 + day, for seasonal rules.
+        var monthDay = 0
     }
 
     let minuteOfDay: Int
@@ -134,8 +136,10 @@ struct CountdownCalendar: Sendable {
                   let weekday = ParkingDay.from(weekday: calendar.component(.weekday, from: date))
             else { return nil }
             let onDay = holidays.filter { calendar.isDate($0.date, inSameDayAs: date) }
+            let md = calendar.dateComponents([.month, .day], from: date)
             return Day(weekday: weekday, isHoliday: !onDay.isEmpty,
-                       metersOff: onDay.contains { $0.metersSuspended })
+                       metersOff: onDay.contains { $0.metersSuspended },
+                       monthDay: (md.month ?? 0) * 100 + (md.day ?? 0))
         }
         days = (0...dayCount).compactMap(day)
         yesterday = day(-1)
@@ -148,6 +152,7 @@ struct MoveCountdown: Hashable, Sendable {
     let days: Int
     let weekday: ParkingDay
     let startMinutes: Int
+    /// Nil for a rule that runs anytime.
     let endMinutes: Int?
     /// The restriction is already in effect.
     let isUnderway: Bool
@@ -157,9 +162,10 @@ struct MoveCountdown: Hashable, Sendable {
     var urgency: MoveUrgency { MoveUrgency(days: days) }
 
     /// Pill text: "TODAY", "1 DAY", "4 DAYS", "7+ DAYS"; "P · 1 DAY" when it's
-    /// the meter, which can be paid instead.
+    /// the meter, which can be paid instead; "NO PARKING" when it's anytime.
     static func shortText(_ countdown: MoveCountdown?) -> String {
         guard let c = countdown, c.days < 7 else { return "7+ DAYS" }
+        if c.isUnderway && c.endMinutes == nil { return "NO PARKING" }
         let text: String
         switch c.days {
         case 0:  text = "TODAY"
@@ -174,7 +180,9 @@ struct MoveCountdown: Hashable, Sendable {
 
     /// The next time `windows` say move or pay, skipping days each is
     /// suspended. Nil when there's none in the calendar's range. A rule already
-    /// in effect counts as today; when several are, the strictest wins.
+    /// in effect counts as today; when several are, the strictest wins. A time
+    /// limit says move once it's up, for a car parked now (or, on a later
+    /// day, from before it starts).
     ///
     /// - Parameter upcomingOnly: skip rules already in effect, for "move by"
     ///   deadlines that have to be in the future.
@@ -196,20 +204,28 @@ struct MoveCountdown: Hashable, Sendable {
 
         // Overnight rules still running from last night ("10 PM–5 AM").
         if !upcomingOnly, let y = cal.yesterday {
-            for w in windows where w.window.end > dayMinutes && w.window.covers(y.weekday)
-                && !w.isSuspended(on: y) && now < w.window.end - dayMinutes {
+            for w in windows where w.window.end > dayMinutes && w.limitMinutes == nil && w.applies(on: y)
+                && now < w.window.end - dayMinutes {
                 consider(MoveCountdown(days: 0, weekday: y.weekday, startMinutes: w.window.start,
                                        endMinutes: w.window.end, isUnderway: true, kind: w.kind))
             }
         }
         for (offset, day) in cal.days.enumerated() {
-            for w in windows where w.window.covers(day.weekday) && !w.isSuspended(on: day) {
+            for w in windows where w.applies(on: day) {
+                if let limit = w.limitMinutes {
+                    let due = (offset == 0 ? max(now, w.window.start) : w.window.start) + limit
+                    if due < w.window.end {
+                        consider(MoveCountdown(days: offset, weekday: day.weekday, startMinutes: due,
+                                               endMinutes: w.window.end, isUnderway: false, kind: w.kind))
+                    }
+                    continue
+                }
                 if offset == 0 {
                     if now >= w.window.end { continue }                   // already over today
                     if upcomingOnly && now >= w.window.start { continue }
                 }
                 consider(MoveCountdown(days: offset, weekday: day.weekday, startMinutes: w.window.start,
-                                       endMinutes: w.window.end,
+                                       endMinutes: w.window.isAnytime ? nil : w.window.end,
                                        isUnderway: offset == 0 && now >= w.window.start, kind: w.kind))
             }
             if best != nil { return best }

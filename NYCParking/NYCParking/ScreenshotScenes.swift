@@ -166,6 +166,44 @@ struct ScreenshotScene {
             center: .init(latitude: 40.7276, longitude: -73.9994), spanMeters: (600, 280),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
             selectedSegmentID: "1448L"),
+        // Manhattan Beach on a summer Saturday: no parking Sat, Sun & holidays,
+        // May 15–Sep 15; and the same block in November, cleaning only.
+        "seasonal": ScreenshotScene(
+            center: .init(latitude: 40.5806, longitude: -73.9526), spanMeters: (600, 280),
+            heading: 0, mode: .dayParking, clock: "2026-08-15T12:00:00-04:00",
+            selectedSegmentID: "46588R"),
+        "seasonal-off": ScreenshotScene(
+            center: .init(latitude: 40.5806, longitude: -73.9526), spanMeters: (600, 280),
+            heading: 0, mode: .dayParking, clock: "2026-11-14T12:00:00-05:00",
+            selectedSegmentID: "46588R"),
+        // Clinton St on the Lower East Side up close: a car share spot and
+        // corner zones drawn over the block; zoomed out, they're not.
+        "anytime-close": ScreenshotScene(
+            center: .init(latitude: 40.7151, longitude: -73.9871), spanMeters: (200, 90),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "191776L"),
+        "anytime-far": ScreenshotScene(
+            center: .init(latitude: 40.7151, longitude: -73.9871), spanMeters: (1150, 530),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00"),
+        // A police-only block by the 1st Precinct, Washington St.
+        "police": ScreenshotScene(
+            center: .init(latitude: 40.7087, longitude: -74.0143), spanMeters: (330, 150),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "79613L"),
+        // School staff only on school days, on part of Madison St.
+        "school": ScreenshotScene(
+            center: .init(latitude: 40.6849, longitude: -73.9488), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-09-29T18:00:00-04:00",
+            selectedSegmentID: "48911R"),
+        // 3rd Ave in Sunset Park: 1-hour parking 8 AM–7 PM, and midnight cleaning.
+        "limit": ScreenshotScene(
+            center: .init(latitude: 40.6585, longitude: -74.0030), spanMeters: (330, 150),
+            heading: 0, mode: .dayParking, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "37800L"),
+        "limit-countdown": ScreenshotScene(
+            center: .init(latitude: 40.6585, longitude: -74.0030), spanMeters: (330, 150),
+            heading: 0, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "37800L"),
         // Meters around Mulberry St at midday: no parking under way on one side,
         // commercial-only hours on Grand and Hester.
         "meters-midday": ScreenshotScene(
