@@ -53,7 +53,16 @@ struct ParkingDetailSheet: View {
     @State private var fullHeight: CGFloat = 0
     @State private var bottomHeight: CGFloat = 0
     /// The posted rules, hidden to start: the verdict is what matters at a glance.
-    @State private var showsDetails = false
+    @State private var showsDetails = Self.startsWithDetails
+
+    #if DEBUG
+    private static var startsWithDetails: Bool {
+        guard let scene = ScreenshotScene.current else { return false }
+        return scene.showsDetails || UserDefaults.standard.bool(forKey: "showsDetails")
+    }
+    #else
+    private static let startsWithDetails = false
+    #endif
 
     private var collapsedDetent: PresentationDetent { .height(max(summaryHeight + bottomHeight, 200)) }
     private var expandedDetent: PresentationDetent { .height(max(fullHeight + bottomHeight, 200)) }
