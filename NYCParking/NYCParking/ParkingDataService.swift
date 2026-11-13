@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 @MainActor
 final class ParkingDataService: ObservableObject {
@@ -10,6 +11,12 @@ final class ParkingDataService: ObservableObject {
     init() {
         removeLegacyCache()
         Task {
+            // A second or two at launch: keep going if the app is sent to the
+            // background meanwhile, rather than being suspended mid-load.
+            loadBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Load block faces") {
+                [weak self] in self?.endLoadBackgroundTask()
+            }
+            defer { endLoadBackgroundTask() }
             let (index, dates) = await Task.detached(priority: .userInitiated) { () -> (SegmentIndex?, DataSourceDates) in
                 guard let db = ParkingDatabase() else { return (nil, DataSourceDates()) }
                 return (SegmentIndex(segments: db.allSegments()), db.sourceDates)
@@ -18,6 +25,14 @@ final class ParkingDataService: ObservableObject {
             self.sourceDates = dates
             print("ParkingDataService: loaded \(index?.segments.count ?? 0) block faces")
         }
+    }
+
+    private var loadBackgroundTask = UIBackgroundTaskIdentifier.invalid
+
+    private func endLoadBackgroundTask() {
+        guard loadBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(loadBackgroundTask)
+        loadBackgroundTask = .invalid
     }
 
     /// Move countdowns for every block face; nil until first computed.

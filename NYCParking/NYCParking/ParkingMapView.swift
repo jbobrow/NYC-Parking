@@ -307,6 +307,10 @@ extension ParkingMapView {
             let b = mapView.convert(CGPoint(x: c.x, y: c.y + 100), toCoordinateFrom: mapView)
             let d = CLLocation(latitude: a.latitude, longitude: a.longitude)
                 .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+            // Before the map has a size, or off the map, there's no distance:
+            // say zoomed far out rather than NaN (which `Int` can't take).
+            guard d.isFinite, CLLocationCoordinate2DIsValid(a), CLLocationCoordinate2DIsValid(b)
+            else { return 1_000 }
             return max(d / 100, 0.01)
         }
 
@@ -705,6 +709,8 @@ extension ParkingMapView {
             let b = mapView.convert(CGPoint(x: point.x + r, y: point.y + r), toCoordinateFrom: mapView)
             let c = mapView.convert(CGPoint(x: point.x - r, y: point.y + r), toCoordinateFrom: mapView)
             let d = mapView.convert(CGPoint(x: point.x + r, y: point.y - r), toCoordinateFrom: mapView)
+            // A tap off the map (the sky in drive mode's 3D view) hits nothing.
+            guard [a, b, c, d].allSatisfy(CLLocationCoordinate2DIsValid) else { return nil }
             let lats = [a, b, c, d].map(\.latitude), lons = [a, b, c, d].map(\.longitude)
             let candidates = index.segments(minLat: lats.min()!, maxLat: lats.max()!,
                                             minLon: lons.min()!, maxLon: lons.max()!)

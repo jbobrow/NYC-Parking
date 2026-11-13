@@ -111,11 +111,23 @@ final class SegmentIndex: @unchecked Sendable {
     private static func cell(_ deg: Double) -> Int { Int((deg / cellDegrees).rounded(.down)) }
     private static func key(_ r: Int, _ c: Int) -> Int64 { Int64(r) << 32 | Int64(UInt32(bitPattern: Int32(c))) }
 
+    /// Most grid cells one lookup visits (≈ 90 × 70 km): far more than any
+    /// screen of labels, a tap or a drive needs.
+    private static let maxCells = 40_000
+
+    /// Block faces in the box, or none for a box that's invalid (off the map,
+    /// NaN, wrapped around the world) or bigger than `maxCells`. Such boxes
+    /// would crash the range, or freeze the app looping over the planet.
     func segments(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) -> [ParkingSegment] {
+        guard (-90...90).contains(minLat), (-90...90).contains(maxLat), minLat <= maxLat,
+              (-180...180).contains(minLon), (-180...180).contains(maxLon), minLon <= maxLon
+        else { return [] }
+        let rows = Self.cell(minLat)...Self.cell(maxLat), cols = Self.cell(minLon)...Self.cell(maxLon)
+        guard rows.count * cols.count <= Self.maxCells else { return [] }
         var seen = Set<Int32>()
         var out: [ParkingSegment] = []
-        for r in Self.cell(minLat)...Self.cell(maxLat) {
-            for c in Self.cell(minLon)...Self.cell(maxLon) {
+        for r in rows {
+            for c in cols {
                 for i in cells[Self.key(r, c)] ?? [] where seen.insert(i).inserted {
                     out.append(segments[Int(i)])
                 }
