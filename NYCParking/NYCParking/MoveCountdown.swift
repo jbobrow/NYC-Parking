@@ -162,10 +162,19 @@ struct MoveCountdown: Hashable, Sendable {
     var urgency: MoveUrgency { MoveUrgency(days: days) }
 
     /// Pill text: "TODAY", "1 DAY", "4 DAYS", "7+ DAYS"; "P · 1 DAY" when it's
-    /// the meter, which can be paid instead; "NO PARKING" when it's anytime.
+    /// the meter, which can be paid instead; what it is ("NO STANDING") when
+    /// it's anytime.
     static func shortText(_ countdown: MoveCountdown?) -> String {
         guard let c = countdown, c.days < 7 else { return "7+ DAYS" }
-        if c.isUnderway && c.endMinutes == nil { return "NO PARKING" }
+        if c.isAnytime {
+            switch c.kind {
+            case .noStanding: return "NO STANDING"
+            case .noStopping: return "NO STOPPING"
+            case .loading:    return "LOADING"
+            case .authorized: return "AUTHORIZED"
+            default:          return "NO PARKING"
+            }
+        }
         let text: String
         switch c.days {
         case 0:  text = "TODAY"
@@ -174,6 +183,9 @@ struct MoveCountdown: Hashable, Sendable {
         }
         return c.kind.isMeter ? "P · \(text)" : text
     }
+
+    /// A rule that runs anytime, in effect now and never ending.
+    var isAnytime: Bool { isUnderway && endMinutes == nil }
 
     /// "TUE 8:30 AM"
     var timeText: String { "\(weekday.short) \(ParkingTime.format(minutes: startMinutes))" }

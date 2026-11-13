@@ -185,6 +185,14 @@ struct ScreenshotScene {
         "anytime-far": ScreenshotScene(
             center: .init(latitude: 40.7151, longitude: -73.9871), spanMeters: (1150, 530),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00"),
+        // Cortlandt St up close, no standing anytime the whole block.
+        "anytime-block": ScreenshotScene(
+            center: .init(latitude: 40.7101, longitude: -74.0106), spanMeters: (150, 70),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00"),
+        "anytime-block-day": ScreenshotScene(
+            center: .init(latitude: 40.7101, longitude: -74.0106), spanMeters: (150, 70),
+            heading: manhattanGrid, mode: .dayParking, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "576L"),
         // A police-only block by the 1st Precinct, Washington St.
         "police": ScreenshotScene(
             center: .init(latitude: 40.7087, longitude: -74.0143), spanMeters: (330, 150),

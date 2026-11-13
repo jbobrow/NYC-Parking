@@ -20,6 +20,18 @@ struct WhatsNew: Identifiable {
     /// Every version with something to show. A version without an entry
     /// shows nothing.
     static let releases: [WhatsNew] = [
+        WhatsNew(version: "1.7", items: [
+            Item(icon: "box.truck", title: "Truck loading zones",
+                 detail: "Curbs kept for trucks loading are on the map with their hours, drawn where their signs say."),
+            Item(icon: "exclamationmark.octagon", title: "Every sign on the block",
+                 detail: "Bus stops, fire zones, taxi stands, police and school staff spots, and No Standing Anytime. Zoom in to see where each one runs."),
+            Item(icon: "creditcard", title: "Pay with ParkNYC",
+                 detail: "On a metered block, one tap copies its zone number and opens ParkNYC, ready to paste."),
+            Item(icon: "clock", title: "Time limits",
+                 detail: "On blocks with 1- or 2-hour parking, NYC Parking tells you when your time is up, counting from when you parked."),
+            Item(icon: "moon.stars", title: "Seasons and overnight cleaning",
+                 detail: "Beach weekend rules apply only in summer, and midnight street cleaning now shows on thousands more blocks."),
+        ]),
         WhatsNew(version: "1.6", items: [
             Item(icon: "clock", title: "Day parking",
                  detail: "Parking for a few hours? Every block shows whether you can stay the whole time: free, paid or no parking. Set how long with − and +."),
