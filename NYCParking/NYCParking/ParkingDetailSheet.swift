@@ -380,7 +380,7 @@ struct ParkingDetailSheet: View {
         let now = MoveCountdown.next(for: segment.moveWindows.filter { $0.kind == .loading }, in: cal)
         let when = now.flatMap { c in
             c.isUnderway ? c.endMinutes.map { "until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } : nil
-        } ?? zone.hoursText
+        } ?? (zone.isAnytime ? "anytime" : zone.hoursText ?? "")
         return "Only trucks loading and unloading can stand here \(when).\(movesHereNote)"
     }
 
@@ -423,7 +423,7 @@ struct ParkingDetailSheet: View {
                         }
                     }
                 case .restrictions:
-                    RestrictionsSection(restrictions: segment.restrictions)
+                    RestrictionsSection(segment: segment)
                 case .meter:
                     if let meter = segment.meter {
                         MeterSection(meter: meter, holidays: holidays, moveWindows: segment.moveWindows)
@@ -548,6 +548,7 @@ private struct VerdictRow: View {
         case .loading:    "Truck loading"
         case .noStopping: "No stopping"
         case .noParking:  "No parking"
+        case .authorized: rule.title
         default:          "No standing"
         }
         let when: String
@@ -579,7 +580,7 @@ private struct VerdictRow: View {
         guard !segment.moveWindows.isEmpty else { return ("No rules for the whole block", nil) }
         guard let c else { return ("Free all week", nil) }
         if c.isUnderway {
-            let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? ""
+            let until = c.endMinutes.map { " until \(ParkingTime.format(minutes: $0 % (24 * 60)))" } ?? " anytime"
             switch c.kind {
             case .cleaning:   return ("Street cleaning" + until, nil)
             case .noStanding: return ("No standing" + until, "You can stop to drop off or pick up passengers.")
@@ -587,6 +588,10 @@ private struct VerdictRow: View {
             case .noStopping: return ("No stopping" + until, nil)
             case .commercial: return ("Commercial vehicles only" + until, nil)
             case .loading:    return ("Truck loading only" + until, "You can stop to drop off or pick up passengers.")
+            case .authorized:
+                let rule = segment.restrictions.first { $0.kind == .authorized && !$0.partOfBlock }
+                return ((rule?.title ?? "Authorized vehicles only") + until, nil)
+            case .timeLimit:  return ("Time limit is up", nil)
             case .meter:      return ("Paid parking" + until, nil)
             }
         }
@@ -603,35 +608,53 @@ private struct VerdictRow: View {
         case .noStopping: "no stopping"
         case .commercial: "commercial vehicles only"
         case .loading:    "truck loading only"
+        case .authorized: "authorized vehicles only"
+        case .timeLimit:  "the time limit is up"
         case .meter:      "meters"
         }
         return ("Free until \(when)", "Then \(then)")
     }
 }
 
-/// Rush-hour, school and overnight no-standing / no-stopping rules, no-parking
-/// rules other than street cleaning, and truck loading zones.
+/// Every posted rule but street cleaning: rush-hour, school and overnight
+/// no-standing rules, anytime zones (bus stops, fire zones, hydrant and corner
+/// zones), truck loading, Authorized Vehicles Only, time limits; then notices.
+/// Rules with hours first, then the anytime zones, then notices.
 private struct RestrictionsSection: View {
-    let restrictions: [CurbRestriction]
+    let segment: ParkingSegment
+
+    private var restrictions: [CurbRestriction] {
+        let order = { (r: CurbRestriction) in r.kind == .notice ? 2 : r.isAnytime ? 1 : 0 }
+        return segment.restrictions.enumerated()
+            .sorted { (order($0.element), $0.offset) < (order($1.element), $1.offset) }
+            .map(\.element)
+    }
 
     var body: some View {
-        let kinds = Set(restrictions.map(\.kind))
+        let rules = restrictions
+        let titles = Set(rules.map(\.title))
+        let kinds = Set(rules.map(\.kind))
         VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(text: kinds.count == 1 ? restrictions[0].title
-                             : kinds == [.standing, .stopping] ? "No standing or stopping" : "Posted rules",
-                         systemImage: kinds == [.loading] ? "box.truck" : "exclamationmark.octagon")
-            ForEach(restrictions, id: \.self) { r in
+            SectionTitle(text: titles.count == 1 ? rules[0].title : "Posted rules",
+                         systemImage: kinds == [.loading] ? "box.truck"
+                             : kinds == [.limit] ? "clock"
+                             : kinds == [.notice] ? "info.circle" : "exclamationmark.octagon")
+            ForEach(rules, id: \.self) { r in
                 VStack(alignment: .leading, spacing: 3) {
-                    Text((kinds.count > 1 ? "\(r.title) · " : "") + r.hoursText)
+                    Text([titles.count > 1 ? r.title : nil, r.hoursText].compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 15, weight: .medium))
-                    if r.partOfBlock {
-                        Text("Posted on part of the block")
+                    if r.partOfBlock && r.kind != .notice {
+                        Text(Self.capitalized(segment.whereText(r)))
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
         }
+    }
+
+    private static func capitalized(_ text: String) -> String {
+        text.prefix(1).uppercased() + text.dropFirst()
     }
 }
 

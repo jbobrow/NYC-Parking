@@ -158,6 +158,9 @@ extension ParkingMapView {
         }
         private var layer: MarkLayer?
         private var shownOverlays: [StripeOverlay] = []
+        /// The current layer's overlays, close-up ones included while zoomed out.
+        private var layerOverlays: [StripeOverlay] = []
+        private var isCloseUp = false
         private var dayStripeOverlays: [StripeOverlay]?
         private var countdownOverlays: [StripeOverlay]?
         private var dayParkingOverlays: [StripeOverlay]?
@@ -345,6 +348,11 @@ extension ParkingMapView {
 
         private func updateMarks(mpp: Double) {
             if !isDriving { applyStripeWidth(StripeBuilder.lineWidth(metersPerPoint: mpp)) }
+            let closeUp = mpp < StripeBuilder.closeUpMetersPerPoint
+            if closeUp != isCloseUp {
+                isCloseUp = closeUp
+                show(layerOverlays)
+            }
             let target: MarkLayer
             if displayMode == .countdown {
                 target = .countdown
@@ -421,10 +429,11 @@ extension ParkingMapView {
 
         private func show(_ overlays: [StripeOverlay]) {
             guard let mapView else { return }
+            layerOverlays = overlays
             mapView.removeOverlays(shownOverlays)
-            shownOverlays = overlays
+            shownOverlays = isCloseUp ? overlays : overlays.filter { !$0.isCloseUpOnly }
             // Above roads but below street-name labels, so names stay legible.
-            mapView.addOverlays(overlays, level: .aboveRoads)
+            mapView.addOverlays(shownOverlays, level: .aboveRoads)
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -738,6 +747,9 @@ final class StripeOverlay: MKMultiPolyline {
     /// Set for dot overlays: each polyline is a near-zero-length segment drawn
     /// with round caps at this width, i.e. a dot of this diameter.
     var dotDiameter: CGFloat?
+    /// Drawn only when zoomed in close (anytime zones: corners, hydrants, bus
+    /// stops), so a zoomed-out map isn't flecked with them.
+    var isCloseUpOnly = false
 }
 
 enum StripeBuilder {
@@ -776,20 +788,28 @@ enum StripeBuilder {
         }
     }
 
+    /// How far in anytime zones show: where block pills grow past their
+    /// smallest size.
+    static let closeUpMetersPerPoint = 0.6
+
     /// Short zones over their blocks, each colored as a curb of its own
-    /// (`color` by its `CurbZone.key`; nil leaves it out).
+    /// (`color` by its `CurbZone.key`; nil leaves it out). Anytime zones are
+    /// close-up only, and drawn first so a timed zone shows over one.
     private static func zoneOverlays(for segments: [ParkingSegment],
                                      color: (String) -> UIColor?) -> [StripeOverlay] {
-        var groups: [UIColor: [MKPolyline]] = [:]
+        struct Key: Hashable { let color: UIColor; let isAnytime: Bool }
+        var groups: [Key: [MKPolyline]] = [:]
         for seg in segments {
             for (i, zone) in seg.zones.enumerated() where zone.curve.count >= 2 {
                 guard let c = color(CurbZone.key(seg.id, i)) else { continue }
-                groups[c, default: []].append(MKPolyline(coordinates: zone.curve, count: zone.curve.count))
+                groups[Key(color: c, isAnytime: zone.restriction.isAnytime), default: []]
+                    .append(MKPolyline(coordinates: zone.curve, count: zone.curve.count))
             }
         }
-        return groups.map { color, lines in
+        return groups.sorted { $0.key.isAnytime && !$1.key.isAnytime }.map { key, lines in
             let overlay = StripeOverlay(lines)
-            overlay.color = color
+            overlay.color = key.color
+            overlay.isCloseUpOnly = key.isAnytime
             return overlay
         }
     }

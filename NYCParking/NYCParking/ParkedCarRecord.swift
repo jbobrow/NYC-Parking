@@ -25,6 +25,8 @@ struct MoveDeadline: Hashable {
         case .noStopping: return "No stopping"
         case .commercial: return "Commercial-only parking"
         case .loading:    return "Truck loading"
+        case .authorized: return "Authorized vehicles only"
+        case .timeLimit:  return "The time limit"
         case .meter:      return "Meters"
         }
     }
@@ -97,6 +99,9 @@ struct ParkedCarRecord: Codable, Equatable {
     /// Asked when parking at a curb with commercial-only hours: commercial
     /// vehicles pay the meter then, other cars have to move. Nil elsewhere.
     let isCommercialVehicle: Bool?
+    /// When the car was parked, for posted time limits. Missing in records
+    /// saved before them.
+    let parkedAt: Date?
     let street: String
     let fromStreet: String
     let toStreet: String
@@ -104,6 +109,7 @@ struct ParkedCarRecord: Codable, Equatable {
 
     init(segment: ParkingSegment, offsetMeters: Double, isCommercialVehicle: Bool? = nil) {
         self.isCommercialVehicle   = isCommercialVehicle
+        self.parkedAt              = AppClock.now
         self.segmentID             = segment.id
         self.coordinateLatitude    = segment.coordinate.latitude
         self.coordinateLongitude   = segment.coordinate.longitude
@@ -156,12 +162,41 @@ struct ParkedCarRecord: Codable, Equatable {
     func nextMove(after now: Date, holidays: [NamedHoliday],
                   calendar cal: Calendar = .newYork) -> MoveDeadline? {
         let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
-        guard let next = MoveCountdown.next(for: windows, in: calendar, upcomingOnly: true),
-              let day = cal.date(byAdding: .day, value: next.days, to: cal.startOfDay(for: now)),
-              let date = cal.date(bySettingHour: next.startMinutes / 60, minute: next.startMinutes % 60,
-                                  second: 0, of: day)
-        else { return nil }
-        return MoveDeadline(date: date, kind: next.kind)
+        let rule = MoveCountdown.next(for: windows.filter { $0.limitMinutes == nil }, in: calendar,
+                                      upcomingOnly: true).flatMap { next -> MoveDeadline? in
+            guard let day = cal.date(byAdding: .day, value: next.days, to: cal.startOfDay(for: now)),
+                  let date = cal.date(bySettingHour: next.startMinutes / 60, minute: next.startMinutes % 60,
+                                      second: 0, of: day)
+            else { return nil }
+            return MoveDeadline(date: date, kind: next.kind)
+        }
+        let limit = timeLimit(around: now, holidays: holidays, calendar: cal)
+            .flatMap { $0.due > now ? MoveDeadline(date: $0.due, kind: .timeLimit) : nil }
+        return [rule, limit].compactMap { $0 }.min { $0.date < $1.date }
+    }
+
+    /// The posted time limit the car is under now, or is next: when it's up
+    /// (counted from parking, or from when the limit starts if parked before
+    /// then) and when its hours end. Nil when the curb has none.
+    private func timeLimit(around now: Date, holidays: [NamedHoliday],
+                           calendar cal: Calendar = .newYork) -> (due: Date, ends: Date)? {
+        let limits = windows.filter { $0.limitMinutes != nil }
+        guard !limits.isEmpty else { return nil }
+        let calendar = CountdownCalendar(now: now, calendar: cal, holidays: holidays, dayCount: 14)
+        let today = cal.startOfDay(for: now)
+        let days = [(-1, calendar.yesterday)] + calendar.days.enumerated().map { ($0.offset, Optional($0.element)) }
+        for case let (offset, day?) in days {
+            guard let midnight = cal.date(byAdding: .day, value: offset, to: today) else { continue }
+            let found = limits.filter { $0.applies(on: day) }.compactMap { w -> (due: Date, ends: Date)? in
+                let start = midnight.addingTimeInterval(Double(w.window.start) * 60)
+                let ends = midnight.addingTimeInterval(Double(w.window.end) * 60)
+                guard ends > now else { return nil }
+                let due = max(start, parkedAt ?? start).addingTimeInterval(Double(w.limitMinutes ?? 0) * 60)
+                return due < ends ? (due, ends) : nil
+            }
+            if let first = found.min(by: { $0.due < $1.due }) { return first }
+        }
+        return nil
     }
 
     /// The street cleaning under way now, or else the next one: what a
@@ -187,7 +222,14 @@ struct ParkedCarRecord: Codable, Equatable {
     /// A rule in effect right now that means the car shouldn't be here, such
     /// as no standing, or commercial-only hours for a passenger car.
     func restrictionInEffect(at now: Date, holidays: [NamedHoliday]) -> MoveCountdown? {
-        windows.restrictionInEffect(in: CountdownCalendar(now: now, holidays: holidays))
+        let cal = CountdownCalendar(now: now, holidays: holidays)
+        if let rule = windows.filter({ $0.limitMinutes == nil }).restrictionInEffect(in: cal) { return rule }
+        // Past the time limit, until its hours end.
+        guard let limit = timeLimit(around: now, holidays: holidays), limit.due <= now,
+              let today = cal.days.first else { return nil }
+        let minutes = { (d: Date) in Int(d.timeIntervalSince(Calendar.newYork.startOfDay(for: now)) / 60) }
+        return MoveCountdown(days: 0, weekday: today.weekday, startMinutes: minutes(limit.due),
+                             endMinutes: minutes(limit.ends), isUnderway: true, kind: .timeLimit)
     }
 
     /// The curb's rules as they apply to this car.

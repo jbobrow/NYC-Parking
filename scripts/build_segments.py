@@ -17,11 +17,11 @@ are grouped by (centerline segment, side of centerline). The curb polyline is th
 centerline offset by half the street width, trimmed back from each intersection
 by half the cross street's width.
 
-Metered curbs (from the ParkNYC block-face dataset), time-limited
-no-standing / no-stopping signs (rush hour, school days, overnight), no-parking
-signs other than street cleaning, and truck loading zones are snapped to the
-same (centerline block, side) keys, so a face can carry any mix of cleaning
-rules, a meter and restrictions.
+Metered curbs (from the ParkNYC block-face dataset) and every other curb
+sign (no standing, stopping or parking, for set hours or anytime; truck loading
+zones, bus stops, fire zones, Authorized Vehicles Only, free parking with a
+time limit) are snapped to the same (centerline block, side) keys, so a face
+can carry any mix of cleaning rules, a meter and restrictions.
 
 Sources
 -------
@@ -134,6 +134,21 @@ def fetch_no_parking_signs(cache_dir):
                    "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code,"
                    "arrow_direction",
     }, os.path.join(cache_dir, "no_parking.json"))
+
+
+def fetch_other_signs(cache_dir):
+    """Curbs kept for one use or one kind of vehicle (Authorized Vehicles Only,
+    taxi stands, EV charging), free parking with a time limit, and back-in
+    parking, none of which say "no standing" or "no parking"."""
+    likes = ["% AVO %", "%AUTHORIZED%", "%PLATES ONLY%", "%AMBULANCE%", "%AMBULETTE%", "%ROAD TEST%",
+             "%FARMERS MARKET%", "%TAXI%STAND%", "%CHARGING ONLY%", "%HOUR PARKING%", "%MINUTE PARKING%",
+             "%PARKING ONLY%", "%BUS LAYOVER%"]
+    return fetch_paged(SIGNS_URL, {
+        "$where": " OR ".join(f"upper(sign_description) LIKE '{l}'" for l in likes),
+        "$select": "order_number,borough,on_street,from_street,to_street,side_of_street,"
+                   "sign_description,sign_x_coord,sign_y_coord,distance_from_intersection,sign_code,"
+                   "arrow_direction",
+    }, os.path.join(cache_dir, "other.json"))
 
 
 def fetch_meters(cache_dir):
@@ -258,17 +273,30 @@ def is_cleaning(desc):
 
 def parse_rule(desc):
     """A street cleaning rule, as (days, start, end). Other No Parking signs
-    are read by `parse_standing`."""
+    are read by `parse_curb_sign`."""
     u = desc.upper()
     if "NO PARKING" not in u or not is_cleaning(u):
         return None
-    m = _TIME_RE.search(u)
+    # "MIDNIGHT-3AM" (overnight cleaning), "NOON-1:30PM", "8:30-10AM",
+    # "11:30AM TO 1PM", "10A M-11:30AM".
+    t = re.sub(r"\b12\s*(NOON|MIDNIGHT)\b", r"\1", u)
+    t = re.sub(r"(\d)\s*([AP])\s+M\b", r"\1\2M", t)
+    t = re.sub(r"(\d(?:AM|PM)?|NOON|MIDNIGHT)\s+TO\s+(\d|NOON|MIDNIGHT)", r"\1-\2", t)
+    m = next((m for m in _SIGN_TOKEN_RE.finditer(t) if m.group("time")), None)
     if not m:
         return None
     days = _extract_days(u)
     if not days:
         return None
-    return (",".join(days), m.group(1), m.group(2))
+    start, end = _sign_range(m)
+    return (",".join(days), _clock_text(start), _clock_text(end))
+
+
+def _clock_text(minutes):
+    """"8AM", "11:30AM", "12PM" (noon), "12AM" (midnight)."""
+    h, m = divmod(minutes % (24 * 60), 60)
+    h12 = h % 12 or 12
+    return f"{h12}{f':{m:02d}' if m else ''}{'AM' if h < 12 else 'PM'}"
 
 
 # ── No standing / stopping / parking, truck loading (Swift CurbRestriction) ──
@@ -328,33 +356,6 @@ def _sign_days(text):
     return mask
 
 
-def parse_standing(desc):
-    """A time-limited no-standing, no-stopping or no-parking sign (other
-    than street cleaning), as ("standing" | "stopping" | "parking",
-    [[day mask, start, end], ...], school days?).
-
-    None for anything that isn't limited to set hours. "Anytime" signs, bus
-    stops and fire zones mark a stretch of curb (often by a corner or hydrant)
-    rather than the block, and their reach isn't in the data, so they're left
-    to the posted signs. "School days" are read as Monday to Friday; there's no
-    school calendar to narrow them, so they err toward the rule applying, as do
-    seasonal signs ("MAY-SEPTEMBER"), which are read as year-round.
-    """
-    u = desc.upper().replace("–", "-")
-    if "NO STOPPING" in u:
-        kind = "stopping"
-    elif "NO STANDING" in u:
-        kind = "standing"
-    elif "NO PARKING" in u and not is_cleaning(u):
-        kind = "parking"
-    else:
-        return None
-    if "ANYTIME" in u or ("BUS" in u and "STOP" in u) or "OTHER TIMES" in u:
-        return None
-    windows, school = _posted_hours(u)
-    return (kind, windows, school) if windows else None
-
-
 # "TRUCK LOADING ONLY", "TRUCKS LOADING ONLY", "NLZ (SYMBOL) LOADING ONLY" (a
 # neighborhood loading zone), "NO STANDING EXCEPT TRUCKS LOADING & UNLOADING";
 # not farmers or flea market loading, which keep to their own season.
@@ -365,19 +366,22 @@ def parse_loading(desc):
     """A truck loading zone limited to set hours, as ("loading", [[day mask,
     start, end], ...], False): no standing for anyone else.
 
-    "OTHER TIMES NO STANDING" (or a bus layover) after the hours is anytime,
-    left to the posted signs like other anytime rules, as are zones with no
-    hours at all.
+    A zone with no hours is a loading zone anytime. "OTHER TIMES NO STANDING"
+    (or a bus layover) after the hours is posted on its own as well.
     """
     u = desc.upper().replace("–", "-")
     if not _LOADING_RE.search(u):
         return None
-    windows, _ = _posted_hours(u.split("OTHER TIMES")[0])
+    hours = u.split("OTHER TIMES")[0]
+    windows, _ = _posted_hours(hours)
+    if not windows and not _names_hours(hours):
+        windows = ANYTIME           # "TRUCK LOADING ONLY -->"
     return ("loading", windows, False) if windows else None
 
 
-def _posted_hours(u):
-    """([[day mask, start, end], ...], school days?) for a sign's hours."""
+def _posted_hours(u, all_day=False):
+    """([[day mask, start, end], ...], school days?) for a sign's hours.
+    `all_day`: a sign naming days but no hours runs all day on them."""
     u = re.sub(r"\([^)]*\)", " ", u)            # "(SUPERSEDES SP-1120B)", "(SYMBOLS)"
     u = re.sub(r"<?-{2,}>?|<-+|->", " ", u)     # arrows
     school = "SCHOOL DAYS" in u
@@ -412,6 +416,12 @@ def _posted_hours(u):
                 days |= bits
             prev, dash = d, False
     default = 0x1F if school else 0x7F
+    if not groups and all_day:
+        # "NO PARKING SATURDAY SUNDAY & HOLIDAYS", "NO PARKING EXCEPT SUNDAY":
+        # days but no hours, so all day on them.
+        mask = _sign_days(u)
+        mask = (mask or (0x7F if exempt else 0)) & ~exempt
+        return ([[mask, 0, 24 * 60]] if mask else []), school
     windows = []
     for mask, times in groups:
         mask = (mask or default) & ~exempt
@@ -421,6 +431,156 @@ def _posted_hours(u):
             if mask:
                 windows.append([mask, start, end])
     return windows, school
+
+
+# ── Every other curb sign (Swift CurbRestriction) ──────────────────────────
+
+ANYTIME = [[0x7F, 0, 24 * 60]]
+
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])}
+_MONTH = r"(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?"
+# "MAY 15 - SEPT 30", "MAY-JULY", "FEB 1 - DEC 31"
+_DATE = r"(?:\s*(\d{1,2})(?![\d:]|\s*(?:AM|PM)))?"     # a day, not "11AM"
+_SEASON_RE = re.compile(r"\b" + _MONTH + _DATE + r"\s*(?:-|THRU|TO)\s*" + _MONTH + _DATE)
+
+
+def _season(u):
+    """([start, end] as month × 100 + day, the text without it), or (None, u).
+    A month alone runs from its 1st, or to its end."""
+    m = _SEASON_RE.search(u)
+    if not m:
+        return None, u
+    start = _MONTHS[m.group(1)] * 100 + int(m.group(2) or 1)
+    end = _MONTHS[m.group(3)] * 100 + int(m.group(4) or 31)
+    return [start, end], u[:m.start()] + " " + u[m.end():]
+
+
+# Who an Authorized Vehicles Only curb is for, as a short name ("Police only").
+_AUTHORIZED_FOR = [
+    (r"MTA POLICE", "MTA police"), (r"POLICE", "Police"), (r"FIRE DEPARTMENT|FDNY", "Fire Department"),
+    (r"EDUCATION|SCHOOL|FACULTY", "School staff"), (r"SANITATION", "Sanitation"),
+    (r"CONSUL|DIPLOMAT", "Diplomats"), (r"POSTAL", "Postal Service"),
+    (r"NYSJ|COURT|JUDICIA|DISTRICT ATTORNEY", "Court staff"),
+    (r"AMBULANCE|AMBULETTE", "Ambulances"), (r"DOCTOR", "Doctors"), (r"PRESS|\bNYP\b", "Press"),
+    (r"ROAD TEST", "Road tests"), (r"FARMERS MARKET", "Farmers market"),
+    (r"TRANSPORTATION", "DOT"), (r"PARKS", "Parks Dept"), (r"\bMTA\b", "MTA"),
+]
+_AUTHORIZED_RE = re.compile(r"\bAVO\b|AUTHORIZED VEHICLES|PLATES ONLY|AMBULANCE|AMBULETTE|ROAD TEST ONLY"
+                            r"|FARMERS MARKET ONLY")
+
+# Curbs kept for one use, no standing for anyone else; most have no hours.
+_RESERVED = [
+    (r"BUS STOP|HANDICAP BUS|ACCESS-A-RIDE", "Bus stop"),
+    (r"CARSHARE|CAR SHARE", "Car share only"),
+    (r"FIRE ZONE", "Fire zone"),
+    (r"HOTEL LOADING ZONE", "Hotel loading zone"),
+    (r"TAXI.*STAND", "Taxi stand"),
+    (r"CHARGING ONLY", "EV charging only"),
+    (r"COMMUTER VAN", "Commuter van stop"),
+    (r"BUS LAYOVER", "Bus layover"),
+    (r"HARD ?HAT|TEMPORARY CONSTRUCTION", "Construction zone"),
+]
+
+# Posted for information only: where to park, but nothing to move for.
+_NOTICES = [
+    (r"STADIUM EVENT", "No parking during stadium events"),
+    (r"BACK IN ANGLE PARKING ONLY", "Back-in angle parking"),
+    (r"BACK IN (\d+) DEG PARKING ONLY", "Back-in {}° parking"),
+    (r"PARALLEL PARKING ONLY", "Parallel parking only"),
+]
+
+# "2 HOUR PARKING 8AM-7PM EXCEPT SUNDAY", "1/2 HOUR PARKING", "15 MINUTE PARKING"
+_LIMIT_RE = re.compile(r"^(\d+)(?:/(\d+))?\s*(HOUR|MINUTE)S?\s+PARKING\b")
+_NOT_PASSENGER = re.compile(r"TRAILER|BUSES|METER|\bHMP\b|\bMMP\b|IDLING")
+
+
+def parse_curb_sign(desc):
+    """Any curb sign other than street cleaning, as (kind, [[day mask, start,
+    end], ...], school days?, extras), or None.
+
+    Kinds: "standing", "stopping", "parking" (no standing / stopping / parking
+    for a time, anytime, or kept for one use: a bus stop, fire zone, taxi stand),
+    "loading" (truck loading zones), "authorized" (Authorized Vehicles Only:
+    police, schools, diplomats, ambulances), "limit" (free parking up to a time
+    limit) and "notice" (no hours: back-in parking, stadium event days).
+    Extras, each only when it applies: "label" (what the sign is for), "season"
+    ([start, end], month × 100 + day), "holidays" (also on major holidays) and
+    "limit" (minutes).
+
+    "School days" are read as Monday to Friday; there's no school calendar to
+    narrow them, so they err toward the rule applying.
+    """
+    u = desc.upper().replace("–", "-")
+    if "NO PARKING" in u and is_cleaning(u):
+        return None
+    loading = parse_loading(desc)
+    if loading:
+        return loading + ({},)
+    if "CODING RIDER" in u or "INFORMATION" in u:
+        return None
+    for pattern, label in _NOTICES:
+        m = re.search(pattern, u)
+        if m:
+            return ("notice", [], False, {"label": label.format(*m.groups())})
+
+    season, u = _season(u)
+    extras = {}
+    if season:
+        extras["season"] = season
+    if re.search(r"HOLIDAYS|HOILDAYS", u):
+        extras["holidays"] = 1
+    other_times = re.search(r"OTHER TIMES NO (STANDING|STOPPING|PARKING)", u)
+
+    m = _LIMIT_RE.match(u)
+    if m and not _NOT_PASSENGER.search(u):
+        n = int(m.group(1)) / int(m.group(2) or 1)
+        extras["limit"] = round(n * (60 if m.group(3) == "HOUR" else 1))
+        windows, school = _posted_hours(u, all_day=True)
+        return ("limit", windows or ANYTIME, school, extras)
+
+    if _AUTHORIZED_RE.search(u) and "COMMUTER VAN" not in u:
+        label = next((l for p, l in _AUTHORIZED_FOR if re.search(p, u)), None)
+        if label:
+            extras["label"] = label
+        windows, school = _posted_hours(u.split("OTHER TIMES")[0], all_day=True)
+        if other_times or not windows or "ANYTIME" in u:
+            windows, school = ANYTIME, False
+            if other_times:
+                extras.pop("season", None)      # no standing out of season too
+        return ("authorized", windows, school, extras)
+
+    label = next((l for p, l in _RESERVED if re.search(p, u)), None)
+    if "NO STOPPING" in u:
+        kind = "stopping"
+    elif "NO STANDING" in u:
+        kind = "standing"
+    elif "NO PARKING" in u:
+        kind = "parking"
+    elif label:
+        kind = "standing"
+    else:
+        return None
+    if label:
+        extras["label"] = label
+    if other_times:
+        return None     # hours, then no standing anytime: read as their hours elsewhere
+    if "ANYTIME" in u or label and (not _names_hours(u) or "OTHER TIMES" in u):
+        return (kind, ANYTIME, False, extras)
+    windows, school = _posted_hours(u, all_day=True)
+    if not windows:
+        # "NO STANDING -->": no hours, no days, so anytime.
+        if re.fullmatch(r"NO (STANDING|STOPPING|PARKING)\s*(<?-+>?|W/ SINGLE ARROW|\(SINGLE ARROW\))?\s*",
+                        re.sub(r"\([^)]*\)", " ", u).strip() if "SINGLE ARROW" not in u else u.split("(SUPER")[0].strip()):
+            return (kind, ANYTIME, False, extras)
+        return None
+    return (kind, windows, school, extras)
+
+
+def _names_hours(u):
+    """Whether a sign names any days or times."""
+    return any(m.group("time") or not m.group("range")
+               for m in _SIGN_TOKEN_RE.finditer(re.sub(r"\([^)]*\)", " ", u)))
 
 
 # ── Meter parsing (read by Swift MeterInfo) ───────────────────────────────────
@@ -880,7 +1040,7 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
     # Snap signs.
     faces = defaultdict(lambda: {"rules": [], "rule_keys": set(), "names": Counter(),
                                  "n": 0, "meter": None, "meter_len": 0.0,
-                                 "standing": defaultdict(list), "anytime": []})
+                                 "standing": defaultdict(list), "anytime": [], "poles": []})
     stats = Counter()
     for sg in signs_raw:
         rule = parse_rule(sg.get("sign_description") or "")
@@ -903,23 +1063,21 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
         f = faces[key]
         f["n"] += 1
         f["names"][sg.get("on_street") or ""] += 1
+        f["poles"].append(project_on_polyline(px, py, blocks[key[0]]["pts"])[1])
         if rule not in f["rule_keys"]:
             f["rule_keys"].add(rule)
             f["rules"].append(rule)
     print(f"Block faces with rules: {len(faces)}")
 
-    # Snap time-limited no-standing / no-stopping signs and truck loading
-    # zones, keeping where along the block each one stands, to judge how much
-    # of the block a rule covers. A loading zone's sign reads "no standing" for
-    # everyone else, so it's read as a loading zone first. Anytime and bus stop
-    # zones aren't shown, but where they are tells how much of the rest of the
-    # block a rule covers.
+    # Snap every other curb sign (no standing, stopping or parking, loading
+    # zones, Authorized Vehicles Only, time limits…), keeping where along the
+    # block each one stands, to judge how much of the block a rule covers.
+    # Anytime zones also tell how much of the rest of the block a rule covers.
     for sg in standing_raw:
         desc = sg.get("sign_description") or ""
-        parsed = parse_loading(desc) or parse_standing(desc)
-        anytime = not parsed and _is_anytime(desc)
-        if not parsed and not anytime:
-            stats["standing not_time_limited"] += 1
+        parsed = parse_curb_sign(desc)
+        if not parsed:
+            stats["standing unread"] += 1
             continue
         try:
             x_ft = float(sg.get("sign_x_coord") or 0)
@@ -937,9 +1095,10 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
         pts = blocks[key[0]]["pts"]
         _, along, _, _ = project_on_polyline(px, py, pts)
         reach = sign_reach(desc, sg.get("arrow_direction"), pts, along)
-        if anytime:
+        kind, windows, _, extras = parsed
+        if windows == ANYTIME and kind not in ("limit", "notice") and "season" not in extras:
             faces[key]["anytime"].append((along, reach))
-            continue
+        faces[key]["poles"].append(along)
         rule = json.dumps(parsed, separators=(",", ":"))
         faces[key]["standing"][rule].append((along, reach))
 
@@ -984,7 +1143,7 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
     out = []
     for (bid, side), f in faces.items():
         if not f["rules"] and f["meter"] is None and not f["standing"]:
-            continue    # only anytime zones, which aren't shown
+            continue
         s = blocks[bid]
         pts = s["pts"]
         sign = 1 if side == "L" else -1
@@ -1024,6 +1183,14 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
         # Rules sorted by first weekday for stable display.
         rules = sorted(f["rules"], key=lambda r: (_DAY_ORDER[r[0].split(",")[0]], r[1]))
         geom = [[round(la, 6), round(lo, 6)] for la, lo in (to_latlon(x, y) for x, y in curb_t)]
+        rs = restrictions(f["standing"], f["anytime"], f["poles"], polyline_length(pts),
+                          lambda along: curb_fraction(along, polyline_length(pts), total,
+                                                      trim_a * scale, trim_b * scale),
+                          metered=f["meter"] is not None)
+        # A block with only short anytime zones, or notices, isn't shown.
+        if not rules and f["meter"] is None and all(
+                r[0] == "notice" or (r[3] and r[1] == ANYTIME) for r in rs):
+            continue
 
         out.append({
             "id": f"{bid}{side}",
@@ -1037,9 +1204,7 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
             "half_len": round(length / 2, 1),
             "rules": [list(r) for r in rules],
             "meter": f["meter"],
-            "restrictions": restrictions(f["standing"], f["anytime"], polyline_length(pts),
-                                         lambda along: curb_fraction(along, polyline_length(pts), total,
-                                                                     trim_a * scale, trim_b * scale)),
+            "restrictions": rs,
             "geom": geom,
         })
     print(f"Block faces written: {len(out)}")
@@ -1047,13 +1212,6 @@ def build(signs_raw, cscl_raw, meters_raw, standing_raw):
 
 
 _COMPASS = {"EAST": (1, 0), "WEST": (-1, 0), "NORTH": (0, 1), "SOUTH": (0, -1)}
-
-
-def _is_anytime(desc):
-    """No standing, stopping or parking at any hour: "ANYTIME", bus stops."""
-    u = desc.upper()
-    return (("NO STANDING" in u or "NO STOPPING" in u or "NO PARKING" in u)
-            and ("ANYTIME" in u or ("BUS" in u and "STOP" in u)))
 
 
 def sign_reach(desc, arrow_direction, pts, along):
@@ -1113,33 +1271,76 @@ def curb_fraction(along, block_len, curb_len, trim_a, trim_b):
     return min(1.0, max(0.0, at / max(curb_len - trim_a - trim_b, 1e-6)))
 
 
-def restrictions(standing, anytime, block_len, to_curb):
-    """[[kind, windows, school days?, part of block?, stretches?], ...] for a face.
+def zone_coverage(signs, poles, block_len):
+    """[(start, end), ...] along the block that an anytime zone's signs cover,
+    or None when a sign's direction is unknown. Each runs from the sign the way
+    its arrow points to the next sign of any kind (a zone by a corner, hydrant
+    or bus stop ends where the next rule's sign stands) or the end of the
+    block. A double-arrow sign alone on the block doesn't say how far it
+    reaches, so it's left out."""
+    if any(reach is None for _, reach in signs):
+        return None
+    spans = []
+    for at, reach in signs:
+        after = min((p for p in poles if p > at + 1), default=None)
+        before = max((p for p in poles if p < at - 1), default=None)
+        if reach == 0 and after is None and before is None:
+            continue
+        if reach >= 0:
+            spans.append((at, block_len if after is None else after))
+        if reach <= 0:
+            spans.append((0.0 if before is None else before, at))
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    return merged
+
+
+def restrictions(standing, anytime, poles, block_len, to_curb, metered=False):
+    """[[kind, windows, school days?, part of block?, stretches?, extras?], ...]
+    for a face (see `parse_curb_sign`; stretches is [] when extras follow).
 
     A rule covers the block when its signs reach across most of it, as their
     arrows say, counting curb that's no standing anytime (`anytime` signs: bus
     stops, hydrant and corner zones) as covered already. Where a sign's
     direction isn't known, a rule posted only once on a longer block is taken
-    as a short zone (by a school entrance, say). A short zone's stretches are
-    [start, end] fractions of the drawn curb, when they're known.
+    as a short zone (by a school entrance, say). An anytime zone reaches only
+    to the next sign (`poles`: where every sign on the face stands). A short
+    zone's stretches are [start, end] fractions of the drawn curb, when
+    they're known. Time limits on a metered curb are the meter's to set, so
+    they're left out.
     """
     always = sign_coverage(anytime, block_len) or []
     out = []
     for rule, signs in sorted(standing.items()):
-        kind, windows, school = json.loads(rule)
-        spans = sign_coverage(signs, block_len)
-        if block_len <= PARTIAL_BLOCK_M:
-            partial = False
-        elif spans is None:
-            partial = len(signs) == 1
+        kind, windows, school, extras = json.loads(rule)
+        if kind == "limit" and metered:
+            continue
+        if windows == ANYTIME and kind not in ("limit", "notice"):
+            # A whole block of it is signed more than once, unless it's short.
+            spans = zone_coverage(signs, poles, block_len)
+            partial = (spans is None or _union_length(spans) < WHOLE_BLOCK_SHARE * block_len
+                       or len({round(at) for at, _ in signs}) < 2 and block_len > PARTIAL_BLOCK_M)
         else:
-            partial = _union_length(spans + always) < WHOLE_BLOCK_SHARE * block_len
+            spans = sign_coverage(signs, block_len)
+            if block_len <= PARTIAL_BLOCK_M:
+                partial = False
+            elif spans is None:
+                partial = len(signs) == 1
+            else:
+                partial = _union_length(spans + always) < WHOLE_BLOCK_SHARE * block_len
         entry = [kind, windows, int(school), int(partial)]
+        stretches = []
         if partial and spans:
             stretches = [[round(to_curb(a), 3), round(to_curb(b), 3)] for a, b in spans]
             stretches = [st for st in stretches if st[1] - st[0] >= 0.02]
-            if stretches:
-                entry.append(stretches)
+        if stretches or extras:
+            entry.append(stretches)
+        if extras:
+            entry.append(extras)
         out.append(entry)
     return out
 
@@ -1223,9 +1424,12 @@ def main():
     print("Fetching no-parking signs other than street cleaning…")
     no_parking = fetch_no_parking_signs(args.cache)
     print(f"  {len(no_parking)} signs")
+    print("Fetching Authorized Vehicles Only, time limit and other curb signs…")
+    other = fetch_other_signs(args.cache)
+    print(f"  {len(other)} signs")
     # A few signs are in more than one ("TRUCK LOADING ONLY … OTHER TIMES NO STANDING").
     seen = {json.dumps(sg, sort_keys=True) for sg in standing}
-    for sg in loading + no_parking:
+    for sg in loading + no_parking + other:
         key = json.dumps(sg, sort_keys=True)
         if key not in seen:
             seen.add(key)

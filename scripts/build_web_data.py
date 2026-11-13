@@ -146,12 +146,17 @@ def main():
                            spec.get("limit_min") or 0, spec.get("first_hour") or 0])
         return meter_index[profile]
 
-    kinds = {"standing": 0, "stopping": 1, "loading": 2, "parking": 3}
+    # Authorized Vehicles Only is no standing for everyone else. Anytime,
+    # seasonal and time-limited rules, and notices, are the app's alone.
+    kinds = {"standing": 0, "stopping": 1, "loading": 2, "parking": 3, "authorized": 0}
+    anytime = [[0x7F, 0, 24 * 60]]
 
     def restrictions_id(restrictions_json):
         windows = [[kinds[kind], *w]
-                   for kind, ws, _school, part, *_stretches in json.loads(restrictions_json or "[]")
-                   if not part for w in ws]
+                   for kind, ws, _school, part, *more in json.loads(restrictions_json or "[]")
+                   if not part and kind in kinds and ws != anytime
+                   and not (more[1:] and ("season" in more[1] or "holidays" in more[1]))
+                   for w in ws]
         if not windows:
             return -1
         key = json.dumps(windows)

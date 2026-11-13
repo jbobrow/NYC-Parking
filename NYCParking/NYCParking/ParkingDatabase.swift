@@ -121,7 +121,8 @@ final class ParkingDatabase {
     }
 
     /// [["standing", [[day mask, start, end], ...], school days, part of block,
-    ///   [[start, end], ...] along the curb (part of block only, when known)], ...]
+    ///   [[start, end], ...] along the curb (part of block only, when known),
+    ///   {"label", "season": [start, end], "holidays", "limit"}], ...]
     private static func parseRestrictions(_ json: String) -> [CurbRestriction] {
         guard !json.isEmpty, let data = json.data(using: .utf8),
               let arr = (try? JSONSerialization.jsonObject(with: data)) as? [[Any]] else { return [] }
@@ -130,12 +131,17 @@ final class ParkingDatabase {
                   let kind = (entry[0] as? String).flatMap(CurbRestriction.Kind.init(rawValue:)),
                   let raw = entry[1] as? [[Int]] else { return nil }
             let windows = raw.compactMap { w in w.count == 3 ? DayWindow(dayMask: w[0], start: w[1], end: w[2]) : nil }
-            guard !windows.isEmpty else { return nil }
+            guard !windows.isEmpty || kind == .notice else { return nil }
             let stretches = (entry.count > 4 ? entry[4] as? [[Double]] : nil)?
                 .compactMap { $0.count == 2 && $0[0] < $0[1] ? $0[0]...$0[1] : nil } ?? []
+            let extras = (entry.count > 5 ? entry[5] as? [String: Any] : nil) ?? [:]
+            let season = (extras["season"] as? [Int]).flatMap { $0.count == 2 ? Season(start: $0[0], end: $0[1]) : nil }
+            let limit = extras["limit"] as? Int
+            guard kind != .limit || limit != nil else { return nil }
             return CurbRestriction(kind: kind, windows: windows,
                                    schoolDays: (entry[2] as? Int) == 1, partOfBlock: (entry[3] as? Int) == 1,
-                                   stretches: stretches)
+                                   stretches: stretches, label: extras["label"] as? String, season: season,
+                                   onHolidays: (extras["holidays"] as? Int) == 1, limitMinutes: limit)
         }
     }
 

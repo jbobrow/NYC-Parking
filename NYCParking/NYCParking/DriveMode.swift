@@ -670,7 +670,7 @@ private struct SideCard: View {
         guard let c else { return ("7+ DAYS", segment.hasCleaning ? "No cleaning this week" : "Nothing this week") }
         if c.isUnderway {
             let end = c.endMinutes.map { ParkingTime.format(minutes: $0 % (24 * 60)) }
-            let until = end.map { " until \($0)" } ?? " now"
+            let until = end.map { " until \($0)" } ?? " anytime"
             switch c.kind {
             case .cleaning:   return ("NOW", end.map { "Until \($0)" } ?? "Cleaning now")
             case .noStanding: return ("NOW", "No standing" + until)
@@ -678,6 +678,8 @@ private struct SideCard: View {
             case .noStopping: return ("NOW", "No stopping" + until)
             case .commercial: return ("NOW", "Trucks only" + until)
             case .loading:    return ("NOW", "Truck loading" + until)
+            case .authorized: return ("NOW", "Authorized only" + until)
+            case .timeLimit:  return ("NOW", "Time limit is up")
             case .meter:      return ("PAY", "Paid" + until)
             }
         }
@@ -698,6 +700,8 @@ private struct SideCard: View {
         case .noStopping: what = "no stopping"
         case .commercial: what = "trucks only"
         case .loading:    what = "truck loading"
+        case .authorized: what = "authorized only"
+        case .timeLimit:  what = "time limit up"
         case .meter:      what = "pay"
         }
         let time = ParkingTime.format(minutes: c.startMinutes)

@@ -133,9 +133,10 @@ final class SegmentIndex: @unchecked Sendable {
 }
 
 /// A stretch of curb where a rule on part of the block applies (a short
-/// truck loading or no-standing zone), from its sign the way the sign's arrow
-/// points. On the map it's drawn over the block, colored as a curb of its own
-/// with the block's rules and its own.
+/// truck loading or no-standing zone, a bus stop), from its sign the way the
+/// sign's arrow points. On the map it's drawn over the block, colored as a
+/// curb of its own with the block's rules and its own; anytime zones only
+/// when zoomed in close.
 struct CurbZone: Sendable {
     let restriction: CurbRestriction
     let curve: [CLLocationCoordinate2D]
@@ -147,8 +148,8 @@ struct CurbZone: Sendable {
 
     static func zones(restrictions: [CurbRestriction], moveWindows: [CurbWindow],
                       curve: [CLLocationCoordinate2D]) -> [CurbZone] {
-        restrictions.filter(\.partOfBlock).flatMap { r in
-            let windows = moveWindows + r.windows.map { CurbWindow(kind: r.windowKind, window: $0) }
+        restrictions.filter { $0.partOfBlock && $0.kind != .notice }.flatMap { r in
+            let windows = moveWindows + r.curbWindows
             return r.stretches.map { range in
                 CurbZone(restriction: r, curve: subCurve(curve, range), moveWindows: windows)
             }

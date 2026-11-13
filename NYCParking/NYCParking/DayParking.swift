@@ -72,13 +72,14 @@ enum DayParkingVerdict: Hashable, Sendable {
     /// the start) until `until`.
     case paid(from: TripTime?, until: TripTime)
     /// The car can't stay: a rule runs from `start` to `end` (`isUnderway`:
-    /// it already is at the stay's start), or the stay outlasts the meter's
-    /// limit and the car has to move by `start`.
+    /// it already is at the stay's start; no `end`: it runs anytime), or the
+    /// stay outlasts the meter's or a sign's time limit and the car has to
+    /// move by `start`.
     case noParking(Reason, start: TripTime, end: TripTime?, isUnderway: Bool)
 
     enum Reason: Hashable, Sendable {
         case rule(CurbWindow.Kind)
-        case meterLimit(minutes: Int)
+        case timeLimit(minutes: Int)
     }
 
     /// The Meters colors and legend: commercial-only and truck loading hours
@@ -101,7 +102,7 @@ enum DayParkingVerdict: Hashable, Sendable {
             return until.map { "Free until \($0.text)" } ?? "Free the whole time"
         case .paid(let from, let until):
             return from.map { "Paid from \($0.text)" } ?? "Paid until \(until.text)"
-        case .noParking(.meterLimit(let limit), let start, _, _):
+        case .noParking(.timeLimit(let limit), let start, _, _):
             return "\(DayParkingTrip.durationText(limit)) limit · move by \(start.text)"
         case .noParking(.rule(let kind), let start, let end, let isUnderway):
             let what: String
@@ -112,6 +113,8 @@ enum DayParkingVerdict: Hashable, Sendable {
             case .noStopping: what = "No stopping"
             case .commercial: what = "Commercial vehicles only"
             case .loading:    what = "Truck loading only"
+            case .authorized: what = "Authorized vehicles only"
+            case .timeLimit:  what = "Time limit"
             case .meter:      what = "Paid parking"
             }
             return "\(what) \(Self.whenText(start: start, end: end, isUnderway: isUnderway))"
@@ -121,7 +124,7 @@ enum DayParkingVerdict: Hashable, Sendable {
     /// "until 10 AM" when it's under way, "11 AM–12:30 PM" (or "Thu 8:30–10 AM")
     /// when it starts during the stay.
     fileprivate static func whenText(start: TripTime, end: TripTime?, isUnderway: Bool) -> String {
-        if isUnderway { return end.map { "until \($0.text)" } ?? "now" }
+        if isUnderway { return end.map { "until \($0.text)" } ?? "anytime" }
         guard let end, end.days == start.days else { return "at \(start.text)" }
         let range = ParkingTime.formatRange(start.minutes, end.minutes)
         return start.days == 0 ? range : "\(start.weekday.short.capitalized) \(range)"
@@ -140,16 +143,25 @@ extension ParkingSegment {
         let dayMinutes = 24 * 60
         let a = cal.minuteOfDay, b = a + minutes
 
-        // Every time a rule runs, in minutes from the start day's midnight.
-        struct Span { let kind: CurbWindow.Kind; let start: Int; let end: Int }
+        // Every time a rule runs, in minutes from the start day's midnight;
+        // back-to-back runs of one rule (all day Saturday and Sunday) as one.
+        struct Span { let kind: CurbWindow.Kind; let start: Int; var end: Int; var limit: Int? }
         let days = [(-1, cal.yesterday)] + cal.days.enumerated().map { ($0.offset, Optional($0.element)) }
         var spans: [Span] = []
         for case let (offset, day?) in days {
-            for w in moveWindows where w.window.covers(day.weekday) && !w.isSuspended(on: day) {
-                spans.append(Span(kind: w.kind, start: offset * dayMinutes + w.window.start,
-                                  end: offset * dayMinutes + w.window.end))
+            for w in moveWindows where w.applies(on: day) {
+                let span = Span(kind: w.kind, start: offset * dayMinutes + w.window.start,
+                                end: offset * dayMinutes + w.window.end, limit: w.limitMinutes)
+                if let i = spans.firstIndex(where: { $0.kind == span.kind && $0.limit == nil && span.limit == nil
+                                                     && $0.end == span.start }) {
+                    spans[i].end = span.end
+                } else {
+                    spans.append(span)
+                }
             }
         }
+        // Runs to the end of the calendar: anytime, as far as it can tell.
+        let horizon = cal.days.count * dayMinutes
         let week = ParkingDay.allCases.sorted { $0.sortOrder < $1.sortOrder }
         let startDay = cal.days.first?.weekday.sortOrder ?? 0
         func time(_ m: Int) -> TripTime {
@@ -160,13 +172,22 @@ extension ParkingSegment {
 
         // Cleaning, no standing or no stopping, then commercial-only and truck
         // loading hours: the soonest of them (strictest when they start together).
-        let during = spans.filter { !$0.kind.isMeter && $0.start < b && $0.end > a }
+        let during = spans.filter { !$0.kind.isMeter && $0.limit == nil && $0.start < b && $0.end > a }
         let soonest = { (spans: [Span]) in
             spans.min { ($0.start, -$0.kind.strictness) < ($1.start, -$1.kind.strictness) }
         }
         if let rule = soonest(during.filter { !$0.kind.isCommercialOnly }) ?? soonest(during) {
-            return .noParking(.rule(rule.kind), start: time(rule.start), end: time(rule.end),
+            return .noParking(.rule(rule.kind), start: time(rule.start),
+                              end: rule.start <= -dayMinutes + 1 && rule.end >= horizon ? nil : time(rule.end),
                               isUnderway: rule.start <= a)
+        }
+
+        // Posted time limits ("2 hour parking 8 AM–7 PM"): free up to the
+        // limit, counted from the start of the stay or of the limit's hours.
+        if let over = spans.filter({ $0.limit != nil && $0.start < b && $0.end > a })
+            .first(where: { min($0.end, b) - max($0.start, a) > $0.limit! }), let limit = over.limit {
+            return .noParking(.timeLimit(minutes: limit), start: time(max(over.start, a) + limit),
+                              end: time(over.end), isUnderway: false)
         }
 
         // Meter hours, back-to-back windows run together.
@@ -182,7 +203,7 @@ extension ParkingSegment {
         if let first = paidInStay.first, let last = paidInStay.last {
             if let limit = meter?.profile.paid?.limitMinutes, limit > 0,
                let over = paidInStay.first(where: { min($0.end, b) - max($0.start, a) > limit }) {
-                return .noParking(.meterLimit(minutes: limit), start: time(max(over.start, a) + limit),
+                return .noParking(.timeLimit(minutes: limit), start: time(max(over.start, a) + limit),
                                   end: time(over.end), isUnderway: false)
             }
             return .paid(from: first.start > a ? time(first.start) : nil, until: time(last.end))
@@ -241,7 +262,7 @@ struct DayParkingPill: Hashable {
             let parts = [tier?.priceText, tier?.limitText].compactMap { $0 }
             title = parts.isEmpty ? "PAID" : parts.joined(separator: " · ")
             detail = from.map { "from \($0.text)" } ?? "until \(until.text)"
-        case .noParking(.meterLimit(let limit), let start, _, _):
+        case .noParking(.timeLimit(let limit), let start, _, _):
             title = "\(DayParkingTrip.durationText(limit).uppercased()) MAX"
             detail = "move by \(start.text)"
         case .noParking(.rule(let rule), let start, let end, let isUnderway):
@@ -256,7 +277,8 @@ struct DayParkingPill: Hashable {
             case .noStanding: what = "no standing "
             case .noParking:  what = ""
             case .noStopping: what = "no stopping "
-            case .commercial, .loading, .meter: what = ""
+            case .authorized: what = "authorized only "
+            case .commercial, .loading, .timeLimit, .meter: what = ""
             }
             detail = what + DayParkingVerdict.whenText(start: start, end: end, isUnderway: isUnderway)
         }
