@@ -14,7 +14,12 @@ final class ParkingDatabase {
 
     init?() {
         guard let url = Bundle.main.url(forResource: "segments", withExtension: "db") else { return nil }
-        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
+        // Immutable: the bundled file never changes, so SQLite takes no file
+        // locks. iOS kills a suspended app holding one (0xdead10cc), as when
+        // it goes to the background while this loads at launch.
+        let uri = url.absoluteString + "?immutable=1"
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_URI,
+                              nil) == SQLITE_OK else {
             sqlite3_close(db); return nil
         }
     }
