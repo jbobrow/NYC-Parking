@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Source for the site's share video (og:video), 1200x630 drawn at 2x.
+     It starts from the share image itself (docs/og.png), so the headline keeps
+     the Mac's fonts, and moves only the phone: driving up DeKalb Ave, the map
+     rolls toward you, and as you cross S Oxford St the header moves on to the
+     next block. The cards stay put because the next block has the same rules
+     (left side Thursday, right side Friday 9:30-11, in docs/data/blocks.json).
+     At the end the screen dissolves back to the share image, so the 8-second
+     loop opens and closes on the same frame. Open it in a browser to watch it
+     loop; re-render the video with ./render-video.sh -->
+<meta charset="utf-8">
+<title>NYC Parking share video</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600&display=block">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body { background: url(../docs/og.png) 0 0 / 1200px 630px no-repeat; position: relative; }
+
+  /* The map below the cards, inside the screen (measured from og.png at 2x:
+     screen x 1416-2175, cards end at y 581). It grows from where DeKalb meets
+     the cards' bottom edge, so the road rolls toward you and nothing from
+     behind the cards slides into view. */
+  .map { position: absolute; left: 708px; top: 291px; width: 379.5px; height: 339px; overflow: hidden; }
+  .map div {
+    position: absolute; left: -708px; top: -291px; width: 1200px; height: 630px;
+    background: url(../docs/og.png) 0 0 / 1200px 630px no-repeat;
+    transform-origin: 899px 291px;
+  }
+
+  /* The header's second line: a patch of the header's own background
+     (rows above and below the text, blended) covers the old cross streets */
+  .patch { position: absolute; left: 793px; top: 172.5px; width: 212px; height: 15.5px; background: url(header-patch.png) 0 0 / 100% 100%; opacity: 0; }
+  .next {
+    position: absolute; left: 898px; top: 173px; transform: translateX(-50%);
+    font: 600 13.6px/1 Nunito, ui-rounded, sans-serif; color: rgb(178 175 176);
+    white-space: nowrap; opacity: 0;
+  }
+  .next svg { width: 10px; height: 9px; margin: 0 3px 0 4px; vertical-align: 0; }
+</style>
+</head>
+<body>
+  <div class="map"><div id="map"></div></div>
+  <div class="patch" id="patch"></div>
+  <div class="next" id="next">S Oxford St<svg viewBox="0 0 10 9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4.5h7.6M5.3 1.2l3.3 3.3-3.3 3.3"/></svg>Cumberland St</div>
+  <script>
+  // 8-second loop, in seconds
+  const T = 8;
+  const map = document.getElementById('map'), patch = document.getElementById('patch'), next = document.getElementById('next');
+  const clamp = (x) => Math.max(0, Math.min(1, x));
+  const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
+  // Pull away, cruise, ease to a stop: a smoothstep on distance
+  const drive = (t) => smooth((t - .5) / 6.1);
+
+  window.seek = (time) => {
+    const t = ((time % T) + T) % T;
+    map.style.transform = `scale(${(1 + .2 * drive(t)).toFixed(4)})`;
+    // Crossing S Oxford St: the next block's cross streets fade in
+    const label = smooth((t - 3.3) / .35);
+    // Then the screen dissolves back to the share image
+    const back = smooth((t - 7.0) / .6);
+    patch.style.opacity = (label * (1 - back)).toFixed(3);
+    next.style.opacity = (label * (1 - back)).toFixed(3);
+    map.parentElement.style.opacity = (1 - back).toFixed(3);
+  };
+  seek(0);
+  const t0 = performance.now();
+  (function tick() { if (!window.__frozen) seek((performance.now() - t0) / 1000); requestAnimationFrame(tick); })();
+  </script>
+</body>
+</html>
