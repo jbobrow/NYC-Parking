@@ -160,6 +160,12 @@ struct ScreenshotScene {
             center: .init(latitude: 40.7193, longitude: -74.0095), spanMeters: (600, 280),
             heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T01:00:00-04:00",
             selectedSegmentID: "949L"),
+        // La Guardia Pl by Washington Square: No Parking Mon–Fri 8 AM–6 PM on
+        // the west side (not street cleaning), daily cleaning on the east.
+        "no-parking": ScreenshotScene(
+            center: .init(latitude: 40.7276, longitude: -73.9994), spanMeters: (600, 280),
+            heading: manhattanGrid, mode: .countdown, clock: "2026-09-30T10:00:00-04:00",
+            selectedSegmentID: "1448L"),
         // Meters around Mulberry St at midday: no parking under way on one side,
         // commercial-only hours on Grand and Hester.
         "meters-midday": ScreenshotScene(

@@ -409,7 +409,7 @@ struct ParkingDetailSheet: View {
         .accessibilityLabel(showsDetails ? "Hide posted rules" : "Show posted rules")
     }
 
-    /// Every posted rule: cleaning, no standing / stopping, and the meter.
+    /// Every posted rule: cleaning, no standing / stopping / parking, loading, and the meter.
     private var details: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(sections, id: \.self) { section in
@@ -547,6 +547,7 @@ private struct VerdictRow: View {
         let what = switch c.kind {
         case .loading:    "Truck loading"
         case .noStopping: "No stopping"
+        case .noParking:  "No parking"
         default:          "No standing"
         }
         let when: String
@@ -582,6 +583,7 @@ private struct VerdictRow: View {
             switch c.kind {
             case .cleaning:   return ("Street cleaning" + until, nil)
             case .noStanding: return ("No standing" + until, "You can stop to drop off or pick up passengers.")
+            case .noParking:  return ("No parking" + until, nil)
             case .noStopping: return ("No stopping" + until, nil)
             case .commercial: return ("Commercial vehicles only" + until, nil)
             case .loading:    return ("Truck loading only" + until, "You can stop to drop off or pick up passengers.")
@@ -597,6 +599,7 @@ private struct VerdictRow: View {
         let then = switch c.kind {
         case .cleaning:   "street cleaning"
         case .noStanding: "no standing"
+        case .noParking:  "no parking"
         case .noStopping: "no stopping"
         case .commercial: "commercial vehicles only"
         case .loading:    "truck loading only"
@@ -606,8 +609,8 @@ private struct VerdictRow: View {
     }
 }
 
-/// Rush-hour, school and overnight no-standing / no-stopping rules, and truck
-/// loading zones.
+/// Rush-hour, school and overnight no-standing / no-stopping rules, no-parking
+/// rules other than street cleaning, and truck loading zones.
 private struct RestrictionsSection: View {
     let restrictions: [CurbRestriction]
 
@@ -615,7 +618,7 @@ private struct RestrictionsSection: View {
         let kinds = Set(restrictions.map(\.kind))
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(text: kinds.count == 1 ? restrictions[0].title
-                             : kinds.contains(.loading) ? "Standing and loading" : "No standing or stopping",
+                             : kinds == [.standing, .stopping] ? "No standing or stopping" : "Posted rules",
                          systemImage: kinds == [.loading] ? "box.truck" : "exclamationmark.octagon")
             ForEach(restrictions, id: \.self) { r in
                 VStack(alignment: .leading, spacing: 3) {

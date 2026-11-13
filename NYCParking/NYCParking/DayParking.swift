@@ -108,6 +108,7 @@ enum DayParkingVerdict: Hashable, Sendable {
             switch kind {
             case .cleaning:   what = "Street cleaning"
             case .noStanding: what = "No standing"
+            case .noParking:  what = "No parking"
             case .noStopping: what = "No stopping"
             case .commercial: what = "Commercial vehicles only"
             case .loading:    what = "Truck loading only"
@@ -253,6 +254,7 @@ struct DayParkingPill: Hashable {
             switch rule {
             case .cleaning:   what = "cleaning "
             case .noStanding: what = "no standing "
+            case .noParking:  what = ""
             case .noStopping: what = "no stopping "
             case .commercial, .loading, .meter: what = ""
             }

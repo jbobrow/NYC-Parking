@@ -21,6 +21,7 @@ struct MoveDeadline: Hashable {
         switch kind {
         case .cleaning:   return "Alternate-side parking"
         case .noStanding: return "No standing"
+        case .noParking:  return "No parking"
         case .noStopping: return "No stopping"
         case .commercial: return "Commercial-only parking"
         case .loading:    return "Truck loading"
