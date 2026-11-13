@@ -12,7 +12,7 @@
 // Block data comes from data/blocks.json and ASP holidays from
 // data/holidays.json (both built by scripts/build_web_data.py).
 
-// "New in 1.6", a parking sign that swings into the map's corner a moment
+// "New in 1.7", a parking sign that swings into the map's corner a moment
 // after the page opens, every visit. The × swings it back out.
 (function newSign() {
   const sign = document.querySelector(".new-sign");
@@ -111,7 +111,7 @@ map.touchPitch.disable();
 new ResizeObserver(() => map.resize()).observe(map.getContainer());
 
 const dataPromise = Promise.all([
-  fetch("data/blocks.json?v=1.6.0").then((r) => r.json()),
+  fetch("data/blocks.json?v=1.7.0").then((r) => r.json()),
   fetch("data/holidays.json").then((r) => (r.ok ? r.json() : [])).catch(() => []),
 ]).then(([data, holidays]) => decode(data, holidays));
 
