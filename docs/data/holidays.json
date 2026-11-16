@@ -1,158 +1,396 @@
 [
  {
   "date": "2026-01-01",
-  "name": "New Year\u2019s Day"
+  "name": "New Year\u2019s Day",
+  "meters": true
  },
  {
   "date": "2026-01-06",
-  "name": "Three Kings' Day"
+  "name": "Three Kings' Day",
+  "meters": false
  },
  {
   "date": "2026-01-19",
-  "name": "Martin Luther King Jr"
+  "name": "Martin Luther King Jr",
+  "meters": false
  },
  {
   "date": "2026-02-12",
-  "name": "Lincoln\u2019s Birthday"
+  "name": "Lincoln\u2019s Birthday",
+  "meters": false
  },
  {
   "date": "2026-02-16",
-  "name": "Lunar New Year\u2019s Eve"
+  "name": "Lunar New Year\u2019s Eve",
+  "meters": false
  },
  {
   "date": "2026-02-16",
-  "name": "Washington\u2019s Birthday (Presidents Day)"
+  "name": "Washington\u2019s Birthday (Presidents Day)",
+  "meters": false
  },
  {
   "date": "2026-02-17",
-  "name": "Lunar New Year"
+  "name": "Lunar New Year",
+  "meters": false
  },
  {
   "date": "2026-02-18",
-  "name": "Losar (Tibetan New Year)"
+  "name": "Losar (Tibetan New Year)",
+  "meters": false
  },
  {
   "date": "2026-02-18",
-  "name": "Ash Wednesday"
+  "name": "Ash Wednesday",
+  "meters": false
  },
  {
   "date": "2026-03-03",
-  "name": "Purim"
+  "name": "Purim",
+  "meters": false
  },
  {
   "date": "2026-03-20",
-  "name": "Idul-Fitr (Eid Al-Fitr)"
+  "name": "Idul-Fitr (Eid Al-Fitr)",
+  "meters": false
  },
  {
   "date": "2026-04-02",
-  "name": "Passover"
+  "name": "Passover",
+  "meters": false
  },
  {
   "date": "2026-04-02",
-  "name": "Holy Thursday"
+  "name": "Holy Thursday",
+  "meters": false
  },
  {
   "date": "2026-04-03",
-  "name": "Good Friday"
+  "name": "Good Friday",
+  "meters": false
  },
  {
   "date": "2026-04-08",
-  "name": "the seventh and eighth days of Passover"
+  "name": "the seventh and eighth days of Passover",
+  "meters": false
  },
  {
   "date": "2026-04-09",
-  "name": "Orthodox Holy Thursday"
+  "name": "Orthodox Holy Thursday",
+  "meters": false
  },
  {
   "date": "2026-04-10",
-  "name": "Orthodox Good Friday"
+  "name": "Orthodox Good Friday",
+  "meters": false
  },
  {
   "date": "2026-05-14",
-  "name": "Solemnity of the Ascension"
+  "name": "Solemnity of the Ascension",
+  "meters": false
  },
  {
   "date": "2026-05-22",
-  "name": "Shavuoth"
+  "name": "Shavuoth",
+  "meters": false
  },
  {
   "date": "2026-05-25",
-  "name": "Memorial Day"
+  "name": "Memorial Day",
+  "meters": true
  },
  {
   "date": "2026-05-27",
-  "name": "Idul-Adha (Eid Al-Adha)"
+  "name": "Idul-Adha (Eid Al-Adha)",
+  "meters": false
  },
  {
   "date": "2026-06-19",
-  "name": "Juneteenth"
+  "name": "Juneteenth",
+  "meters": false
  },
  {
   "date": "2026-07-03",
-  "name": "Independence Day"
+  "name": "Independence Day",
+  "meters": true
  },
  {
   "date": "2026-07-23",
-  "name": "Tisha B'Av"
+  "name": "Tisha B'Av",
+  "meters": false
  },
  {
   "date": "2026-08-15",
-  "name": "Feast of the Assumption"
+  "name": "Feast of the Assumption",
+  "meters": false
  },
  {
   "date": "2026-09-07",
-  "name": "Labor Day"
+  "name": "Labor Day",
+  "meters": true
  },
  {
   "date": "2026-09-12",
-  "name": "Rosh Hashanah"
+  "name": "Rosh Hashanah",
+  "meters": false
  },
  {
   "date": "2026-09-21",
-  "name": "Yom Kippur"
+  "name": "Yom Kippur",
+  "meters": false
  },
  {
   "date": "2026-09-26",
-  "name": "Succoth"
+  "name": "Succoth",
+  "meters": false
  },
  {
   "date": "2026-10-03",
-  "name": "Shemini Atzereth"
+  "name": "Shemini Atzereth",
+  "meters": false
  },
  {
   "date": "2026-10-04",
-  "name": "Simchas Torah"
+  "name": "Simchas Torah",
+  "meters": false
  },
  {
   "date": "2026-10-12",
-  "name": "Columbus Day"
+  "name": "Columbus Day",
+  "meters": false
  },
  {
   "date": "2026-11-01",
-  "name": "All Saints' Day"
+  "name": "All Saints' Day",
+  "meters": false
  },
  {
   "date": "2026-11-03",
-  "name": "Election Day"
+  "name": "Election Day",
+  "meters": false
  },
  {
   "date": "2026-11-08",
-  "name": "Diwali"
+  "name": "Diwali",
+  "meters": false
  },
  {
   "date": "2026-11-11",
-  "name": "Veterans Day"
+  "name": "Veterans Day",
+  "meters": false
  },
  {
   "date": "2026-11-26",
-  "name": "Thanksgiving Day"
+  "name": "Thanksgiving Day",
+  "meters": true
  },
  {
   "date": "2026-12-08",
-  "name": "Immaculate Conception"
+  "name": "Immaculate Conception",
+  "meters": false
  },
  {
   "date": "2026-12-25",
-  "name": "Christmas Day"
+  "name": "Christmas Day",
+  "meters": true
+ },
+ {
+  "date": "2027-01-01",
+  "name": "New Year\u2019s Day",
+  "meters": true
+ },
+ {
+  "date": "2027-01-06",
+  "name": "Three Kings' Day",
+  "meters": false
+ },
+ {
+  "date": "2027-01-18",
+  "name": "Martin Luther King Jr",
+  "meters": false
+ },
+ {
+  "date": "2027-02-05",
+  "name": "Lunar New Year\u2019s Eve",
+  "meters": false
+ },
+ {
+  "date": "2027-02-06",
+  "name": "Lunar New Year",
+  "meters": false
+ },
+ {
+  "date": "2027-02-07",
+  "name": "Losar (Tibetan New Year)",
+  "meters": false
+ },
+ {
+  "date": "2027-02-10",
+  "name": "Ash Wednesday",
+  "meters": false
+ },
+ {
+  "date": "2027-02-12",
+  "name": "Lincoln\u2019s Birthday",
+  "meters": false
+ },
+ {
+  "date": "2027-02-15",
+  "name": "Washington\u2019s Birthday (Presidents Day)",
+  "meters": false
+ },
+ {
+  "date": "2027-03-09",
+  "name": "Idul-Fitr (Eid Al-Fitr)",
+  "meters": false
+ },
+ {
+  "date": "2027-03-23",
+  "name": "Purim",
+  "meters": false
+ },
+ {
+  "date": "2027-03-25",
+  "name": "Holy Thursday",
+  "meters": false
+ },
+ {
+  "date": "2027-03-26",
+  "name": "Good Friday",
+  "meters": false
+ },
+ {
+  "date": "2027-03-28",
+  "name": "Easter"
+ },
+ {
+  "date": "2027-04-22",
+  "name": "Passover",
+  "meters": false
+ },
+ {
+  "date": "2027-04-28",
+  "name": "the seventh and eighth days of Passover",
+  "meters": false
+ },
+ {
+  "date": "2027-04-29",
+  "name": "Orthodox Holy Thursday",
+  "meters": false
+ },
+ {
+  "date": "2027-04-30",
+  "name": "Orthodox Good Friday",
+  "meters": false
+ },
+ {
+  "date": "2027-05-06",
+  "name": "Solemnity of the Ascension",
+  "meters": false
+ },
+ {
+  "date": "2027-05-16",
+  "name": "Idul-Adha (Eid Al-Adha)",
+  "meters": false
+ },
+ {
+  "date": "2027-05-31",
+  "name": "Memorial Day",
+  "meters": true
+ },
+ {
+  "date": "2027-06-11",
+  "name": "Shavuoth",
+  "meters": false
+ },
+ {
+  "date": "2027-06-18",
+  "name": "Juneteenth",
+  "meters": false
+ },
+ {
+  "date": "2027-07-04",
+  "name": "Independence Day",
+  "meters": true
+ },
+ {
+  "date": "2027-08-12",
+  "name": "Tisha B'Av",
+  "meters": false
+ },
+ {
+  "date": "2027-08-15",
+  "name": "Feast of the Assumption",
+  "meters": false
+ },
+ {
+  "date": "2027-09-06",
+  "name": "Labor Day",
+  "meters": true
+ },
+ {
+  "date": "2027-10-02",
+  "name": "Rosh Hashanah",
+  "meters": false
+ },
+ {
+  "date": "2027-10-11",
+  "name": "Columbus Day",
+  "meters": false
+ },
+ {
+  "date": "2027-10-16",
+  "name": "Succoth",
+  "meters": false
+ },
+ {
+  "date": "2027-10-23",
+  "name": "Shemini Atzereth",
+  "meters": false
+ },
+ {
+  "date": "2027-10-24",
+  "name": "Simchas Torah",
+  "meters": false
+ },
+ {
+  "date": "2027-10-28",
+  "name": "Diwali",
+  "meters": false
+ },
+ {
+  "date": "2027-11-01",
+  "name": "All Saints' Day",
+  "meters": false
+ },
+ {
+  "date": "2027-11-02",
+  "name": "Election Day",
+  "meters": false
+ },
+ {
+  "date": "2027-11-11",
+  "name": "Veterans Day",
+  "meters": false
+ },
+ {
+  "date": "2027-11-25",
+  "name": "Thanksgiving Day",
+  "meters": true
+ },
+ {
+  "date": "2027-12-08",
+  "name": "Immaculate Conception",
+  "meters": false
+ },
+ {
+  "date": "2027-12-24",
+  "name": "Christmas Day",
+  "meters": true
+ },
+ {
+  "date": "2027-12-31",
+  "name": "New Year\u2019s Day",
+  "meters": true
  }
 ]
